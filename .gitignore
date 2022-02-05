@@ -13,6 +13,7 @@ _output/
 .venv
 venv
 
-**/.vendor
+.vendor
 *.swo
 *.swp
+fluentd/lib/**/Gemfile.lock

@@ -20,17 +20,15 @@ gen-dockerfiles:
 .PHONY: gen-dockerfiles
 
 test-unit:
-	@for d in $$(ls ./fluentd/lib) ; do \
-		echo Running tests for $$d ; \
+	@export FLUENTD_VERSION=1.7.4; export GEM_HOME=$$(pwd)/.vendor; \
+	gem install rake bundler -N ; \
+	for d in $$(ls ./fluentd/lib) ; do \
 		pushd fluentd/lib/$${d} ; \
-			GEM_HOME=./vendor bundle install ; \
-			out=$(GEM_HOME=./.vendor bundle exec rake test) ; \
-			result=$$?
-			echo $$out
-			if [ "$$result" != "0" ] ; then \
-				failed=1 ; \
-			fi ; \
+			$$(bundle install) ; \
+			out=$$(bundle exec rake test) ; \
+			if [ "$$?" != "0" ] ; then exit 1 ; fi ; \
+			echo "\n$$out" ; \
+			echo  ; \
 		popd ; \
-	done ; \
-	exit ${failed:-0}
+	done
 .PHONY: test-unit
