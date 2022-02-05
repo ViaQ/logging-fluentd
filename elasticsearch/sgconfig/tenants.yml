@@ -1,3 +1,0 @@
-admin_tenant:
-  reserved: false
-  description: "Admin tenant to be shared by all admins"

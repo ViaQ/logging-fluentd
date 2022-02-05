@@ -3,12 +3,10 @@ filters:
   ".*":
     approvers:
       - jcantrill
-      - igor-karpukhin
       - alanconway
       - periklis
     reviewers:
       - jcantrill
-      - lukas-vlcek
       - alanconway
       - vimalk78
       - syedriko

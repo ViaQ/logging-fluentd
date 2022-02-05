@@ -1,6 +1,0 @@
-{
-  "description": "Openshift ingest pipeline for custom schema",
-  "processors": [
-    { "openshift-ingestion-processor": {} }
-  ]
-}

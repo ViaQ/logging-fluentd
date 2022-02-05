@@ -1,3 +1,0 @@
-elasticsearch-curator==5.8.1
-ruamel.yaml==0.15.100
-elasticsearch-dsl==7.4.0

@@ -1,8 +1,0 @@
----
-.regex:
-  - pattern: '^project\..+\-dev\..*$'
-    delete:
-      days: 1
-  - pattern: '^project\..+\-test\..*$'
-    delete:
-      days: 2
