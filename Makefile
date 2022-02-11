@@ -1,13 +1,13 @@
-
-FLUENTD_IMAGE?="openshift/origin-logging-fluentd"
+REGISTRY?=127.0.0.1/openshift-logging
+FLUENTD_VERSION=1.7.4
+FLUENTD_IMAGE?=$(REGISTRY)/logging-fluentd:$(FLUENTD_VERSION)
+CONTAINER_ENGINE?=docker
+CONTAINER_BUILDER?=imagebuilder
+BUILD_ARGS?=
 
 image:
-	hack/build-component-image.sh "fluentd" $(FLUENTD_IMAGE)
+	$(CONTAINER_BUILDER) $(BUILD_ARGS) --build-arg FLUENTD_VERSION_VALUE=$(FLUENTD_VERSION) -f fluentd/Dockerfile -t $(FLUENTD_IMAGE) fluentd
 .PHONY: image
-
-deploy: image
-	hack/deploy-component-image.sh $(FLUENTD_IMAGE)
-.PHONY: deploy
 
 lint:
 	@hack/run-linter
@@ -20,15 +20,6 @@ gen-dockerfiles:
 .PHONY: gen-dockerfiles
 
 test-unit:
-	@export FLUENTD_VERSION=1.7.4; export GEM_HOME=$$(pwd)/.vendor; \
-	gem install rake bundler -N ; \
-	for d in $$(ls ./fluentd/lib) ; do \
-		pushd fluentd/lib/$${d} ; \
-			$$(bundle install) ; \
-			out=$$(bundle exec rake test) ; \
-			if [ "$$?" != "0" ] ; then exit 1 ; fi ; \
-			echo "\n$$out" ; \
-			echo  ; \
-		popd ; \
-	done
+	$(CONTAINER_BUILDER) -t logging-fluentd-unit-tests -f Dockerfile.unit .
+	# podman run logging-fluentd-unit-tests
 .PHONY: test-unit

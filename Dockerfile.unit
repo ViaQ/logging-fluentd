@@ -1,19 +1,19 @@
 FROM registry.ci.openshift.org/ocp/builder:ubi8.ruby.25
-MAINTAINER OpenShift Development <dev@lists.openshift.redhat.com>
 
-ENV FLUENTD_VERSION=1.0 \
+ENV FLUENTD_VERSION=1.7.4 \
     WORKDIR=/tmp/fluentd/lib
 
 USER 0
-ENTRYPOINT /tmp/run.sh
+
 ENV GEM_HOME=/tmp/vendor
-RUN gem install rake bundler --no-ri --no-doc
+RUN gem install rake:13.0.6 bundler:2.2.33 --no-ri --no-doc
 WORKDIR ${WORKDIR}
-COPY test/unit/run.sh /tmp/
+COPY run-unit-tests.sh /tmp/
+ENTRYPOINT /tmp/run-unit-tests.sh
 COPY fluentd/lib ${WORKDIR}
 RUN for d in $(ls $WORKDIR) ; do \
     pushd ${d} ; \
         bundle install ; \
     popd ; \
     done
-RUN /tmp/run.sh
+RUN /tmp/run-unit-tests.sh

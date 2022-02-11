@@ -21,29 +21,15 @@ ENV BUILD_VERSION=1.7.4
 ENV SOURCE_GIT_COMMIT=${CI_ORIGIN_AGGREGATED_LOGGING_UPSTREAM_COMMIT:-}
 ENV SOURCE_GIT_URL=${CI_ORIGIN_AGGREGATED_LOGGING_UPSTREAM_URL:-}
 
-MAINTAINER OpenShift Development <dev@lists.openshift.redhat.com>
-
 ARG DATA_VERSION_VALUE=1.6.0
 ARG FLUENTD_VERSION_VALUE=1.7.4
-ARG HOME_VALUE=/opt/app-root/src
-ARG PATH_VALUE=/opt/app-root/src/bin:/opt/app-root/bin
-ARG LOGGING_FILE_PATH_VALUE=/var/log/fluentd/fluentd.log
-ARG LOGGING_FILE_AGE_VALUE=10
-ARG LOGGING_FILE_SIZE_VALUE=1024000
 ARG CONTAINER_VALUE=oci
 
 ENV DATA_VERSION=$DATA_VERSION_VALUE \
     FLUENTD_VERSION=$FLUENTD_VERSION_VALUE \
-    HOME=$HOME_VALUE \
-    PATH=$PATH_VALUE:$PATH \
-    LOGGING_FILE_PATH=$LOGGING_FILE_PATH_VALUE \
-    LOGGING_FILE_AGE=$LOGGING_FILE_AGE_VALUE \
-    LOGGING_FILE_SIZE=$LOGGING_FILE_SIZE_VALUE \
+    HOME=/opt/app-root/src \
+    PATH=/opt/app-root/src/bin:/opt/app-root/bin:$PATH \
     container=$CONTAINER_VALUE
-
-
-ARG TEST_REPO
-#ADD test.repo /etc/yum.repos.d
 
 USER 0
 RUN : 'removed yum-config-manager' \
@@ -54,17 +40,17 @@ RUN : 'removed yum-config-manager' \
  &&   rpm -V $RUNTIME_PKGS \
  &&   yum clean all
 
-# uncomment if you want to try out test rpm builds
-#ADD *.rpm /tmp/
-#RUN yum -y install /tmp/*.rpm
 ## EXCLUDE BEGIN ##
 ENV upstream_code=upstream_code/fluentd
 ## EXCLUDE END ##
 ENV upstream_code=${upstream_code:-"."}
-COPY --from=builder ${upstream_code}/jemalloc/ ${HOME}/jemalloc/
-RUN cd ${HOME}/jemalloc && EXTRA_CFLAGS="$( rpm --eval '%{optflags}' )" ./autogen.sh && \
-    make install_lib_shared install_bin && cp COPYING ${HOME}/COPYING.jemalloc && \
-    cd .. && rm -rf jemalloc
+COPY --from=builder ${upstream_code}/jemalloc/ /tmp/jemalloc/
+RUN pushd /tmp/jemalloc && \
+        EXTRA_CFLAGS="$( rpm --eval '%{optflags}' )" ./autogen.sh && \
+        make install_lib_shared install_bin && \
+        cp COPYING /tmp/COPYING.jemalloc && \
+    popd
+RUN rm -rf /tmp/jemalloc
 
 COPY --from=builder ${upstream_code}/source.jemalloc /source.jemalloc
 RUN bash -c '. /source.jemalloc; echo jemalloc $JEMALLOC_VER >> /contents'
@@ -78,7 +64,8 @@ COPY --from=builder ${upstream_code}/install-gems.sh ${HOME}/vendored_gem_src/
 COPY --from=builder ${upstream_code}/*.patch.sh ${HOME}/vendored_gem_src/
 COPY --from=builder ${upstream_code}/*.patch ${HOME}/vendored_gem_src/
 
-RUN cd ${HOME}/vendored_gem_src/ && ./install-gems.sh && cd / && rm -rf ${HOME}/vendored_gem_src/
+RUN cd ${HOME}/vendored_gem_src/ && ./install-gems.sh && cd / 
+RUN rm -rf ${HOME}/vendored_gem_src/
 
 RUN BUILD_PKGS="make gcc-c++ libffi-devel \
                 gcc gcc-gdb-plugin cpp \
@@ -116,7 +103,7 @@ LABEL \
         License="Apache-2.0" \
         io.k8s.description="Fluentd container for collecting of container logs" \
         io.k8s.display-name="Fluentd" \
-        io.openshift.tags="logging,elk,fluentd" \
+        io.openshift.tags="logging,collection,fluentd" \
         vendor="Red Hat" \
         name="openshift-logging/fluentd-rhel8" \
         com.redhat.component="logging-fluentd-container" \
