@@ -19,8 +19,6 @@ module I18n
     #
     # I18n::Backend::Simple.include(I18n::Backend::Pluralization)
     class Simple
-      using I18n::HashRefinements
-
       module Implementation
         include Base
 
@@ -35,14 +33,13 @@ module I18n
         def store_translations(locale, data, options = EMPTY_HASH)
           if I18n.enforce_available_locales &&
             I18n.available_locales_initialized? &&
-            !I18n.available_locales.include?(locale.to_sym) &&
-            !I18n.available_locales.include?(locale.to_s)
+            !I18n.locale_available?(locale)
             return data
           end
           locale = locale.to_sym
-          translations[locale] ||= {}
-          data = data.deep_symbolize_keys
-          translations[locale].deep_merge!(data)
+          translations[locale] ||= Concurrent::Hash.new
+          data = Utils.deep_symbolize_keys(data) unless options.fetch(:skip_symbolize_keys, false)
+          Utils.deep_merge!(translations[locale], data)
         end
 
         # Get available locales from the translations hash
@@ -71,7 +68,7 @@ module I18n
           # call `init_translations`
           init_translations if do_init && !initialized?
 
-          @translations ||= {}
+          @translations ||= Concurrent::Hash.new { |h, k| h[k] = Concurrent::Hash.new }
         end
 
       protected
@@ -97,7 +94,7 @@ module I18n
               return nil unless result.has_key?(_key)
             end
             result = result[_key]
-            result = resolve(locale, _key, result, options.merge(:scope => nil)) if result.is_a?(Symbol)
+            result = resolve_entry(locale, _key, result, options.merge(:scope => nil)) if result.is_a?(Symbol)
             result
           end
         end

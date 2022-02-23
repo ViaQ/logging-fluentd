@@ -1,5 +1,3 @@
-# encoding: ascii-8bit
-
 require 'stringio'
 require 'tempfile'
 require 'zlib'
@@ -18,11 +16,33 @@ describe MessagePack::Unpacker do
   it 'gets options to specify how to unpack values' do
     u1 = MessagePack::Unpacker.new
     u1.symbolize_keys?.should == false
+    u1.freeze?.should == false
     u1.allow_unknown_ext?.should == false
 
-    u2 = MessagePack::Unpacker.new(symbolize_keys: true, allow_unknown_ext: true)
+    u2 = MessagePack::Unpacker.new(symbolize_keys: true, freeze: true, allow_unknown_ext: true)
     u2.symbolize_keys?.should == true
+    u2.freeze?.should == true
     u2.allow_unknown_ext?.should == true
+  end
+
+  if automatic_string_keys_deduplication?
+    it 'ensure string hash keys are deduplicated' do
+      sample_data = [{"foo" => 1}, {"foo" => 2}]
+      sample_packed = MessagePack.pack(sample_data).force_encoding('ASCII-8BIT')
+      unpacker.feed(sample_packed)
+      hashes = nil
+      unpacker.each { |obj| hashes = obj }
+      expect(hashes[0].keys.first).to equal(hashes[1].keys.first)
+    end
+
+    it 'ensure strings are not deduplicated' do
+      sample_data = ["foo"]
+      sample_packed = MessagePack.pack(sample_data).force_encoding('ASCII-8BIT')
+      unpacker.feed(sample_packed)
+      ary = nil
+      unpacker.each { |obj| ary = obj }
+      expect(ary.first.frozen?).to eq(false)
+    end
   end
 
   it 'gets IO or object which has #read to read data from it' do
@@ -278,6 +298,21 @@ describe MessagePack::Unpacker do
     symbolized_hash = {:a => 'b', :c => 'd'}
     MessagePack.load(MessagePack.pack(symbolized_hash), :symbolize_keys => true).should == symbolized_hash
     MessagePack.unpack(MessagePack.pack(symbolized_hash), :symbolize_keys => true).should == symbolized_hash
+  end
+
+  it 'MessagePack.unpack symbolize_keys preserve encoding' do
+    hash = { :ascii => 1, :utf8_é => 2}
+    loaded_hash = MessagePack.load(MessagePack.pack(hash), :symbolize_keys => true)
+
+    hash.keys[0].encoding.should == Encoding::US_ASCII # Ruby coerce symbols to US-ASCII when possible.
+    loaded_hash.keys[0].should == hash.keys[0]
+    loaded_hash.keys[0].encoding.should == hash.keys[0].encoding
+
+    hash.keys[1].encoding.should == Encoding::UTF_8
+    loaded_hash.keys[1].should == hash.keys[1]
+    loaded_hash.keys[1].encoding.should == hash.keys[1].encoding
+
+    MessagePack.unpack(MessagePack.pack(hash), :symbolize_keys => true).should == hash
   end
 
   it 'Unpacker#unpack symbolize_keys' do
@@ -621,6 +656,14 @@ describe MessagePack::Unpacker do
       array = ['foo'] * 10_000
       MessagePack.unpack(MessagePack.pack(array)).size.should == 10_000
     end
+
+    it 'preserves string encoding (issue #200)' do
+      string = 'a'.force_encoding(Encoding::UTF_8)
+      MessagePack.unpack(MessagePack.pack(string)).encoding.should == string.encoding
+
+      string *= 256
+      MessagePack.unpack(MessagePack.pack(string)).encoding.should == string.encoding
+    end
   end
 
   context 'extensions' do
@@ -651,9 +694,97 @@ describe MessagePack::Unpacker do
       end
     end
 
+    context 'freeze' do
+      let :struct do
+        {'hello' => 'world', 'nested' => ['object', {'structure' => true}]}
+      end
+
+      let :buffer do
+        MessagePack.pack(struct)
+      end
+
+      let :unpacker do
+        described_class.new(:freeze => true)
+      end
+
+      it 'can freeze objects when using .unpack' do
+        parsed_struct = MessagePack.unpack(buffer, freeze: true)
+        parsed_struct.should == struct
+
+        parsed_struct.should be_frozen
+        parsed_struct['hello'].should be_frozen
+        parsed_struct['nested'].should be_frozen
+        parsed_struct['nested'][0].should be_frozen
+        parsed_struct['nested'][1].should be_frozen
+
+        if string_deduplication?
+          parsed_struct.keys[0].should be_equal('hello'.freeze)
+          parsed_struct.keys[1].should be_equal('nested'.freeze)
+          parsed_struct.values[0].should be_equal('world'.freeze)
+          parsed_struct.values[1][0].should be_equal('object'.freeze)
+          parsed_struct.values[1][1].keys[0].should be_equal('structure'.freeze)
+        end
+      end
+
+      it 'can freeze objects when using #each' do
+        objs = []
+        unpacker.feed(buffer)
+        unpacker.each do |obj|
+          objs << obj
+        end
+
+        parsed_struct = objs.first
+        parsed_struct.should == struct
+
+        parsed_struct.should be_frozen
+        parsed_struct['hello'].should be_frozen
+        parsed_struct['nested'].should be_frozen
+        parsed_struct['nested'][0].should be_frozen
+        parsed_struct['nested'][1].should be_frozen
+
+        if string_deduplication?
+          parsed_struct.keys[0].should be_equal('hello'.freeze)
+          parsed_struct.keys[1].should be_equal('nested'.freeze)
+          parsed_struct.values[0].should be_equal('world'.freeze)
+          parsed_struct.values[1][0].should be_equal('object'.freeze)
+          parsed_struct.values[1][1].keys[0].should be_equal('structure'.freeze)
+        end
+      end
+
+      it 'can freeze objects when using #feed_each' do
+        objs = []
+        unpacker.feed_each(buffer) do |obj|
+          objs << obj
+        end
+
+        parsed_struct = objs.first
+        parsed_struct.should == struct
+
+        parsed_struct.should be_frozen
+        parsed_struct['hello'].should be_frozen
+        parsed_struct['nested'].should be_frozen
+        parsed_struct['nested'][0].should be_frozen
+        parsed_struct['nested'][1].should be_frozen
+
+        if string_deduplication?
+          parsed_struct.keys[0].should be_equal('hello'.freeze)
+          parsed_struct.keys[1].should be_equal('nested'.freeze)
+          parsed_struct.values[0].should be_equal('world'.freeze)
+          parsed_struct.values[1][0].should be_equal('object'.freeze)
+          parsed_struct.values[1][1].keys[0].should be_equal('structure'.freeze)
+        end
+      end
+    end
+
     context 'binary encoding', :encodings do
       let :buffer do
-        MessagePack.pack({'hello' => 'world', 'nested' => ['object', {'structure' => true}]})
+        MessagePack.pack({
+          'hello'.b => 'world'.b,
+          'nested'.b => [
+            'object'.b,
+            {'structure'.b => true},
+          ]
+        })
       end
 
       let :unpacker do

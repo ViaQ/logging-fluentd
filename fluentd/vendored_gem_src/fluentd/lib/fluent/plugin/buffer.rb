@@ -16,16 +16,19 @@
 
 require 'fluent/plugin/base'
 require 'fluent/plugin/owned_by_mixin'
+require 'fluent/plugin_id'
+require 'fluent/plugin_helper'
 require 'fluent/unique_id'
-
-require 'monitor'
+require 'fluent/ext_monitor_require'
 
 module Fluent
   module Plugin
     class Buffer < Base
       include OwnedByMixin
       include UniqueId::Mixin
+      include PluginId
       include MonitorMixin
+      include PluginHelper::Mixin # for metrics
 
       class BufferError < StandardError; end
       class BufferOverflowError < BufferError; end
@@ -39,6 +42,8 @@ module Fluent
       DEFAULT_CHUNK_FULL_THRESHOLD = 0.95
 
       configured_in :buffer
+
+      helpers_internal :metrics
 
       # TODO: system total buffer limit size in bytes by SystemConfig
 
@@ -61,7 +66,17 @@ module Fluent
       desc 'Compress buffered data.'
       config_param :compress, :enum, list: [:text, :gzip], default: :text
 
-      Metadata = Struct.new(:timekey, :tag, :variables) do
+      Metadata = Struct.new(:timekey, :tag, :variables, :seq) do
+        def initialize(timekey, tag, variables)
+          super(timekey, tag, variables, 0)
+        end
+
+        def dup_next
+          m = dup
+          m.seq = seq + 1
+          m
+        end
+
         def empty?
           timekey.nil? && tag.nil? && variables.nil?
         end
@@ -140,12 +155,15 @@ module Fluent
         # This means that this class is one of the most called object in Fluentd.
         # See https://github.com/fluent/fluentd/pull/2560
         def hash
-          timekey.object_id
+          timekey.hash
         end
       end
 
+      # for metrics
+      attr_reader :stage_size_metrics, :stage_length_metrics, :queue_size_metrics, :queue_length_metrics
+      attr_reader :available_buffer_space_ratios_metrics, :total_queued_size_metrics
+      attr_reader :newest_timekey_metrics, :oldest_timekey_metrics
       # for tests
-      attr_accessor :stage_size, :queue_size
       attr_reader :stage, :queue, :dequeued, :queued_num
 
       def initialize
@@ -162,9 +180,33 @@ module Fluent
         @queued_num = {} # metadata => int (number of queued chunks)
         @dequeued_num = {} # metadata => int (number of dequeued chunks)
 
-        @stage_size = @queue_size = 0
+        @stage_length_metrics = nil
+        @stage_size_metrics = nil
+        @queue_length_metrics = nil
+        @queue_size_metrics = nil
+        @available_buffer_space_ratios_metrics = nil
+        @total_queued_size_metrics = nil
+        @newest_timekey_metrics = nil
+        @oldest_timekey_metrics = nil
         @timekeys = Hash.new(0)
+        @enable_update_timekeys = false
         @mutex = Mutex.new
+      end
+
+      def stage_size
+        @stage_size_metrics.get
+      end
+
+      def stage_size=(value)
+        @stage_size_metrics.set(value)
+      end
+
+      def queue_size
+        @queue_size_metrics.get
+      end
+
+      def queue_size=(value)
+        @queue_size_metrics.set(value)
       end
 
       def persistent?
@@ -177,6 +219,32 @@ module Fluent
         unless @queue_limit_length.nil?
           @total_limit_size = @chunk_limit_size * @queue_limit_length
         end
+        @stage_length_metrics = metrics_create(namespace: "fluentd", subsystem: "buffer", name: "stage_length",
+                                               help_text: 'Length of stage buffers', prefer_gauge: true)
+        @stage_length_metrics.set(0)
+        @stage_size_metrics = metrics_create(namespace: "fluentd", subsystem: "buffer", name: "stage_byte_size",
+                                             help_text: 'Total size of stage buffers', prefer_gauge: true)
+        @stage_size_metrics.set(0) # Ensure zero.
+        @queue_length_metrics = metrics_create(namespace: "fluentd", subsystem: "buffer", name: "queue_length",
+                                               help_text: 'Length of queue buffers', prefer_gauge: true)
+        @queue_length_metrics.set(0)
+        @queue_size_metrics = metrics_create(namespace: "fluentd", subsystem: "buffer", name: "queue_byte_size",
+                                             help_text: 'Total size of queue buffers', prefer_gauge: true)
+        @queue_size_metrics.set(0) # Ensure zero.
+        @available_buffer_space_ratios_metrics = metrics_create(namespace: "fluentd", subsystem: "buffer", name: "available_buffer_space_ratios",
+                                                                help_text: 'Ratio of available space in buffer', prefer_gauge: true)
+        @available_buffer_space_ratios_metrics.set(100) # Default is 100%.
+        @total_queued_size_metrics = metrics_create(namespace: "fluentd", subsystem: "buffer", name: "total_queued_size",
+                                                    help_text: 'Total size of stage and queue buffers', prefer_gauge: true)
+        @total_queued_size_metrics.set(0)
+        @newest_timekey_metrics = metrics_create(namespace: "fluentd", subsystem: "buffer", name: "newest_timekey",
+                                                 help_text: 'Newest timekey in buffer', prefer_gauge: true)
+        @oldest_timekey_metrics = metrics_create(namespace: "fluentd", subsystem: "buffer", name: "oldest_timekey",
+                                                 help_text: 'Oldest timekey in buffer', prefer_gauge: true)
+      end
+
+      def enable_update_timekeys
+        @enable_update_timekeys = true
       end
 
       def start
@@ -184,20 +252,15 @@ module Fluent
 
         @stage, @queue = resume
         @stage.each_pair do |metadata, chunk|
-          @stage_size += chunk.bytesize
-          if chunk.metadata && chunk.metadata.timekey
-            add_timekey(metadata.timekey)
-          end
+          @stage_size_metrics.add(chunk.bytesize)
         end
         @queue.each do |chunk|
           @queued_num[chunk.metadata] ||= 0
           @queued_num[chunk.metadata] += 1
-          @queue_size += chunk.bytesize
-          if chunk.metadata && chunk.metadata.timekey
-            add_timekey(chunk.metadata.timekey)
-          end
+          @queue_size_metrics.add(chunk.bytesize)
         end
-        log.debug "buffer started", instance: self.object_id, stage_size: @stage_size, queue_size: @queue_size
+        update_timekeys
+        log.debug "buffer started", instance: self.object_id, stage_size: @stage_size_metrics.get, queue_size: @queue_size_metrics.get
       end
 
       def close
@@ -219,17 +282,19 @@ module Fluent
       def terminate
         super
         @dequeued = @stage = @queue = @queued_num = nil
-        @stage_size = @queue_size = 0
+        @stage_length_metrics = @stage_size_metrics = @queue_length_metrics = @queue_size_metrics = nil
+        @available_buffer_space_ratios_metrics = @total_queued_size_metrics = nil
+        @newest_timekey_metrics = @oldest_timekey_metrics = nil
         @timekeys.clear
       end
 
       def storable?
-        @total_limit_size > @stage_size + @queue_size
+        @total_limit_size > @stage_size_metrics.get + @queue_size_metrics.get
       end
 
       ## TODO: for back pressure feature
       # def used?(ratio)
-      #   @total_limit_size * ratio > @stage_size + @queue_size
+      #   @total_limit_size * ratio > @stage_size_metrics.get + @queue_size_metrics.get
       # end
 
       def resume
@@ -245,12 +310,9 @@ module Fluent
         Metadata.new(timekey, tag, variables)
       end
 
+      # Keep this method for existing code
       def metadata(timekey: nil, tag: nil, variables: nil)
-        meta = Metadata.new(timekey, tag, variables)
-        if (t = meta.timekey)
-          add_timekey(t)
-        end
-        meta
+        Metadata.new(timekey, tag, variables)
       end
 
       def timekeys
@@ -266,23 +328,34 @@ module Fluent
 
         log.on_trace { log.trace "writing events into buffer", instance: self.object_id, metadata_size: metadata_and_data.size }
 
-        staged_bytesize = 0
         operated_chunks = []
         unstaged_chunks = {} # metadata => [chunk, chunk, ...]
         chunks_to_enqueue = []
+        staged_bytesizes_by_chunk = {}
+        # track internal BufferChunkOverflowError in write_step_by_step
+        buffer_chunk_overflow_errors = []
 
         begin
           # sort metadata to get lock of chunks in same order with other threads
           metadata_and_data.keys.sort.each do |metadata|
             data = metadata_and_data[metadata]
-            write_once(metadata, data, format: format, size: size) do |chunk, adding_bytesize|
+            write_once(metadata, data, format: format, size: size) do |chunk, adding_bytesize, error|
               chunk.mon_enter # add lock to prevent to be committed/rollbacked from other threads
               operated_chunks << chunk
               if chunk.staged?
-                staged_bytesize += adding_bytesize
+                #
+                # https://github.com/fluent/fluentd/issues/2712
+                # write_once is supposed to write to a chunk only once
+                # but this block **may** run multiple times from write_step_by_step and previous write may be rollbacked
+                # So we should be counting the stage_size only for the last successful write
+                #
+                staged_bytesizes_by_chunk[chunk] = adding_bytesize
               elsif chunk.unstaged?
                 unstaged_chunks[metadata] ||= []
                 unstaged_chunks[metadata] << chunk
+              end
+              if error && !error.empty?
+                buffer_chunk_overflow_errors << error
               end
             end
           end
@@ -326,27 +399,39 @@ module Fluent
 
           # All locks about chunks are released.
 
-          synchronize do
-            # At here, staged chunks may be enqueued by other threads.
-            @stage_size += staged_bytesize
+          #
+          # Now update the stage, stage_size with proper locking
+          # FIX FOR stage_size miscomputation - https://github.com/fluent/fluentd/issues/2712
+          #
+          staged_bytesizes_by_chunk.each do |chunk, bytesize|
+            chunk.synchronize do
+              synchronize { @stage_size_metrics.add(bytesize) }
+              log.on_trace { log.trace { "chunk #{chunk.path} size_added: #{bytesize} new_size: #{chunk.bytesize}" } }
+            end
+          end
 
-            chunks_to_enqueue.each do |c|
-              if c.staged? && (enqueue || chunk_size_full?(c))
-                m = c.metadata
-                enqueue_chunk(m)
-                if unstaged_chunks[m]
-                  u = unstaged_chunks[m].pop
+          chunks_to_enqueue.each do |c|
+            if c.staged? && (enqueue || chunk_size_full?(c))
+              m = c.metadata
+              enqueue_chunk(m)
+              if unstaged_chunks[m]
+                u = unstaged_chunks[m].pop
+                u.synchronize do
                   if u.unstaged? && !chunk_size_full?(u)
-                    @stage[m] = u.staged!
-                    @stage_size += u.bytesize
+                    # `u.metadata.seq` and `m.seq` can be different but Buffer#enqueue_chunk expect them to be the same value
+                    u.metadata.seq = 0
+                    synchronize {
+                      @stage[m] = u.staged!
+                      @stage_size_metrics.add(u.bytesize)
+                    }
                   end
                 end
-              elsif c.unstaged?
-                enqueue_unstaged_chunk(c)
-              else
-                # previously staged chunk is already enqueued, closed or purged.
-                # no problem.
               end
+            elsif c.unstaged?
+              enqueue_unstaged_chunk(c)
+            else
+              # previously staged chunk is already enqueued, closed or purged.
+              # no problem.
             end
           end
 
@@ -363,6 +448,10 @@ module Fluent
               chunk.purge rescue nil # to prevent leakage of unstaged chunks
             end
             chunk.mon_exit rescue nil # this may raise ThreadError for chunks already committed
+          end
+          unless buffer_chunk_overflow_errors.empty?
+            # Notify delayed BufferChunkOverflowError here
+            raise BufferChunkOverflowError, buffer_chunk_overflow_errors.join(", ")
           end
         end
       end
@@ -398,13 +487,14 @@ module Fluent
             if chunk.empty?
               chunk.close
             else
+              chunk.metadata.seq = 0 # metadata.seq should be 0 for counting @queued_num
               @queue << chunk
               @queued_num[metadata] = @queued_num.fetch(metadata, 0) + 1
               chunk.enqueued!
             end
             bytesize = chunk.bytesize
-            @stage_size -= bytesize
-            @queue_size += bytesize
+            @stage_size_metrics.sub(bytesize)
+            @queue_size_metrics.add(bytesize)
           end
         end
         nil
@@ -416,17 +506,32 @@ module Fluent
         synchronize do
           chunk.synchronize do
             metadata = chunk.metadata
+            metadata.seq = 0 # metadata.seq should be 0 for counting @queued_num
             @queue << chunk
             @queued_num[metadata] = @queued_num.fetch(metadata, 0) + 1
             chunk.enqueued!
           end
-          @queue_size += chunk.bytesize
+          @queue_size_metrics.add(chunk.bytesize)
+        end
+      end
+
+      def update_timekeys
+        synchronize do
+          chunks = @stage.values
+          chunks.concat(@queue)
+          @timekeys = chunks.each_with_object({}) do |chunk, keys|
+            if chunk.metadata && chunk.metadata.timekey
+              t = chunk.metadata.timekey
+              keys[t] = keys.fetch(t, 0) + 1
+            end
+          end
         end
       end
 
       # At flush_at_shutdown, all staged chunks should be enqueued for buffer flush. Set true to force_enqueue for it.
       def enqueue_all(force_enqueue = false)
         log.on_trace { log.trace "enqueueing all chunks in buffer", instance: self.object_id }
+        update_timekeys if @enable_update_timekeys
 
         if block_given?
           synchronize{ @stage.keys }.each do |metadata|
@@ -491,7 +596,7 @@ module Fluent
           begin
             bytesize = chunk.bytesize
             chunk.purge
-            @queue_size -= bytesize
+            @queue_size_metrics.sub(bytesize)
           rescue => e
             log.error "failed to purge buffer chunk", chunk_id: dump_unique_id_hex(chunk_id), error_class: e.class, error: e
             log.error_backtrace
@@ -503,10 +608,6 @@ module Fluent
             @dequeued_num.delete(metadata)
           end
           log.trace "chunk purged", instance: self.object_id, chunk_id: dump_unique_id_hex(chunk_id), metadata: metadata
-        end
-
-        if metadata && metadata.timekey
-          del_timekey(metadata.timekey)
         end
 
         nil
@@ -526,7 +627,7 @@ module Fluent
               log.error_backtrace
             end
           end
-          @queue_size = 0
+          @queue_size_metrics.set(0)
         end
       end
 
@@ -572,7 +673,11 @@ module Fluent
 
             if chunk_size_over?(chunk)
               if format && empty_chunk
-                log.warn "chunk bytes limit exceeds for an emitted event stream: #{adding_bytesize}bytes"
+                if chunk.bytesize > @chunk_limit_size
+                  log.warn "chunk bytes limit exceeds for an emitted event stream: #{adding_bytesize}bytes"
+                else
+                  log.warn "chunk size limit exceeds for an emitted event stream: #{chunk.size}records"
+                end
               end
               chunk.rollback
 
@@ -620,6 +725,7 @@ module Fluent
 
       def write_step_by_step(metadata, data, format, splits_count, &block)
         splits = []
+        errors = []
         if splits_count > data.size
           splits_count = data.size
         end
@@ -638,13 +744,15 @@ module Fluent
         # Then, will generate chunks not staged (not queued) to append rest data.
         staged_chunk_used = false
         modified_chunks = []
+        modified_metadata = metadata
         get_next_chunk = ->(){
           c = if staged_chunk_used
                 # Staging new chunk here is bad idea:
                 # Recovering whole state including newly staged chunks is much harder than current implementation.
-                generate_chunk(metadata)
+                modified_metadata = modified_metadata.dup_next
+                generate_chunk(modified_metadata)
               else
-                synchronize{ @stage[metadata] ||= generate_chunk(metadata).staged! }
+                synchronize { @stage[modified_metadata] ||= generate_chunk(modified_metadata).staged! }
               end
           modified_chunks << c
           c
@@ -659,22 +767,65 @@ module Fluent
             raise ShouldRetry unless chunk.writable?
             staged_chunk_used = true if chunk.staged?
 
-            original_bytesize = chunk.bytesize
+            original_bytesize = committed_bytesize = chunk.bytesize
             begin
               while writing_splits_index < splits.size
                 split = splits[writing_splits_index]
+                formatted_split = format ? format.call(split) : nil
+
+                if split.size == 1 # Check BufferChunkOverflowError
+                  determined_bytesize = nil
+                  if @compress != :text
+                    determined_bytesize = nil
+                  elsif formatted_split
+                    determined_bytesize = formatted_split.bytesize
+                  elsif split.first.respond_to?(:bytesize)
+                    determined_bytesize = split.first.bytesize
+                  end
+
+                  if determined_bytesize && determined_bytesize > @chunk_limit_size
+                    # It is a obvious case that BufferChunkOverflowError should be raised here.
+                    # But if it raises here, already processed 'split' or
+                    # the proceeding 'split' will be lost completely.
+                    # So it is a last resort to delay raising such a exception
+                    errors << "a #{determined_bytesize} bytes record (nth: #{writing_splits_index}) is larger than buffer chunk limit size (#{@chunk_limit_size})"
+                    writing_splits_index += 1
+                    next
+                  end
+
+                  if determined_bytesize.nil? || chunk.bytesize + determined_bytesize > @chunk_limit_size
+                    # The split will (might) cause size over so keep already processed
+                    # 'split' content here (allow performance regression a bit).
+                    chunk.commit
+                    committed_bytesize = chunk.bytesize
+                  end
+                end
+
                 if format
-                  chunk.concat(format.call(split), split.size)
+                  chunk.concat(formatted_split, split.size)
                 else
                   chunk.append(split, compress: @compress)
                 end
+                adding_bytes = chunk.bytesize - committed_bytesize
 
                 if chunk_size_over?(chunk) # split size is larger than difference between size_full? and size_over?
                   chunk.rollback
+                  committed_bytesize = chunk.bytesize
 
-                  if split.size == 1 && original_bytesize == 0
-                    big_record_size = format ? format.call(split).bytesize : split.first.bytesize
-                    raise BufferChunkOverflowError, "a #{big_record_size}bytes record is larger than buffer chunk limit size"
+                  if split.size == 1 # Check BufferChunkOverflowError again
+                    if adding_bytes > @chunk_limit_size
+                      errors << "concatenated/appended a #{adding_bytes} bytes record (nth: #{writing_splits_index}) is larger than buffer chunk limit size (#{@chunk_limit_size})"
+                      writing_splits_index += 1
+                      next
+                    else
+                      # As already processed content is kept after rollback, then unstaged chunk should be queued.
+                      # After that, re-process current split again.
+                      # New chunk should be allocated, to do it, modify @stage and so on.
+                      synchronize { @stage.delete(modified_metadata) }
+                      staged_chunk_used = false
+                      chunk.unstaged!
+                      break
+                    end
                   end
 
                   if chunk_size_full?(chunk) || split.size == 1
@@ -697,7 +848,8 @@ module Fluent
               raise
             end
 
-            block.call(chunk, chunk.bytesize - original_bytesize)
+            block.call(chunk, chunk.bytesize - original_bytesize, errors)
+            errors = []
           end
         end
       rescue ShouldRetry
@@ -723,23 +875,29 @@ module Fluent
       ]
 
       def statistics
-        stage_size, queue_size = @stage_size, @queue_size
-        buffer_space = 1.0 - ((stage_size + queue_size * 1.0) / @total_limit_size).round
+        stage_size, queue_size = @stage_size_metrics.get, @queue_size_metrics.get
+        buffer_space = 1.0 - ((stage_size + queue_size * 1.0) / @total_limit_size)
+        @stage_length_metrics.set(@stage.size)
+        @queue_length_metrics.set(@queue.size)
+        @available_buffer_space_ratios_metrics.set(buffer_space * 100)
+        @total_queued_size_metrics.set(stage_size + queue_size)
         stats = {
-          'stage_length' => @stage.size,
+          'stage_length' => @stage_length_metrics.get,
           'stage_byte_size' => stage_size,
-          'queue_length' => @queue.size,
+          'queue_length' => @queue_length_metrics.get,
           'queue_byte_size' => queue_size,
-          'available_buffer_space_ratios' => buffer_space * 100,
-          'total_queued_size' => stage_size + queue_size,
+          'available_buffer_space_ratios' => @available_buffer_space_ratios_metrics.get.round(1),
+          'total_queued_size' => @total_queued_size_metrics.get,
         }
 
-        if (m = timekeys.min)
-          stats['oldest_timekey'] = m
+        tkeys = timekeys
+        if (m = tkeys.min)
+          @oldest_timekey_metrics.set(m)
+          stats['oldest_timekey'] = @oldest_timekey_metrics.get
         end
-
-        if (m = timekeys.max)
-          stats['newest_timekey'] = m
+        if (m = tkeys.max)
+          @newest_timekey_metrics.set(m)
+          stats['newest_timekey'] = @newest_timekey_metrics.get
         end
 
         { 'buffer' => stats }
@@ -754,24 +912,6 @@ module Fluent
         else
           !@queue.empty?
         end
-      end
-
-      def add_timekey(t)
-        @mutex.synchronize do
-          @timekeys[t] += 1
-        end
-        nil
-      end
-
-      def del_timekey(t)
-        @mutex.synchronize do
-          if @timekeys[t] <= 1
-            @timekeys.delete(t)
-          else
-            @timekeys[t] -= 1
-          end
-        end
-        nil
       end
     end
   end

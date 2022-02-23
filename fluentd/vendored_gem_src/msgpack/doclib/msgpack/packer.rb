@@ -14,7 +14,7 @@ module MessagePack
     # @overload initialize(io, options={})
     #   @param io [IO]
     #   @param options [Hash]
-    #   This packer writes serialzied objects into the IO when the internal buffer is filled.
+    #   This packer writes serialized objects into the IO when the internal buffer is filled.
     #   _io_ must respond to write(string) or append(string) method.
     #
     # Supported options:
@@ -33,12 +33,12 @@ module MessagePack
     #
     # @overload register_type(type, klass, &block)
     #   @param type [Fixnum] type id (0-127) user defined type id for specified Class
-    #   @param klass [Class] Class to be serialized with speicifed type id
+    #   @param klass [Class] Class to be serialized with specified type id
     #   @yieldparam object [Object] object to be serialized
     #
     # @overload register_type(type, klass, method_name)
     #   @param type [Fixnum] type id (0-127) user defined type id for specified Class
-    #   @param klass [Class] Class to be serialized with speicifed type id
+    #   @param klass [Class] Class to be serialized with specified type id
     #   @param method_name [Symbol] method which returns bytes of serialized representation
     #
     # @return nil
@@ -155,8 +155,9 @@ module MessagePack
     #
     # @return nil
     #
-    def clear
+    def reset
     end
+    alias clear reset
 
     #
     # Returns size of the internal buffer. Same as buffer.size.

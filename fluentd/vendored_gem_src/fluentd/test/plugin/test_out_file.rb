@@ -11,6 +11,11 @@ class FileOutputTest < Test::Unit::TestCase
     Fluent::Test.setup
     FileUtils.rm_rf(TMP_DIR)
     FileUtils.mkdir_p(TMP_DIR)
+    @default_newline = if Fluent.windows?
+                         "\r\n"
+                       else
+                         "\n"
+                       end
   end
 
   TMP_DIR = File.expand_path(File.dirname(__FILE__) + "/../tmp/out_file#{ENV['TEST_ENV_NUMBER']}")
@@ -91,7 +96,7 @@ class FileOutputTest < Test::Unit::TestCase
         end
       end
       assert_equal 1, d.formatted.size
-      assert_equal %[2011-01-02T21:14:15+08:00\ttest\t{"a":1}\n], d.formatted[0]
+      assert_equal %[2011-01-02T21:14:15+08:00\ttest\t{"a":1}#{@default_newline}], d.formatted[0]
     end
 
     test 'no configuration error raised for basic configuration using "*" (v0.12 style)' do
@@ -296,11 +301,11 @@ class FileOutputTest < Test::Unit::TestCase
 
       assert_equal 5, d.formatted.size
 
-      r1 = %!2016-10-03 23:58:09 +0000,my.data,{"type":"a","message":"data raw content","hostname":"testing.local","tag":"my.data","time":"2016/10/04 08:58:09 +0900"}\n!
-      r2 = %!2016-10-03 23:59:33 +0000,my.data,{"type":"a","message":"data raw content","hostname":"testing.local","tag":"my.data","time":"2016/10/04 08:59:33 +0900"}\n!
-      r3 = %!2016-10-03 23:59:57 +0000,your.data,{"type":"a","message":"data raw content","hostname":"testing.local","tag":"your.data","time":"2016/10/04 08:59:57 +0900"}\n!
-      r4 = %!2016-10-04 00:00:17 +0000,my.data,{"type":"a","message":"data raw content","hostname":"testing.local","tag":"my.data","time":"2016/10/04 09:00:17 +0900"}\n!
-      r5 = %!2016-10-04 00:01:59 +0000,your.data,{"type":"a","message":"data raw content","hostname":"testing.local","tag":"your.data","time":"2016/10/04 09:01:59 +0900"}\n!
+      r1 = %!2016-10-03 23:58:09 +0000,my.data,{"type":"a","message":"data raw content","hostname":"testing.local","tag":"my.data","time":"2016/10/04 08:58:09 +0900"}#{@default_newline}!
+      r2 = %!2016-10-03 23:59:33 +0000,my.data,{"type":"a","message":"data raw content","hostname":"testing.local","tag":"my.data","time":"2016/10/04 08:59:33 +0900"}#{@default_newline}!
+      r3 = %!2016-10-03 23:59:57 +0000,your.data,{"type":"a","message":"data raw content","hostname":"testing.local","tag":"your.data","time":"2016/10/04 08:59:57 +0900"}#{@default_newline}!
+      r4 = %!2016-10-04 00:00:17 +0000,my.data,{"type":"a","message":"data raw content","hostname":"testing.local","tag":"my.data","time":"2016/10/04 09:00:17 +0900"}#{@default_newline}!
+      r5 = %!2016-10-04 00:01:59 +0000,your.data,{"type":"a","message":"data raw content","hostname":"testing.local","tag":"your.data","time":"2016/10/04 09:01:59 +0900"}#{@default_newline}!
       assert_equal r1, d.formatted[0]
       assert_equal r2, d.formatted[1]
       assert_equal r3, d.formatted[2]
@@ -329,8 +334,8 @@ class FileOutputTest < Test::Unit::TestCase
         d.feed(time, {"a"=>2})
       end
       assert_equal 2, d.formatted.size
-      assert_equal %[2011-01-02T13:14:15Z\ttest\t{"a":1}\n], d.formatted[0]
-      assert_equal %[2011-01-02T13:14:15Z\ttest\t{"a":2}\n], d.formatted[1]
+      assert_equal %[2011-01-02T13:14:15Z\ttest\t{"a":1}#{@default_newline}], d.formatted[0]
+      assert_equal %[2011-01-02T13:14:15Z\ttest\t{"a":2}#{@default_newline}], d.formatted[1]
     end
 
     test 'time formatted with specified timezone, using area name' do
@@ -344,7 +349,7 @@ class FileOutputTest < Test::Unit::TestCase
         d.feed(time, {"a"=>1})
       end
       assert_equal 1, d.formatted.size
-      assert_equal %[2011-01-02T21:14:15+08:00\ttest\t{"a":1}\n], d.formatted[0]
+      assert_equal %[2011-01-02T21:14:15+08:00\ttest\t{"a":1}#{@default_newline}], d.formatted[0]
     end
 
     test 'time formatted with specified timezone, using offset' do
@@ -358,7 +363,7 @@ class FileOutputTest < Test::Unit::TestCase
         d.feed(time, {"a"=>1})
       end
       assert_equal 1, d.formatted.size
-      assert_equal %[2011-01-02T09:44:15-03:30\ttest\t{"a":1}\n], d.formatted[0]
+      assert_equal %[2011-01-02T09:44:15-03:30\ttest\t{"a":1}#{@default_newline}], d.formatted[0]
     end
 
     test 'configuration error raised for invalid timezone' do
@@ -389,6 +394,11 @@ class FileOutputTest < Test::Unit::TestCase
     assert_equal expect, result
   end
 
+  def check_result(path, expect)
+    result = File.read(path, mode: "rb")
+    assert_equal expect, result
+  end
+
   sub_test_case 'write' do
     test 'basic case' do
       d = create_driver
@@ -402,7 +412,7 @@ class FileOutputTest < Test::Unit::TestCase
       end
 
       assert File.exist?("#{TMP_DIR}/out_file_test.20110102_0.log.gz")
-      check_gzipped_result("#{TMP_DIR}/out_file_test.20110102_0.log.gz", %[2011-01-02T13:14:15Z\ttest\t{"a":1}\n] + %[2011-01-02T13:14:15Z\ttest\t{"a":2}\n])
+      check_gzipped_result("#{TMP_DIR}/out_file_test.20110102_0.log.gz", %[2011-01-02T13:14:15Z\ttest\t{"a":1}#{@default_newline}] + %[2011-01-02T13:14:15Z\ttest\t{"a":2}#{@default_newline}])
     end
   end
 
@@ -469,7 +479,7 @@ class FileOutputTest < Test::Unit::TestCase
       end
 
       path = d.instance.last_written_path
-      check_gzipped_result(path, %[#{Yajl.dump({"a" => 1, 'time' => time.to_i})}\n] + %[#{Yajl.dump({"a" => 2, 'time' => time.to_i})}\n])
+      check_gzipped_result(path, %[#{Yajl.dump({"a" => 1, 'time' => time.to_i})}#{@default_newline}] + %[#{Yajl.dump({"a" => 2, 'time' => time.to_i})}#{@default_newline}])
     end
 
     test 'ltsv' do
@@ -482,7 +492,7 @@ class FileOutputTest < Test::Unit::TestCase
       end
 
       path = d.instance.last_written_path
-      check_gzipped_result(path, %[a:1\ttime:2011-01-02T13:14:15Z\n] + %[a:2\ttime:2011-01-02T13:14:15Z\n])
+      check_gzipped_result(path, %[a:1\ttime:2011-01-02T13:14:15Z#{@default_newline}] + %[a:2\ttime:2011-01-02T13:14:15Z#{@default_newline}])
     end
 
     test 'single_value' do
@@ -495,13 +505,13 @@ class FileOutputTest < Test::Unit::TestCase
       end
 
       path = d.instance.last_written_path
-      check_gzipped_result(path, %[1\n] + %[2\n])
+      check_gzipped_result(path, %[1#{@default_newline}] + %[2#{@default_newline}])
     end
   end
 
   test 'path with index number' do
     time = event_time("2011-01-02 13:14:15 UTC")
-    formatted_lines = %[2011-01-02T13:14:15Z\ttest\t{"a":1}\n] + %[2011-01-02T13:14:15Z\ttest\t{"a":2}\n]
+    formatted_lines = %[2011-01-02T13:14:15Z\ttest\t{"a":1}#{@default_newline}] + %[2011-01-02T13:14:15Z\ttest\t{"a":2}#{@default_newline}]
 
     write_once = ->(){
       d = create_driver
@@ -530,20 +540,27 @@ class FileOutputTest < Test::Unit::TestCase
     assert_equal 3, Dir.glob("#{TMP_DIR}/out_file_test.*").size
   end
 
-  test 'append' do
+  data(
+    "with compression" => true,
+    "without compression" => false,
+  )
+  test 'append' do |compression|
     time = event_time("2011-01-02 13:14:15 UTC")
-    formatted_lines = %[2011-01-02T13:14:15Z\ttest\t{"a":1}\n] + %[2011-01-02T13:14:15Z\ttest\t{"a":2}\n]
+    formatted_lines = %[2011-01-02T13:14:15Z\ttest\t{"a":1}#{@default_newline}] + %[2011-01-02T13:14:15Z\ttest\t{"a":2}#{@default_newline}]
 
     write_once = ->(){
-      d = create_driver %[
+      config = %[
         path #{TMP_DIR}/out_file_test
-        compress gz
         utc
         append true
         <buffer>
           timekey_use_utc true
         </buffer>
       ]
+      if compression
+        config << "        compress gz"
+      end
+      d = create_driver(config)
       d.run(default_tag: 'test'){
         d.feed(time, {"a"=>1})
         d.feed(time, {"a"=>2})
@@ -551,23 +568,27 @@ class FileOutputTest < Test::Unit::TestCase
       d.instance.last_written_path
     }
 
-    path = write_once.call
-    assert_equal "#{TMP_DIR}/out_file_test.20110102.log.gz", path
-    check_gzipped_result(path, formatted_lines)
+    log_file_name = "out_file_test.20110102.log"
+    if compression
+      log_file_name << ".gz"
+    end
 
-    path = write_once.call
-    assert_equal "#{TMP_DIR}/out_file_test.20110102.log.gz", path
-    check_gzipped_result(path, formatted_lines * 2)
-
-    path = write_once.call
-    assert_equal "#{TMP_DIR}/out_file_test.20110102.log.gz", path
-    check_gzipped_result(path, formatted_lines * 3)
+    1.upto(3) do |i|
+      path = write_once.call
+      assert_equal "#{TMP_DIR}/#{log_file_name}", path
+      expect = formatted_lines * i
+      if compression
+        check_gzipped_result(path, expect)
+      else
+        check_result(path, expect)
+      end
+    end
   end
 
   test 'append when JST' do
     with_timezone(Fluent.windows? ? "JST-9" : "Asia/Tokyo") do
       time = event_time("2011-01-02 03:14:15+09:00")
-      formatted_lines = %[2011-01-02T03:14:15+09:00\ttest\t{"a":1}\n] + %[2011-01-02T03:14:15+09:00\ttest\t{"a":2}\n]
+      formatted_lines = %[2011-01-02T03:14:15+09:00\ttest\t{"a":1}#{@default_newline}] + %[2011-01-02T03:14:15+09:00\ttest\t{"a":2}#{@default_newline}]
 
       write_once = ->(){
         d = create_driver %[
@@ -603,7 +624,7 @@ class FileOutputTest < Test::Unit::TestCase
   test 'append when UTC-02 but timekey_zone is +0900' do
     with_timezone("UTC-02") do # +0200
       time = event_time("2011-01-02 17:14:15+02:00")
-      formatted_lines = %[2011-01-02T17:14:15+02:00\ttest\t{"a":1}\n] + %[2011-01-02T17:14:15+02:00\ttest\t{"a":2}\n]
+      formatted_lines = %[2011-01-02T17:14:15+02:00\ttest\t{"a":1}#{@default_newline}] + %[2011-01-02T17:14:15+02:00\ttest\t{"a":2}#{@default_newline}]
 
       write_once = ->(){
         d = create_driver %[

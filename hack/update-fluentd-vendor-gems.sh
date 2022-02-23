@@ -41,7 +41,8 @@ fi
 gemlist=$( mktemp )
 manifest=$( mktemp )
 trap "rm -f $gemlist $manifest" EXIT
-cat $fluentddir/Gemfile.lock | grep -E '\s{4}.*\s\([0-9.]*\)$' | sed 's/(//;s/)//' | sort > $gemlist
+echo "bundler $(grep -A 1 'BUNDLED WITH' fluentd/Gemfile.lock | grep -o [0-9.]*)" > $gemlist
+cat $fluentddir/Gemfile.lock | grep -E '\s{4}.*\s\([0-9.]*\)$' | sed 's/(//;s/)//' | sort >> $gemlist
 while read gemname gemver ; do
     vendordir=$fluentddir/vendored_gem_src/$gemname
     gemfile=${gemname}-${gemver}.gem

@@ -23,6 +23,7 @@ import static org.jruby.runtime.Visibility.PRIVATE;
 
 @JRubyClass(name="MessagePack::Factory")
 public class Factory extends RubyObject {
+  private static final long serialVersionUID = 8441284623445322492L;
   private final Ruby runtime;
   private final ExtensionRegistry extensionRegistry;
   private boolean hasSymbolExtType;
@@ -61,7 +62,7 @@ public class Factory extends RubyObject {
 
   @JRubyMethod(name = "registered_types_internal", visibility = PRIVATE)
   public IRubyObject registeredTypesInternal(ThreadContext ctx) {
-    return RubyArray.newArray(ctx.getRuntime(), new IRubyObject[] {
+    return RubyArray.newArray(ctx.runtime, new IRubyObject[] {
       extensionRegistry.toInternalPackerRegistry(ctx),
       extensionRegistry.toInternalUnpackerRegistry(ctx)
     });
@@ -69,7 +70,7 @@ public class Factory extends RubyObject {
 
   @JRubyMethod(name = "register_type", required = 2, optional = 1)
   public IRubyObject registerType(ThreadContext ctx, IRubyObject[] args) {
-    Ruby runtime = ctx.getRuntime();
+    Ruby runtime = ctx.runtime;
     IRubyObject type = args[0];
     IRubyObject mod = args[1];
 
@@ -88,6 +89,10 @@ public class Factory extends RubyObject {
         RubyHash options = (RubyHash) args[args.length - 1];
         packerArg = options.fastARef(runtime.newSymbol("packer"));
         unpackerArg = options.fastARef(runtime.newSymbol("unpacker"));
+        IRubyObject optimizedSymbolsParsingArg = options.fastARef(runtime.newSymbol("optimized_symbols_parsing"));
+        if (optimizedSymbolsParsingArg != null && optimizedSymbolsParsingArg.isTrue()) {
+          throw runtime.newArgumentError("JRuby implementation does not support the optimized_symbols_parsing option");
+        }
       } else {
         throw runtime.newArgumentError(String.format("expected Hash but found %s.", args[args.length - 1].getType().getName()));
       }

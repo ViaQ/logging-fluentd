@@ -52,9 +52,9 @@ void msgpack_unpacker_static_destroy()
 
 #define HEAD_BYTE_REQUIRED 0xc1
 
-void _msgpack_unpacker_init(msgpack_unpacker_t* uk)
+msgpack_unpacker_t* _msgpack_unpacker_new(void)
 {
-    memset(uk, 0, sizeof(msgpack_unpacker_t));
+    msgpack_unpacker_t* uk = ZALLOC_N(msgpack_unpacker_t, 1);
 
     msgpack_buffer_init(UNPACKER_BUFFER_(uk));
 
@@ -71,6 +71,8 @@ void _msgpack_unpacker_init(msgpack_unpacker_t* uk)
     uk->stack = xmalloc(MSGPACK_UNPACKER_STACK_CAPACITY * sizeof(msgpack_unpacker_stack_t));
 #endif
     uk->stack_capacity = MSGPACK_UNPACKER_STACK_CAPACITY;
+
+    return uk;
 }
 
 void _msgpack_unpacker_destroy(msgpack_unpacker_t* uk)
@@ -142,34 +144,29 @@ static inline void reset_head_byte(msgpack_unpacker_t* uk)
 
 static inline int object_complete(msgpack_unpacker_t* uk, VALUE object)
 {
+    if(uk->freeze) {
+        rb_obj_freeze(object);
+    }
+
     uk->last_object = object;
     reset_head_byte(uk);
     return PRIMITIVE_OBJECT_COMPLETE;
 }
 
-static inline int object_complete_string(msgpack_unpacker_t* uk, VALUE str)
+static inline int object_complete_symbol(msgpack_unpacker_t* uk, VALUE object)
 {
-#ifdef COMPAT_HAVE_ENCODING
-    ENCODING_SET(str, msgpack_rb_encindex_utf8);
-#endif
-    return object_complete(uk, str);
-}
-
-static inline int object_complete_binary(msgpack_unpacker_t* uk, VALUE str)
-{
-#ifdef COMPAT_HAVE_ENCODING
-    ENCODING_SET(str, msgpack_rb_encindex_ascii8bit);
-#endif
-    return object_complete(uk, str);
+    uk->last_object = object;
+    reset_head_byte(uk);
+    return PRIMITIVE_OBJECT_COMPLETE;
 }
 
 static inline int object_complete_ext(msgpack_unpacker_t* uk, int ext_type, VALUE str)
 {
-#ifdef COMPAT_HAVE_ENCODING
-    ENCODING_SET(str, msgpack_rb_encindex_ascii8bit);
-#endif
+    if (uk->optimized_symbol_ext_type && ext_type == uk->symbol_ext_type) {
+        return object_complete_symbol(uk, rb_str_intern(str));
+    }
 
-    VALUE proc = msgpack_unpacker_ext_registry_lookup(&uk->ext_registry, ext_type);
+    VALUE proc = msgpack_unpacker_ext_registry_lookup(uk->ext_registry, ext_type);
     if(proc != Qnil) {
         VALUE obj = rb_funcall(proc, s_call, 1, str);
         return object_complete(uk, obj);
@@ -271,9 +268,10 @@ static int read_raw_body_cont(msgpack_unpacker_t* uk)
 
     int ret;
     if(uk->reading_raw_type == RAW_TYPE_STRING) {
-        ret = object_complete_string(uk, uk->reading_raw);
-    } else if(uk->reading_raw_type == RAW_TYPE_BINARY) {
-        ret = object_complete_binary(uk, uk->reading_raw);
+        ENCODING_SET(uk->reading_raw, msgpack_rb_encindex_utf8);
+        ret = object_complete(uk, uk->reading_raw);
+    } else if (uk->reading_raw_type == RAW_TYPE_BINARY) {
+        ret = object_complete(uk, uk->reading_raw);
     } else {
         ret = object_complete_ext(uk, uk->reading_raw_type, uk->reading_raw);
     }
@@ -288,20 +286,22 @@ static inline int read_raw_body_begin(msgpack_unpacker_t* uk, int raw_type)
     /* try optimized read */
     size_t length = uk->reading_raw_remaining;
     if(length <= msgpack_buffer_top_readable_size(UNPACKER_BUFFER_(uk))) {
-        /* don't use zerocopy for hash keys but get a frozen string directly
-         * because rb_hash_aset freezes keys and it causes copying */
-        bool will_freeze = is_reading_map_key(uk);
-        VALUE string = msgpack_buffer_read_top_as_string(UNPACKER_BUFFER_(uk), length, will_freeze);
         int ret;
-        if(raw_type == RAW_TYPE_STRING) {
-            ret = object_complete_string(uk, string);
-        } else if(raw_type == RAW_TYPE_BINARY) {
-            ret = object_complete_binary(uk, string);
+        if ((uk->optimized_symbol_ext_type && uk->symbol_ext_type == raw_type) || (uk->symbolize_keys && is_reading_map_key(uk))) {
+            VALUE symbol = msgpack_buffer_read_top_as_symbol(UNPACKER_BUFFER_(uk), length, raw_type != RAW_TYPE_BINARY);
+            ret = object_complete_symbol(uk, symbol);
         } else {
-            ret = object_complete_ext(uk, raw_type, string);
-        }
-        if(will_freeze) {
-            rb_obj_freeze(string);
+            bool will_freeze = uk->freeze;
+            if(raw_type == RAW_TYPE_STRING || raw_type == RAW_TYPE_BINARY) {
+               /* don't use zerocopy for hash keys but get a frozen string directly
+                * because rb_hash_aset freezes keys and it causes copying */
+                will_freeze = will_freeze || is_reading_map_key(uk);
+                VALUE string = msgpack_buffer_read_top_as_string(UNPACKER_BUFFER_(uk), length, will_freeze, raw_type == RAW_TYPE_STRING);
+                ret = object_complete(uk, string);
+            } else {
+                VALUE string = msgpack_buffer_read_top_as_string(UNPACKER_BUFFER_(uk), length, false, false);
+                ret = object_complete_ext(uk, raw_type, string);
+            }
         }
         uk->reading_raw_remaining = 0;
         return ret;
@@ -332,7 +332,7 @@ static int read_primitive(msgpack_unpacker_t* uk)
     SWITCH_RANGE(b, 0xa0, 0xbf)  // FixRaw / fixstr
         int count = b & 0x1f;
         if(count == 0) {
-            return object_complete_string(uk, rb_str_buf_new(0));
+            return object_complete(uk, rb_utf8_str_new_static("", 0));
         }
         /* read_raw_body_begin sets uk->reading_raw */
         uk->reading_raw_remaining = count;
@@ -517,7 +517,7 @@ static int read_primitive(msgpack_unpacker_t* uk)
                 READ_CAST_BLOCK_OR_RETURN_EOF(cb, uk, 1);
                 uint8_t count = cb->u8;
                 if(count == 0) {
-                    return object_complete_string(uk, rb_str_buf_new(0));
+                    return object_complete(uk, rb_utf8_str_new_static("", 0));
                 }
                 /* read_raw_body_begin sets uk->reading_raw */
                 uk->reading_raw_remaining = count;
@@ -529,7 +529,7 @@ static int read_primitive(msgpack_unpacker_t* uk)
                 READ_CAST_BLOCK_OR_RETURN_EOF(cb, uk, 2);
                 uint16_t count = _msgpack_be16(cb->u16);
                 if(count == 0) {
-                    return object_complete_string(uk, rb_str_buf_new(0));
+                    return object_complete(uk, rb_utf8_str_new_static("", 0));
                 }
                 /* read_raw_body_begin sets uk->reading_raw */
                 uk->reading_raw_remaining = count;
@@ -541,7 +541,7 @@ static int read_primitive(msgpack_unpacker_t* uk)
                 READ_CAST_BLOCK_OR_RETURN_EOF(cb, uk, 4);
                 uint32_t count = _msgpack_be32(cb->u32);
                 if(count == 0) {
-                    return object_complete_string(uk, rb_str_buf_new(0));
+                    return object_complete(uk, rb_utf8_str_new_static("", 0));
                 }
                 /* read_raw_body_begin sets uk->reading_raw */
                 uk->reading_raw_remaining = count;
@@ -553,7 +553,7 @@ static int read_primitive(msgpack_unpacker_t* uk)
                 READ_CAST_BLOCK_OR_RETURN_EOF(cb, uk, 1);
                 uint8_t count = cb->u8;
                 if(count == 0) {
-                    return object_complete_binary(uk, rb_str_buf_new(0));
+                    return object_complete(uk, rb_str_new_static("", 0));
                 }
                 /* read_raw_body_begin sets uk->reading_raw */
                 uk->reading_raw_remaining = count;
@@ -565,7 +565,7 @@ static int read_primitive(msgpack_unpacker_t* uk)
                 READ_CAST_BLOCK_OR_RETURN_EOF(cb, uk, 2);
                 uint16_t count = _msgpack_be16(cb->u16);
                 if(count == 0) {
-                    return object_complete_binary(uk, rb_str_buf_new(0));
+                    return object_complete(uk, rb_str_new_static("", 0));
                 }
                 /* read_raw_body_begin sets uk->reading_raw */
                 uk->reading_raw_remaining = count;
@@ -577,7 +577,7 @@ static int read_primitive(msgpack_unpacker_t* uk)
                 READ_CAST_BLOCK_OR_RETURN_EOF(cb, uk, 4);
                 uint32_t count = _msgpack_be32(cb->u32);
                 if(count == 0) {
-                    return object_complete_binary(uk, rb_str_buf_new(0));
+                    return object_complete(uk, rb_str_new_static("", 0));
                 }
                 /* read_raw_body_begin sets uk->reading_raw */
                 uk->reading_raw_remaining = count;
@@ -719,18 +719,8 @@ int msgpack_unpacker_read(msgpack_unpacker_t* uk, size_t target_stack_depth)
                 break;
             case STACK_TYPE_MAP_VALUE:
                 if(uk->symbolize_keys && rb_type(top->key) == T_STRING) {
-                    /* here uses rb_intern_str instead of rb_intern so that Ruby VM can GC unused symbols */
-#ifdef HAVE_RB_STR_INTERN
-                    /* rb_str_intern is added since MRI 2.2.0 */
+                    /* here uses rb_str_intern instead of rb_intern so that Ruby VM can GC unused symbols */
                     rb_hash_aset(top->object, rb_str_intern(top->key), uk->last_object);
-#else
-#ifndef HAVE_RB_INTERN_STR
-                    /* MRI 1.8 doesn't have rb_intern_str or rb_intern2 */
-                    rb_hash_aset(top->object, ID2SYM(rb_intern(RSTRING_PTR(top->key))), uk->last_object);
-#else
-                    rb_hash_aset(top->object, ID2SYM(rb_intern_str(top->key)), uk->last_object);
-#endif
-#endif
                 } else {
                     rb_hash_aset(top->object, top->key, uk->last_object);
                 }

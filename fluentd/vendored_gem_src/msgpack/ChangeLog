@@ -1,3 +1,37 @@
+2022-02-15 version 1.4.5:
+
+* Fix to create UTF-8 Symbol keys when symbolize_keys: true
+* Fix to assume Symbols as US-ASCII or UTF-8
+* Optimize Packer/Unpacker initialization
+* Optimize extension class lookup
+* Rename Packer#clear as Packer#reset (#clear is still available as an alias)
+
+2022-01-22 version 1.4.4:
+
+* Specify the build option --platform=8 for older Java platforms
+
+2022-01-20 version 1.4.3:
+
+* Optimize serialization/deserialization of Symbols
+* Support registering ext types for objects of subclasses of primitive types (like Hash)
+* Add optimized_symbols_parsing option to Factory#register_type on MRI implementation
+* Optimize to deduplicate Hash keys on JRuby
+* Support JRuby 9.3 (and drop 9.1)
+
+2021-02-01 version 1.4.2:
+
+* Add the required Ruby version (>= 2.4) to avoid compilation errors on older Ruby runtimes
+* Drop the support of old Ruby versions explicitly (1.8, 1.9, 2.0, 2.1, 2.2, 2.3)
+
+2021-01-27 version 1.4.1:
+
+* Bugfix about the wrong string encoding longer than 256 bytes (#200)
+
+2021-01-27 version 1.4.0:
+
+* Introduce the optimization to use frozen/deduped keys for map objects
+* Stop releasing fat gem (pre-built binaries) for mswin32 arch environments
+
 2020-02-05 version 1.3.3:
 
 * Hotfix release for Windows environments: 1.3.2 missed including binaries

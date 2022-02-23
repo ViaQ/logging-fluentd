@@ -18,7 +18,7 @@ module FluentPluginBufferTest
   end
   class DummyMemoryChunkError < StandardError; end
   class DummyMemoryChunk < Fluent::Plugin::Buffer::MemoryChunk
-    attr_reader :append_count, :rollbacked, :closed, :purged
+    attr_reader :append_count, :rollbacked, :closed, :purged, :chunk
     attr_accessor :failing
     def initialize(metadata, compress: :text)
       super
@@ -238,8 +238,14 @@ class BufferTest < Test::Unit::TestCase
       assert_nil @p.queue
       assert_nil @p.dequeued
       assert_nil @p.queued_num
-      assert_equal 0, @p.stage_size
-      assert_equal 0, @p.queue_size
+      assert_nil @p.stage_length_metrics
+      assert_nil @p.stage_size_metrics
+      assert_nil @p.queue_length_metrics
+      assert_nil @p.queue_size_metrics
+      assert_nil @p.available_buffer_space_ratios_metrics
+      assert_nil @p.total_queued_size_metrics
+      assert_nil @p.newest_timekey_metrics
+      assert_nil @p.oldest_timekey_metrics
       assert_equal [], @p.timekeys
     end
 
@@ -543,6 +549,8 @@ class BufferTest < Test::Unit::TestCase
       assert_equal [@dm0,@dm1,@dm1], @p.queue.map(&:metadata)
       assert_equal [@dm2,@dm3,m], @p.stage.keys
 
+      @p.update_timekeys
+
       assert @p.timekeys.include?(timekey)
     end
 
@@ -674,6 +682,8 @@ class BufferTest < Test::Unit::TestCase
       assert_equal [@dm0,@dm1,@dm1], @p.queue.map(&:metadata)
       assert_equal [@dm2,@dm3,m], @p.stage.keys
       assert_equal 1, @p.stage[m].append_count
+
+      @p.update_timekeys
 
       assert @p.timekeys.include?(timekey)
     end
@@ -900,11 +910,27 @@ class BufferTest < Test::Unit::TestCase
       es = Fluent::ArrayEventStream.new([ [event_time('2016-04-11 16:00:02 +0000'), {"message" => "x" * (128 - 22)}] ] * 45000)
       @p.write({@dm0 => es}, format: @format)
 
+      # metadata whose seq is 4 is created, but overwrite with original metadata(seq=0) for next use of this chunk https://github.com/fluent/fluentd/blob/9d113029d4550ce576d8825bfa9612aa3e55bff0/lib/fluent/plugin/buffer.rb#L357
       assert_equal [@dm0], @p.stage.keys
       assert_equal 5400, @p.stage[@dm0].size
-      assert_equal [@dm0,@dm0,@dm0,@dm0,@dm0], @p.queue.map(&:metadata)
+      assert_equal [@dm0, @dm0, @dm0, @dm0, @dm0], @p.queue.map(&:metadata)
       assert_equal [5000, 9900, 9900, 9900, 9900], @p.queue.map(&:size) # splits: 45000 / 100 => 450 * ...
       # 9900 * 4 + 5400 == 45000
+    end
+
+    test '#dequeue_chunk succeeds when chunk is splited' do
+      assert_equal [@dm0], @p.stage.keys
+      assert_equal [], @p.queue.map(&:metadata)
+
+      assert_equal 1_280_000, @p.chunk_limit_size
+
+      es = Fluent::ArrayEventStream.new([ [event_time('2016-04-11 16:00:02 +0000'), {"message" => "x" * (128 - 22)}] ] * 45000)
+      @p.write({@dm0 => es}, format: @format)
+      @p.enqueue_all(true)
+
+      dequeued_chunks = 6.times.map { |e| @p.dequeue_chunk } # splits: 45000 / 100 => 450 * ...
+      assert_equal [5000, 9900, 9900, 9900, 9900, 5400], dequeued_chunks.map(&:size)
+      assert_equal [@dm0, @dm0, @dm0, @dm0, @dm0, @dm0], dequeued_chunks.map(&:metadata)
     end
 
     test '#write raises BufferChunkOverflowError if a record is biggar than chunk limit size' do
@@ -917,6 +943,97 @@ class BufferTest < Test::Unit::TestCase
       assert_raise Fluent::Plugin::Buffer::BufferChunkOverflowError do
         @p.write({@dm0 => es}, format: @format)
       end
+    end
+
+    data(
+      first_chunk: Fluent::ArrayEventStream.new([[event_time('2016-04-11 16:00:02 +0000'), {"message" => "x" * 1_280_000}],
+                                                 [event_time('2016-04-11 16:00:02 +0000'), {"message" => "a"}],
+                                                 [event_time('2016-04-11 16:00:02 +0000'), {"message" => "b"}]]),
+      intermediate_chunk: Fluent::ArrayEventStream.new([[event_time('2016-04-11 16:00:02 +0000'), {"message" => "a"}],
+                                                        [event_time('2016-04-11 16:00:02 +0000'), {"message" => "x" * 1_280_000}],
+                                                        [event_time('2016-04-11 16:00:02 +0000'), {"message" => "b"}]]),
+      last_chunk: Fluent::ArrayEventStream.new([[event_time('2016-04-11 16:00:02 +0000'), {"message" => "a"}],
+                                                [event_time('2016-04-11 16:00:02 +0000'), {"message" => "b"}],
+                                                [event_time('2016-04-11 16:00:02 +0000'), {"message" => "x" * 1_280_000}]]),
+      multiple_chunks: Fluent::ArrayEventStream.new([[event_time('2016-04-11 16:00:02 +0000'), {"message" => "a"}],
+                                                     [event_time('2016-04-11 16:00:02 +0000'), {"message" => "x" * 1_280_000}],
+                                                     [event_time('2016-04-11 16:00:02 +0000'), {"message" => "b"}],
+                                                     [event_time('2016-04-11 16:00:02 +0000'), {"message" => "x" * 1_280_000}]])
+    )
+    test '#write exceeds chunk_limit_size, raise BufferChunkOverflowError, but not lost whole messages' do |(es)|
+      assert_equal [@dm0], @p.stage.keys
+      assert_equal [], @p.queue.map(&:metadata)
+
+      assert_equal 1_280_000, @p.chunk_limit_size
+
+      nth = []
+      es.entries.each_with_index do |entry, index|
+        if entry.last["message"].size == @p.chunk_limit_size
+          nth << index
+        end
+      end
+      messages = []
+      nth.each do |n|
+        messages << "a 1280025 bytes record (nth: #{n}) is larger than buffer chunk limit size (1280000)"
+      end
+
+      assert_raise Fluent::Plugin::Buffer::BufferChunkOverflowError.new(messages.join(", ")) do
+        @p.write({@dm0 => es}, format: @format)
+      end
+      # message a and b are concatenated and staged
+      staged_messages = Fluent::MessagePackFactory.msgpack_unpacker.feed_each(@p.stage[@dm0].chunk).collect do |record|
+        record.last
+      end
+      assert_equal([2, [{"message" => "a"}, {"message" => "b"}]],
+                   [@p.stage[@dm0].size, staged_messages])
+      # only es0 message is queued
+      assert_equal [@dm0], @p.queue.map(&:metadata)
+      assert_equal [5000], @p.queue.map(&:size)
+    end
+
+    test "confirm that every message which is smaller than chunk threshold does not raise BufferChunkOverflowError" do
+      assert_equal [@dm0], @p.stage.keys
+      assert_equal [], @p.queue.map(&:metadata)
+      timestamp = event_time('2016-04-11 16:00:02 +0000')
+      es = Fluent::ArrayEventStream.new([[timestamp, {"message" => "a" * 1_000_000}],
+                                         [timestamp, {"message" => "b" * 1_000_000}],
+                                         [timestamp, {"message" => "c" * 1_000_000}]])
+
+      # https://github.com/fluent/fluentd/issues/1849
+      # Even though 1_000_000 < 1_280_000 (chunk_limit_size), it raised BufferChunkOverflowError before.
+      # It should not be raised and message a,b,c should be stored into 3 chunks.
+      assert_nothing_raised do
+        @p.write({@dm0 => es}, format: @format)
+      end
+      messages = []
+      # pick up first letter to check whether chunk is queued in expected order
+      3.times do |index|
+        chunk = @p.queue[index]
+        es = Fluent::MessagePackEventStream.new(chunk.chunk)
+        es.ensure_unpacked!
+        records = es.instance_eval{ @unpacked_records }
+        records.each do |record|
+          messages << record["message"][0]
+        end
+      end
+      es = Fluent::MessagePackEventStream.new(@p.stage[@dm0].chunk)
+      es.ensure_unpacked!
+      staged_message = es.instance_eval{ @unpacked_records }.first["message"]
+      # message a and b are queued, message c is staged
+      assert_equal([
+                     [@dm0],
+                     "c" * 1_000_000,
+                     [@dm0, @dm0, @dm0],
+                     [5000, 1, 1],
+                     [["x"] * 5000, "a", "b"].flatten
+                   ],
+                   [
+                     @p.stage.keys,
+                     staged_message,
+                     @p.queue.map(&:metadata),
+                     @p.queue.map(&:size),
+                     messages
+                   ])
     end
   end
 
@@ -990,7 +1107,7 @@ class BufferTest < Test::Unit::TestCase
 
       assert_equal [@dm0], @p.stage.keys
       assert_equal 900, @p.stage[@dm0].size
-      assert_equal [@dm0,@dm0,@dm0,@dm0,@dm0], @p.queue.map(&:metadata)
+      assert_equal [@dm0, @dm0, @dm0, @dm0, @dm0], @p.queue.map(&:metadata)
       assert_equal [9500, 9900, 9900, 9900, 9900], @p.queue.map(&:size) # splits: 45000 / 100 => 450 * ...
       ##### 900 + 9500 + 9900 * 4 == 5000 + 45000
     end
@@ -1005,6 +1122,38 @@ class BufferTest < Test::Unit::TestCase
       assert_raise Fluent::Plugin::Buffer::BufferChunkOverflowError do
         @p.write({@dm0 => es})
       end
+    end
+
+    test 'confirm that every array message which is smaller than chunk threshold does not raise BufferChunkOverflowError' do
+      assert_equal [@dm0], @p.stage.keys
+      assert_equal [], @p.queue.map(&:metadata)
+
+      assert_equal 1_280_000, @p.chunk_limit_size
+
+      es = ["a" * 1_000_000, "b" * 1_000_000, "c" * 1_000_000]
+      assert_nothing_raised do
+        @p.write({@dm0 => es})
+      end
+      queue_messages = @p.queue.collect do |chunk|
+        # collect first character of each message
+        chunk.chunk[0]
+      end
+      assert_equal([
+                     [@dm0],
+                     1,
+                     "c",
+                     [@dm0, @dm0, @dm0],
+                     [5000, 1, 1],
+                     ["x", "a", "b"]
+                   ],
+                   [
+                     @p.stage.keys,
+                     @p.stage[@dm0].size,
+                     @p.stage[@dm0].chunk[0],
+                     @p.queue.map(&:metadata),
+                     @p.queue.map(&:size),
+                     queue_messages
+                   ])
     end
   end
 
@@ -1175,6 +1324,7 @@ class BufferTest < Test::Unit::TestCase
   sub_test_case 'when compress is gzip' do
     setup do
       @p = create_buffer({'compress' => 'gzip'})
+      @dm0 = create_metadata(Time.parse('2016-04-11 16:00:00 +0000').to_i, nil, nil)
     end
 
     test '#compress returns :gzip' do
@@ -1184,6 +1334,50 @@ class BufferTest < Test::Unit::TestCase
     test 'create decompressable chunk' do
       chunk = @p.generate_chunk(create_metadata)
       assert chunk.singleton_class.ancestors.include?(Fluent::Plugin::Buffer::Chunk::Decompressable)
+    end
+
+    test '#write compressed data which exceeds chunk_limit_size, it raises BufferChunkOverflowError' do
+      @p = create_buffer({'compress' => 'gzip', 'chunk_limit_size' => 70})
+      timestamp = event_time('2016-04-11 16:00:02 +0000')
+      es = Fluent::ArrayEventStream.new([[timestamp, {"message" => "012345"}], # overflow
+                                         [timestamp, {"message" => "aaa"}],
+                                         [timestamp, {"message" => "bbb"}]])
+      assert_equal [], @p.queue.map(&:metadata)
+      assert_equal 70, @p.chunk_limit_size
+
+      # calculate the actual boundary value. it varies on machine
+      c = @p.generate_chunk(create_metadata)
+      c.append(Fluent::ArrayEventStream.new([[timestamp, {"message" => "012345"}]]), compress: :gzip)
+      overflow_bytes = c.bytesize
+
+      messages = "concatenated/appended a #{overflow_bytes} bytes record (nth: 0) is larger than buffer chunk limit size (70)"
+      assert_raise Fluent::Plugin::Buffer::BufferChunkOverflowError.new(messages) do
+        # test format == nil && compress == :gzip
+        @p.write({@dm0 => es})
+      end
+      # message a and b occupies each chunks in full, so both of messages are queued (no staged chunk)
+      assert_equal([2, [@dm0, @dm0], [1, 1], nil],
+                   [@p.queue.size, @p.queue.map(&:metadata), @p.queue.map(&:size), @p.stage[@dm0]])
+    end
+  end
+
+  sub_test_case '#statistics' do
+    setup do
+      @p = create_buffer({ "total_limit_size" => 1024 })
+      dm = create_metadata(Time.parse('2020-03-13 16:00:00 +0000').to_i, nil, nil)
+
+      (class << @p; self; end).module_eval do
+        define_method(:resume) {
+          queued = [create_chunk(dm, ["a" * (1024 - 102)]).enqueued!]
+          return {}, queued
+        }
+      end
+
+      @p.start
+    end
+
+    test 'returns available_buffer_space_ratios' do
+      assert_equal 10.0, @p.statistics['buffer']['available_buffer_space_ratios']
     end
   end
 end

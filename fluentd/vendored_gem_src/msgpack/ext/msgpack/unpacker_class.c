@@ -45,7 +45,7 @@ static void Unpacker_free(msgpack_unpacker_t* uk)
     if(uk == NULL) {
         return;
     }
-    msgpack_unpacker_ext_registry_destroy(&uk->ext_registry);
+    msgpack_unpacker_ext_registry_release(uk->ext_registry);
     _msgpack_unpacker_destroy(uk);
     xfree(uk);
 }
@@ -53,13 +53,12 @@ static void Unpacker_free(msgpack_unpacker_t* uk)
 static void Unpacker_mark(msgpack_unpacker_t* uk)
 {
     msgpack_unpacker_mark(uk);
-    msgpack_unpacker_ext_registry_mark(&uk->ext_registry);
+    msgpack_unpacker_ext_registry_mark(uk->ext_registry);
 }
 
 VALUE MessagePack_Unpacker_alloc(VALUE klass)
 {
-    msgpack_unpacker_t* uk = ZALLOC_N(msgpack_unpacker_t, 1);
-    _msgpack_unpacker_init(uk);
+    msgpack_unpacker_t* uk = _msgpack_unpacker_new();
 
     VALUE self = Data_Wrap_Struct(klass, Unpacker_mark, Unpacker_free, uk);
     return self;
@@ -94,7 +93,6 @@ VALUE MessagePack_Unpacker_initialize(int argc, VALUE* argv, VALUE self)
 
     UNPACKER(self, uk);
 
-    msgpack_unpacker_ext_registry_init(&uk->ext_registry);
     uk->buffer_ref = MessagePack_Buffer_wrap(UNPACKER_BUFFER_(uk), self);
 
     MessagePack_Buffer_set_options(UNPACKER_BUFFER_(uk), io, options);
@@ -104,6 +102,9 @@ VALUE MessagePack_Unpacker_initialize(int argc, VALUE* argv, VALUE self)
 
         v = rb_hash_aref(options, ID2SYM(rb_intern("symbolize_keys")));
         msgpack_unpacker_set_symbolized_keys(uk, RTEST(v));
+
+        v = rb_hash_aref(options, ID2SYM(rb_intern("freeze")));
+        msgpack_unpacker_set_freeze(uk, RTEST(v));
 
         v = rb_hash_aref(options, ID2SYM(rb_intern("allow_unknown_ext")));
         msgpack_unpacker_set_allow_unknown_ext(uk, RTEST(v));
@@ -118,13 +119,19 @@ static VALUE Unpacker_symbolized_keys_p(VALUE self)
     return uk->symbolize_keys ? Qtrue : Qfalse;
 }
 
+static VALUE Unpacker_freeze_p(VALUE self)
+{
+    UNPACKER(self, uk);
+    return uk->freeze ? Qtrue : Qfalse;
+}
+
 static VALUE Unpacker_allow_unknown_ext_p(VALUE self)
 {
     UNPACKER(self, uk);
     return uk->allow_unknown_ext ? Qtrue : Qfalse;
 }
 
-static void raise_unpacker_error(int r)
+NORETURN(static void raise_unpacker_error(int r))
 {
     switch(r) {
     case PRIMITIVE_EOF:
@@ -213,34 +220,6 @@ static VALUE Unpacker_read_map_header(VALUE self)
     return ULONG2NUM(size);
 }
 
-static VALUE Unpacker_peek_next_type(VALUE self)
-{
-    UNPACKER(self, uk);
-
-    int r = msgpack_unpacker_peek_next_object_type(uk);
-    if(r < 0) {
-        raise_unpacker_error(r);
-    }
-
-    switch((enum msgpack_unpacker_object_type) r) {
-    case TYPE_NIL:
-        return rb_intern("nil");
-    case TYPE_BOOLEAN:
-        return rb_intern("boolean");
-    case TYPE_INTEGER:
-        return rb_intern("integer");
-    case TYPE_FLOAT:
-        return rb_intern("float");
-    case TYPE_RAW:
-        return rb_intern("raw");
-    case TYPE_ARRAY:
-        return rb_intern("array");
-    case TYPE_MAP:
-        return rb_intern("map");
-    default:
-        rb_raise(eUnpackError, "logically unknown type %d", r);
-    }
-}
 
 static VALUE Unpacker_feed(VALUE self, VALUE data)
 {
@@ -287,9 +266,10 @@ static VALUE Unpacker_each_impl(VALUE self)
     }
 }
 
-static VALUE Unpacker_rescue_EOFError(VALUE self)
+static VALUE Unpacker_rescue_EOFError(VALUE args, VALUE error)
 {
-    UNUSED(self);
+    UNUSED(args);
+    UNUSED(error);
     return Qnil;
 }
 
@@ -338,9 +318,11 @@ static VALUE Unpacker_registered_types_internal(VALUE self)
     UNPACKER(self, uk);
 
     VALUE mapping = rb_hash_new();
-    for(int i=0; i < 256; i++) {
-        if(uk->ext_registry.array[i] != Qnil) {
-            rb_hash_aset(mapping, INT2FIX(i - 128), uk->ext_registry.array[i]);
+    if (uk->ext_registry) {
+        for(int i=0; i < 256; i++) {
+            if(uk->ext_registry->array[i] != Qnil) {
+                rb_hash_aset(mapping, INT2FIX(i - 128), uk->ext_registry->array[i]);
+            }
         }
     }
 
@@ -360,12 +342,7 @@ static VALUE Unpacker_register_type(int argc, VALUE* argv, VALUE self)
     case 1:
         /* register_type(0x7f) {|data| block... } */
         rb_need_block();
-#ifdef HAVE_RB_BLOCK_LAMBDA
         proc = rb_block_lambda();
-#else
-        /* MRI 1.8 */
-        proc = rb_block_proc();
-#endif
         arg = proc;
         ext_module = Qnil;
         break;
@@ -438,6 +415,7 @@ void MessagePack_Unpacker_module_init(VALUE mMessagePack)
 
     rb_define_method(cMessagePack_Unpacker, "initialize", MessagePack_Unpacker_initialize, -1);
     rb_define_method(cMessagePack_Unpacker, "symbolize_keys?", Unpacker_symbolized_keys_p, 0);
+    rb_define_method(cMessagePack_Unpacker, "freeze?", Unpacker_freeze_p, 0);
     rb_define_method(cMessagePack_Unpacker, "allow_unknown_ext?", Unpacker_allow_unknown_ext_p, 0);
     rb_define_method(cMessagePack_Unpacker, "buffer", Unpacker_buffer, 0);
     rb_define_method(cMessagePack_Unpacker, "read", Unpacker_read, 0);
@@ -446,7 +424,6 @@ void MessagePack_Unpacker_module_init(VALUE mMessagePack)
     rb_define_method(cMessagePack_Unpacker, "skip_nil", Unpacker_skip_nil, 0);
     rb_define_method(cMessagePack_Unpacker, "read_array_header", Unpacker_read_array_header, 0);
     rb_define_method(cMessagePack_Unpacker, "read_map_header", Unpacker_read_map_header, 0);
-    //rb_define_method(cMessagePack_Unpacker, "peek_next_type", Unpacker_peek_next_type, 0);  // TODO
     rb_define_method(cMessagePack_Unpacker, "feed", Unpacker_feed, 1);
     rb_define_method(cMessagePack_Unpacker, "feed_reference", Unpacker_feed_reference, 1);
     rb_define_method(cMessagePack_Unpacker, "each", Unpacker_each, 0);

@@ -119,7 +119,9 @@ public class Encoder {
     } else if (object instanceof RubyFloat) {
       appendFloat((RubyFloat) object);
     } else if (object instanceof RubyString) {
-      appendString((RubyString) object);
+      if (object.getType() == runtime.getString() || !tryAppendWithExtTypeLookup(object)) {
+        appendString((RubyString) object);
+      }
     } else if (object instanceof RubySymbol) {
       if (hasSymbolExtType) {
         appendOther(object, destination);
@@ -127,9 +129,13 @@ public class Encoder {
         appendString(((RubySymbol) object).asString());
       }
     } else if (object instanceof RubyArray) {
-      appendArray((RubyArray) object);
+      if (object.getType() == runtime.getArray() || !tryAppendWithExtTypeLookup(object)) {
+        appendArray((RubyArray) object);
+      }
     } else if (object instanceof RubyHash) {
-      appendHash((RubyHash) object);
+      if (object.getType() == runtime.getHash() || !tryAppendWithExtTypeLookup(object)) {
+        appendHash((RubyHash) object);
+      }
     } else if (object instanceof ExtensionValue) {
       appendExtensionValue((ExtensionValue) object);
     } else {
@@ -153,7 +159,7 @@ public class Encoder {
   }
 
   private void appendInteger(RubyInteger object) {
-    long value = ((RubyInteger) object).getLongValue();
+    long value = object.getLongValue();
     if (value < 0) {
       if (value < Short.MIN_VALUE) {
         if (value < Integer.MIN_VALUE) {
@@ -241,7 +247,7 @@ public class Encoder {
     } else {
       ensureRemainingCapacity(5 + length);
       buffer.put(binary ? BIN32 : STR32);
-      buffer.putInt((int) length);
+      buffer.putInt(length);
     }
   }
 
@@ -249,7 +255,7 @@ public class Encoder {
     Encoding encoding = object.getEncoding();
     boolean binary = !compatibilityMode && encoding == binaryEncoding;
     if (encoding != utf8Encoding && encoding != binaryEncoding) {
-      object = (RubyString) ((RubyString) object).encode(runtime.getCurrentContext(), runtime.getEncodingService().getEncoding(utf8Encoding));
+      object = (RubyString)(object).encode(runtime.getCurrentContext(), runtime.getEncodingService().getEncoding(utf8Encoding));
     }
     ByteList bytes = object.getByteList();
     int length = bytes.length();
@@ -257,12 +263,12 @@ public class Encoder {
     buffer.put(bytes.unsafeBytes(), bytes.begin(), length);
   }
 
-  private void appendArray(RubyArray object) {
+  private void appendArray(RubyArray<?> object) {
     appendArrayHeader(object);
     appendArrayElements(object);
   }
 
-  private void appendArrayHeader(RubyArray object) {
+  private void appendArrayHeader(RubyArray<?> object) {
     appendArrayHeader(object.size());
   }
 
@@ -281,7 +287,7 @@ public class Encoder {
     }
   }
 
-  private void appendArrayElements(RubyArray object) {
+  private void appendArrayElements(RubyArray<?> object) {
     int size = object.size();
     for (int i = 0; i < size; i++) {
       appendObject(object.eltOk(i));
@@ -383,7 +389,7 @@ public class Encoder {
     appendExt((int) type, payloadBytes);
   }
 
-  private void appendOther(IRubyObject object, IRubyObject destination) {
+  private boolean tryAppendWithExtTypeLookup(IRubyObject object) {
     if (registry != null) {
       RubyModule lookupClass;
 
@@ -398,10 +404,14 @@ public class Encoder {
         RubyString bytes = pair[0].callMethod(runtime.getCurrentContext(), "call", object).asString();
         int type = (int) ((RubyFixnum) pair[1]).getLongValue();
         appendExt(type, bytes.getByteList());
-        return;
+        return true;
       }
     }
-    appendCustom(object, destination);
+    return false;
+  }
+
+  private void appendOther(IRubyObject object, IRubyObject destination) {
+    if (!tryAppendWithExtTypeLookup(object)) { appendCustom(object, destination); }
   }
 
   private void appendCustom(IRubyObject object, IRubyObject destination) {

@@ -15,11 +15,36 @@ end
 
 require 'msgpack'
 
-def java?
-  /java/ =~ RUBY_PLATFORM
+if GC.respond_to?(:verify_compaction_references)
+  # This method was added in Ruby 3.0.0. Calling it this way asks the GC to
+  # move objects around, helping to find object movement bugs.
+  GC.verify_compaction_references(double_heap: true, toward: :empty)
 end
 
-if java?
+if GC.respond_to?(:auto_compact=)
+  GC.auto_compact = true
+end
+
+IS_JRUBY = RUBY_ENGINE == 'jruby'
+
+# checking if Hash#[]= (rb_hash_aset) dedupes string keys
+def automatic_string_keys_deduplication?
+  h = {}
+  x = {}
+  r = rand.to_s
+  h[%W(#{r}).join('')] = :foo
+  x[%W(#{r}).join('')] = :foo
+
+  x.keys[0].equal?(h.keys[0])
+end
+
+def string_deduplication?
+  r1 = rand.to_s
+  r2 = r1.dup
+  (-r1).equal?(-r2)
+end
+
+if IS_JRUBY
   RSpec.configure do |c|
     c.treat_symbols_as_metadata_keys_with_true_values = true
     c.filter_run_excluding :encodings => !(defined? Encoding)

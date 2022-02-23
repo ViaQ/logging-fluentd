@@ -1,3 +1,42 @@
+=== 5.15.0 / 2021-12-14
+
+* 1 major enhancement:
+
+  * assert_throws returns the value returned, if any. (volmer)
+
+* 3 minor enhancements:
+
+  * Added -S <CODES> option to skip reporting of certain types of output
+  * Enable Ruby deprecation warnings by default. (casperisfine)
+  * Use Etc.nprocessors by default in order to maximize cpu usage. (tonytonyjan)
+
+* 6 bug fixes:
+
+  * Close then unlink tempfiles on Windows. (nobu)
+  * Fixed #skip_until for windows paths. (MSP-Greg)
+  * Fixed a bunch of tests for jruby and windows. (MSP-Greg)
+  * Fixed marshalling of specs if they error. (tenderlove, jeremyevans, et al)
+  * Updated deprecation message for block expectations. (blowmage)
+  * Use Kernel.warn directly in expectations in case CUT defines their own warn. (firien)
+
+=== 5.14.4 / 2021-02-23
+
+* 1 bug fix:
+
+  * Fixed deprecation warning using stub with methods using keyword arguments. (Nakilon)
+
+=== 5.14.3 / 2021-01-05
+
+* 1 bug fix:
+
+  * Bumped require_ruby_version to < 4 (trunk = 3.1).
+
+=== 5.14.2 / 2020-08-31
+
+* 1 bug fix:
+
+  * Bumped ruby version to include 3.0 (trunk).
+
 === 5.14.1 / 2020-05-15
 
 * 3 minor enhancements:
@@ -205,7 +244,7 @@
 * 2 bug fixes:
 
   * Re-release to refresh gem certificate signing. ugh.
-  * Fixed hoe/minitest to not augment load path if we're actually testing minitest.  
+  * Fixed hoe/minitest to not augment load path if we're actually testing minitest.
 
 === 5.9.0 / 2016-05-16
 
@@ -229,7 +268,7 @@
 * 2 bug fixes:
 
   * Re-release to refresh gem certificate signing. ugh.
-  * Fixed hoe/minitest to not augment load path if we're actually testing minitest.  
+  * Fixed hoe/minitest to not augment load path if we're actually testing minitest.
 
 === 5.8.4 / 2016-01-21
 
@@ -543,7 +582,7 @@ Minitest 5:
   * Added Minitest::Benchmark.
     * Your benchmarks need to move to their own subclass.
     * Benchmarks using the spec DSL have to have "Bench" somewhere in their describe.
-  * MiniTest::Unit.after_tests moved to Minitest.after_tests
+  * MiniTest::Unit.after_tests moved to Minitest.after_run
   * MiniTest::Unit.autorun is now Minitest.autorun. Just require minitest/autorun pls.
   * Removed ParallelEach#grep since it isn't used anywhere.
   * Renamed Runnable#__name__ to Runnable#name (but uses @NAME internally).
@@ -1389,4 +1428,3 @@ back.
 * 1 major enhancement
 
   * Birthday!
-

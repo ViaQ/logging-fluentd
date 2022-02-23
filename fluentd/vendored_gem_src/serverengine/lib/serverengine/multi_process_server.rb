@@ -120,8 +120,17 @@ module ServerEngine
       end
 
       def send_reload
-        @pmon.send_signal(@reload_signal) if @pmon
+        return nil unless @pmon
+        if @pmon.command_sender_pipe
+          send_command("RELOAD\n")
+        else
+          @pmon.send_signal(@reload_signal)
+        end
         nil
+      end
+
+      def send_command(command)
+        @pmon.send_command(command) if @pmon
       end
 
       def join
@@ -133,7 +142,11 @@ module ServerEngine
         return false unless @pmon
 
         if stat = @pmon.try_join
-          @worker.logger.info "Worker #{@wid} finished#{@stop ? '' : ' unexpectedly'} with #{ServerEngine.format_join_status(stat)}"
+          if @stop
+            @worker.logger.info "Worker #{@wid} finished with #{ServerEngine.format_join_status(stat)}"
+          else
+            @worker.logger.error "Worker #{@wid} finished unexpectedly with #{ServerEngine.format_join_status(stat)}"
+          end
           if stat.is_a?(Process::Status) && stat.exited? && @unrecoverable_exit_codes.include?(stat.exitstatus)
             @unrecoverable_exit = true
             @exitstatus = stat.exitstatus

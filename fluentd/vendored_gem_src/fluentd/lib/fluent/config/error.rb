@@ -23,4 +23,22 @@ module Fluent
 
   class ObsoletedParameterError < ConfigError
   end
+
+  class SetNil < Exception
+  end
+
+  class SetDefault < Exception
+  end
+
+  class NotFoundPluginError < ConfigError
+    attr_reader :type, :kind
+
+    def initialize(msg, type: nil, kind: nil)
+      @msg = msg
+      @type = type
+      @kind = kind
+
+      super(msg)
+    end
+  end
 end
