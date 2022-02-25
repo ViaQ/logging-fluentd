@@ -1,6 +1,6 @@
 FROM registry.ci.openshift.org/ocp/builder:ubi8.ruby.25
 
-ENV FLUENTD_VERSION=1.7.4 \
+ENV FLUENTD_VERSION=1.14.5 \
     WORKDIR=/tmp/fluentd/lib
 
 USER 0

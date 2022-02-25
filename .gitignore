@@ -16,5 +16,4 @@ venv
 .vendor
 *.swo
 *.swp
-fluentd/lib/**/Gemfile.lock
 fluentd/1.14.*
