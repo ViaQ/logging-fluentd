@@ -70,10 +70,12 @@ static inline VALUE msgpack_packer_ext_registry_fetch(msgpack_packer_ext_registr
     }
 
     // fetch lookup_class from cache, which stores results of searching ancestors from pkrg->hash
-    VALUE type_inht = rb_hash_lookup(pkrg->cache, lookup_class);
-    if(type_inht != Qnil) {
-        *ext_type_result = FIX2INT(rb_ary_entry(type_inht, 0));
-        return rb_ary_entry(type_inht, 1);
+    if (RTEST(pkrg->cache)) {
+        VALUE type_inht = rb_hash_lookup(pkrg->cache, lookup_class);
+        if(type_inht != Qnil) {
+            *ext_type_result = FIX2INT(rb_ary_entry(type_inht, 0));
+            return rb_ary_entry(type_inht, 1);
+        }
     }
 
     return Qnil;
@@ -82,37 +84,34 @@ static inline VALUE msgpack_packer_ext_registry_fetch(msgpack_packer_ext_registr
 static inline VALUE msgpack_packer_ext_registry_lookup(msgpack_packer_ext_registry_t* pkrg,
         VALUE instance, int* ext_type_result)
 {
-    VALUE lookup_class;
     VALUE type;
 
-    /*
-     * 1. check whether singleton_class of this instance is registered (or resolved in past) or not.
-     *
-     * Objects of type Integer (Fixnum, Bignum), Float, Symbol and frozen
-     * String have no singleton class and raise a TypeError when trying to get
-     * it. See implementation of #singleton_class in ruby's source code:
-     * VALUE rb_singleton_class(VALUE obj);
-     *
-     * Since all but symbols are already filtered out when reaching this code
-     * only symbols are checked here.
-     */
-    if (!SYMBOL_P(instance)) {
-      lookup_class = rb_singleton_class(instance);
+    if (pkrg->hash == Qnil) { // No extensions registered
+        return Qnil;
+    }
 
-      type = msgpack_packer_ext_registry_fetch(pkrg, lookup_class, ext_type_result);
-
-      if(type != Qnil) {
-          return type;
-      }
+   /*
+    * 1. check whether singleton_class or class of this instance is registered (or resolved in past) or not.
+    *
+    * Objects of type Integer (Fixnum, Bignum), Float, Symbol and frozen
+    * `rb_class_of` returns the singleton_class if the object has one, or the "real class" otherwise.
+    */
+    VALUE lookup_class = rb_class_of(instance);
+    type = msgpack_packer_ext_registry_fetch(pkrg, lookup_class, ext_type_result);
+    if(type != Qnil) {
+        return type;
     }
 
     /*
-     * 2. check the class of instance is registered (or resolved in past) or not.
+     * 2. If the object had a singleton_class check if the real class of instance is registered
+     * (or resolved in past) or not.
      */
-    type = msgpack_packer_ext_registry_fetch(pkrg, rb_obj_class(instance), ext_type_result);
-
-    if(type != Qnil) {
-        return type;
+    VALUE real_class = rb_obj_class(instance);
+    if(lookup_class != real_class) {
+        type = msgpack_packer_ext_registry_fetch(pkrg, real_class, ext_type_result);
+        if(type != Qnil) {
+            return type;
+        }
     }
 
     /*
@@ -126,6 +125,9 @@ static inline VALUE msgpack_packer_ext_registry_lookup(msgpack_packer_ext_regist
     VALUE superclass = args[1];
     if(superclass != Qnil) {
         VALUE superclass_type = rb_hash_lookup(pkrg->hash, superclass);
+        if (!RTEST(pkrg->cache)) {
+            pkrg->cache = rb_hash_new();
+        }
         rb_hash_aset(pkrg->cache, lookup_class, superclass_type);
         *ext_type_result = FIX2INT(rb_ary_entry(superclass_type, 0));
         return rb_ary_entry(superclass_type, 1);

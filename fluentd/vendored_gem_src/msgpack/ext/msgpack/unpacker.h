@@ -60,11 +60,14 @@ struct msgpack_unpacker_t {
 
     VALUE buffer_ref;
 
-    msgpack_unpacker_ext_registry_t ext_registry;
+    msgpack_unpacker_ext_registry_t *ext_registry;
 
     /* options */
     bool symbolize_keys;
+    bool freeze;
     bool allow_unknown_ext;
+    bool optimized_symbol_ext_type;
+    int symbol_ext_type;
 };
 
 #define UNPACKER_BUFFER_(uk) (&(uk)->buffer)
@@ -83,7 +86,7 @@ void msgpack_unpacker_static_init();
 
 void msgpack_unpacker_static_destroy();
 
-void _msgpack_unpacker_init(msgpack_unpacker_t* uk);
+msgpack_unpacker_t* _msgpack_unpacker_new(void);
 
 void _msgpack_unpacker_destroy(msgpack_unpacker_t* uk);
 
@@ -94,6 +97,11 @@ void _msgpack_unpacker_reset(msgpack_unpacker_t* uk);
 static inline void msgpack_unpacker_set_symbolized_keys(msgpack_unpacker_t* uk, bool enable)
 {
     uk->symbolize_keys = enable;
+}
+
+static inline void msgpack_unpacker_set_freeze(msgpack_unpacker_t* uk, bool enable)
+{
+    uk->freeze = enable;
 }
 
 static inline void msgpack_unpacker_set_allow_unknown_ext(msgpack_unpacker_t* uk, bool enable)

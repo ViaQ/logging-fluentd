@@ -17,7 +17,6 @@
 require 'fileutils'
 require 'zlib'
 require 'time'
-require 'tempfile'
 
 require 'fluent/plugin/output'
 require 'fluent/config/error'
@@ -36,9 +35,6 @@ module Fluent::Plugin
       gz: :gzip,
       gzip: :gzip,
     }
-
-    FILE_PERMISSION = 0644
-    DIR_PERMISSION = 0755
 
     DEFAULT_TIMEKEY = 60 * 60 * 24
 
@@ -159,7 +155,7 @@ module Fluent::Plugin
         dummy_record_keys = get_placeholders_keys(@path_template) || ['message']
         dummy_record = Hash[dummy_record_keys.zip(['data'] * dummy_record_keys.size)]
 
-        test_chunk1 = chunk_for_test(dummy_tag, Fluent::Engine.now, dummy_record)
+        test_chunk1 = chunk_for_test(dummy_tag, Fluent::EventTime.now, dummy_record)
         test_path = extract_placeholders(@path_template, test_chunk1)
         unless ::Fluent::FileUtil.writable_p?(test_path)
           raise Fluent::ConfigError, "out_file: `#{test_path}` is not writable"
@@ -182,9 +178,16 @@ module Fluent::Plugin
         end
       end
 
-      @dir_perm = system_config.dir_permission || DIR_PERMISSION
-      @file_perm = system_config.file_permission || FILE_PERMISSION
+      @dir_perm = system_config.dir_permission || Fluent::DEFAULT_DIR_PERMISSION
+      @file_perm = system_config.file_permission || Fluent::DEFAULT_FILE_PERMISSION
       @need_lock = system_config.workers > 1
+
+      # https://github.com/fluent/fluentd/issues/3569
+      @need_ruby_on_macos_workaround = false
+      if @append && Fluent.macos?
+        condition = Gem::Dependency.new('', [">= 2.7.0", "< 3.1.0"])
+        @need_ruby_on_macos_workaround = true if condition.match?('', RUBY_VERSION)
+      end
     end
 
     def multi_workers_ready?
@@ -227,33 +230,20 @@ module Fluent::Plugin
 
     def write_without_compression(path, chunk)
       File.open(path, "ab", @file_perm) do |f|
-        chunk.write_to(f)
+        if @need_ruby_on_macos_workaround
+          content = chunk.read()
+          f.puts content
+        else
+          chunk.write_to(f)
+        end
       end
     end
 
     def write_gzip_with_compression(path, chunk)
-      if @append
-        # This code will be removed after zlib/multithread bug is fixed.
-        # Use Tempfile to avoid broken gzip files: https://github.com/fluent/fluentd/issues/1903
-        Tempfile.create('out_file-gzip-append') { |temp|
-          begin
-            writer = Zlib::GzipWriter.new(temp)
-            chunk.write_to(writer, compressed: :text)
-          ensure
-            writer.finish # avoid zlib finalizer warning
-          end
-          temp.rewind
-
-          File.open(path, "ab", @file_perm) do |f|
-            IO.copy_stream(temp, f)
-          end
-        }
-      else
-        File.open(path, "ab", @file_perm) do |f|
-          gz = Zlib::GzipWriter.new(f)
-          chunk.write_to(gz, compressed: :text)
-          gz.close
-        end
+      File.open(path, "ab", @file_perm) do |f|
+        gz = Zlib::GzipWriter.new(f)
+        chunk.write_to(gz, compressed: :text)
+        gz.close
       end
     end
 

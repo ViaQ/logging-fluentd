@@ -12,6 +12,11 @@ class StdoutFilterTest < Test::Unit::TestCase
     @old_tz = ENV["TZ"]
     ENV["TZ"] = "UTC"
     Timecop.freeze
+    @default_newline = if Fluent.windows?
+                         "\r\n"
+                       else
+                         "\n"
+                       end
   end
 
   def teardown
@@ -58,7 +63,7 @@ class StdoutFilterTest < Test::Unit::TestCase
       end
 
       def test_invalid_output_type
-        assert_raise(Fluent::ConfigError) do
+        assert_raise(Fluent::NotFoundPluginError) do
           d = create_driver(CONFIG + config_element("", "", { "output_type" => "foo" }))
           d.run {}
         end
@@ -106,7 +111,7 @@ class StdoutFilterTest < Test::Unit::TestCase
     def test_format_json
       d = create_driver(CONFIG + config_element("", "", { "format" => "json" }))
       out = capture_log(d) { filter(d, event_time, {'test' => 'test'}) }
-      assert_equal "{\"test\":\"test\"}\n", out
+      assert_equal "{\"test\":\"test\"}#{@default_newline}", out
     end
   end
 
@@ -134,7 +139,7 @@ class StdoutFilterTest < Test::Unit::TestCase
       def test_invalid_output_type
         conf = config_element
         conf.elements << config_element("format", "", { "@type" => "stdout", "output_type" => "foo" })
-        assert_raise(Fluent::ConfigError) do
+        assert_raise(Fluent::NotFoundPluginError) do
           d = create_driver(conf)
           d.run {}
         end

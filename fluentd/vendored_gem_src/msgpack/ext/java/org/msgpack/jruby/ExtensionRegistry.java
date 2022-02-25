@@ -37,7 +37,7 @@ public class ExtensionRegistry {
   }
 
   public IRubyObject toInternalPackerRegistry(ThreadContext ctx) {
-    RubyHash hash = RubyHash.newHash(ctx.getRuntime());
+    RubyHash hash = RubyHash.newHash(ctx.runtime);
     for (RubyModule extensionModule : extensionsByModule.keySet()) {
       ExtensionEntry entry = extensionsByModule.get(extensionModule);
       if (entry.hasPacker()) {
@@ -48,11 +48,11 @@ public class ExtensionRegistry {
   }
 
   public IRubyObject toInternalUnpackerRegistry(ThreadContext ctx) {
-    RubyHash hash = RubyHash.newHash(ctx.getRuntime());
+    RubyHash hash = RubyHash.newHash(ctx.runtime);
     for (int typeIdIndex = 0 ; typeIdIndex < 256 ; typeIdIndex++) {
       ExtensionEntry entry = extensionsByTypeId[typeIdIndex];
       if (entry != null && entry.hasUnpacker()) {
-        IRubyObject typeId = RubyFixnum.newFixnum(ctx.getRuntime(), typeIdIndex - 128);
+        IRubyObject typeId = RubyFixnum.newFixnum(ctx.runtime, typeIdIndex - 128);
         hash.put(typeId, entry.toUnpackerTuple(ctx));
       }
     }
@@ -82,26 +82,21 @@ public class ExtensionRegistry {
      * Objects of type Integer (Fixnum, Bignum), Float, Symbol and frozen
      * String have no singleton class and raise a TypeError when trying to get
      * it.
-     *
-     * Since all but symbols are already filtered out when reaching this code
-     * only symbols are checked here.
      */
-    if (!(object instanceof RubySymbol)) {
-      lookupClass = object.getSingletonClass();
-      pair = fetchEntryByModule(lookupClass);
-      if (pair != null) {
-          return pair;
-      }
-    }
-
-    pair = fetchEntryByModule(object.getType());
+    lookupClass = object.getMetaClass();
+    pair = fetchEntryByModule(lookupClass);
     if (pair != null) {
       return pair;
     }
 
-    if (lookupClass == null) {
-      lookupClass = object.getType(); // only for Symbol
+    RubyModule realClass = object.getType();
+    if (realClass != lookupClass) {
+      pair = fetchEntryByModule(realClass);
+      if (pair != null) {
+        return pair;
+      }
     }
+
     ExtensionEntry e = findEntryByModuleOrAncestor(lookupClass);
     if (e != null && e.hasPacker()) {
       extensionsByAncestor.put(e.getExtensionModule(), e);
@@ -124,7 +119,7 @@ public class ExtensionRegistry {
   private ExtensionEntry findEntryByModuleOrAncestor(final RubyModule mod) {
     ThreadContext ctx = mod.getRuntime().getCurrentContext();
     for (RubyModule extensionModule : extensionsByModule.keySet()) {
-      RubyArray ancestors = (RubyArray) mod.callMethod(ctx, "ancestors");
+      RubyArray<?> ancestors = (RubyArray)mod.callMethod(ctx, "ancestors");
       if (ancestors.callMethod(ctx, "include?", extensionModule).isTrue()) {
         return extensionsByModule.get(extensionModule);
       }
@@ -173,16 +168,16 @@ public class ExtensionRegistry {
       return unpackerProc;
     }
 
-    public RubyArray toPackerTuple(ThreadContext ctx) {
-      return RubyArray.newArray(ctx.getRuntime(), new IRubyObject[] {RubyFixnum.newFixnum(ctx.getRuntime(), typeId), packerProc, packerArg});
+    public RubyArray<?> toPackerTuple(ThreadContext ctx) {
+      return ctx.runtime.newArray(new IRubyObject[] {ctx.runtime.newFixnum(typeId), packerProc, packerArg});
     }
 
-    public RubyArray toUnpackerTuple(ThreadContext ctx) {
-      return RubyArray.newArray(ctx.getRuntime(), new IRubyObject[] {mod, unpackerProc, unpackerArg});
+    public RubyArray<?> toUnpackerTuple(ThreadContext ctx) {
+      return ctx.runtime.newArray(new IRubyObject[] {mod, unpackerProc, unpackerArg});
     }
 
     public IRubyObject[] toPackerProcTypeIdPair(ThreadContext ctx) {
-      return new IRubyObject[] {packerProc, RubyFixnum.newFixnum(ctx.getRuntime(), typeId)};
+      return new IRubyObject[] {packerProc, ctx.runtime.newFixnum(typeId)};
     }
   }
 }

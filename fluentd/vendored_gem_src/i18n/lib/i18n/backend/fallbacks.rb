@@ -16,11 +16,13 @@ module I18n
     # Returns the current fallbacks implementation. Defaults to +I18n::Locale::Fallbacks+.
     def fallbacks
       @@fallbacks ||= I18n::Locale::Fallbacks.new
+      Thread.current[:i18n_fallbacks] || @@fallbacks
     end
 
     # Sets the current fallbacks implementation. Use this to set a different fallbacks implementation.
     def fallbacks=(fallbacks)
-      @@fallbacks = fallbacks
+      @@fallbacks = fallbacks.is_a?(Array) ? I18n::Locale::Fallbacks.new(fallbacks) : fallbacks
+      Thread.current[:i18n_fallbacks] = @@fallbacks
     end
   end
 
@@ -41,13 +43,13 @@ module I18n
         return super if options[:fallback_in_progress]
         default = extract_non_symbol_default!(options) if options[:default]
 
-        fallback_options = options.merge(:fallback_in_progress => true)
+        fallback_options = options.merge(:fallback_in_progress => true, fallback_original_locale: locale)
         I18n.fallbacks[locale].each do |fallback|
           begin
             catch(:exception) do
               result = super(fallback, key, fallback_options)
               unless result.nil?
-                on_fallback(locale, fallback, key, options) if locale != fallback
+                on_fallback(locale, fallback, key, options) if locale.to_s != fallback.to_s
                 return result
               end
             end
@@ -60,6 +62,24 @@ module I18n
 
         return super(locale, nil, options.merge(:default => default)) if default
         throw(:exception, I18n::MissingTranslation.new(locale, key, options))
+      end
+
+      def resolve_entry(locale, object, subject, options = EMPTY_HASH)
+        return subject if options[:resolve] == false
+        result = catch(:exception) do
+          options.delete(:fallback_in_progress) if options.key?(:fallback_in_progress)
+
+          case subject
+          when Symbol
+            I18n.translate(subject, **options.merge(:locale => options[:fallback_original_locale], :throw => true))
+          when Proc
+            date_or_time = options.delete(:object) || object
+            resolve_entry(options[:fallback_original_locale], object, subject.call(date_or_time, **options))
+          else
+            subject
+          end
+        end
+        result unless result.is_a?(MissingTranslation)
       end
 
       def extract_non_symbol_default!(options)

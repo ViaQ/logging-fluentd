@@ -1,5 +1,5 @@
 REGISTRY?=127.0.0.1/openshift-logging
-FLUENTD_VERSION=1.7.4
+FLUENTD_VERSION=$$(grep BUILD_VERSION fluentd/Dockerfile.in| cut -d "=" -f2)
 FLUENTD_IMAGE?=$(REGISTRY)/logging-fluentd:$(FLUENTD_VERSION)
 CONTAINER_ENGINE?=docker
 CONTAINER_BUILDER?=imagebuilder

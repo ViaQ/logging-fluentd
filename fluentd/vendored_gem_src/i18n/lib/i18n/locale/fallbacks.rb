@@ -15,18 +15,11 @@
 #   * all parent locales of a given locale (e.g. :es for :"es-MX") first,
 #   * the current default locales and all of their parents second
 #
-# The default locales are set to [I18n.default_locale] by default but can be
-# set to something else.
+# The default locales are set to [] by default but can be set to something else.
 #
 # One can additionally add any number of additional fallback locales manually.
 # These will be added before the default locales to the fallback chain. For
 # example:
-#
-#   # using the default locale as default fallback locale
-#
-#   I18n.default_locale = :"en-US"
-#   I18n.fallbacks = I18n::Locale::Fallbacks.new(:"de-AT" => :"de-DE")
-#   I18n.fallbacks[:"de-AT"] # => [:"de-AT", :"de-DE", :de, :"en-US", :en]
 #
 #   # using a custom locale as default fallback locale
 #
@@ -46,7 +39,7 @@
 #   fallbacks[:"ar-PS"] # => [:"ar-PS", :ar, :"he-IL", :he, :"en-US", :en]
 #   fallbacks[:"ar-EG"] # => [:"ar-EG", :ar, :"en-US", :en]
 #
-#   # people speaking Sami as spoken in Finnland also speak Swedish and Finnish as spoken in Finnland
+#   # people speaking Sami as spoken in Finland also speak Swedish and Finnish as spoken in Finland
 #   fallbacks.map(:sms => [:"se-FI", :"fi-FI"])
 #   fallbacks[:sms] # => [:sms, :"se-FI", :se, :"fi-FI", :fi, :"en-US", :en]
 
@@ -71,13 +64,18 @@ module I18n
         super || store(locale, compute(locale))
       end
 
-      def map(mappings)
-        mappings.each do |from, to|
-          from, to = from.to_sym, Array(to)
-          to.each do |_to|
-            @map[from] ||= []
-            @map[from] << _to.to_sym
+      def map(*args, &block)
+        if args.count == 1 && !block_given?
+          mappings = args.first
+          mappings.each do |from, to|
+            from, to = from.to_sym, Array(to)
+            to.each do |_to|
+              @map[from] ||= []
+              @map[from] << _to.to_sym
+            end
           end
+        else
+          @map.map(*args, &block)
         end
       end
 

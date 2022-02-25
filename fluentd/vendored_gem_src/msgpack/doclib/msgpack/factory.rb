@@ -63,7 +63,7 @@ module MessagePack
 
     #
     # Register a type and Class to be registered for packer and/or unpacker.
-    # If options are not speicified, factory will use :to_msgpack_ext for packer, and
+    # If options are not specified, factory will use :to_msgpack_ext for packer, and
     # :from_msgpack_ext for unpacker.
     #
     # @param type [Fixnum] type id of registered Class (0-127)
@@ -75,6 +75,7 @@ module MessagePack
     #
     # * *:packer* specify symbol or proc object for packer
     # * *:unpacker* specify symbol or proc object for unpacker
+    # * *:optimized_symbols_parsing* specify true to use the optimized symbols parsing (not supported on JRuby now)
     #
     def register_type(type, klass, options={})
     end

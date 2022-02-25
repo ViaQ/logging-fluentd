@@ -153,7 +153,7 @@ class FilterPluginTest < Test::Unit::TestCase
 
       @p.configure(config_element('ROOT', '', {'@log_level' => 'debug'}))
 
-      assert{ @p.log.object_id != original_logger.object_id }
+      assert(@p.log.object_id != original_logger.object_id)
       assert_equal Fluent::Log::LEVEL_DEBUG, @p.log.level
     end
 
@@ -163,6 +163,17 @@ class FilterPluginTest < Test::Unit::TestCase
           helpers :storage
         end
       end
+    end
+
+    test 'can use metrics plugins and fallback methods' do
+      @p.configure(config_element('ROOT', '', {'@log_level' => 'debug'}))
+
+      %w[emit_size_metrics emit_records_metrics].each do |metric_name|
+        assert_true @p.instance_variable_get(:"@#{metric_name}").is_a?(Fluent::Plugin::Metrics)
+      end
+
+      assert_equal 0, @p.emit_size
+      assert_equal 0, @p.emit_records
     end
 
     test 'are available with multi worker configuration in default' do
