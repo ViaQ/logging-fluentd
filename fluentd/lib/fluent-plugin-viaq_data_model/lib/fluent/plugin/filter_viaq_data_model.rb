@@ -25,6 +25,7 @@ require 'fluent/match'
 
 require_relative 'filter_viaq_data_model_systemd'
 require_relative 'viaq_data_model_log_level_normalizer'
+require_relative 'viaq_data_model_openshift'
 
 begin
   ViaqMatchClass = Fluent::Match
@@ -54,6 +55,7 @@ module Fluent
   class ViaqDataModelFilter < Filter
     include ViaqDataModelFilterSystemd
     include ViaqDataModel::LogLevelNormalizer
+    include ViaqDataModel::OpenShift
 
     attr_reader :level_matcher
 
@@ -183,6 +185,7 @@ module Fluent
 
     def configure(conf)
       super
+      @openshift_sequence = 1
       @keep_fields = {}
       @default_keep_fields.each{|xx| @keep_fields[xx] = true}
       @extra_keep_fields.each{|xx| @keep_fields[xx] = true}
