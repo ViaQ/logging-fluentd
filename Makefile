@@ -23,3 +23,7 @@ test-unit:
 	$(CONTAINER_BUILDER) -t logging-fluentd-unit-tests -f Dockerfile.unit .
 	# podman run logging-fluentd-unit-tests
 .PHONY: test-unit
+
+update-gems:
+	FLUENTD_VERSION=$(FLUENTD_VERSION) ./hack/update-fluentd-vendor-gems.sh
+.PHONY: update-gems
