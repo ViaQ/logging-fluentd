@@ -48,8 +48,6 @@
   encoding: base64
   extensions:
   - bmp
-  obsolete: true
-  use-instead: image/x-bmp
   xrefs:
     rfc:
     - rfc7903
@@ -413,7 +411,8 @@
   - png
   xrefs:
     person:
-    - Glenn_Randers-Pehrson
+    - PNG_Working_Group
+    - W3C
     template:
     - image/png
   registered: true
@@ -907,6 +906,8 @@
   encoding: base64
   extensions:
   - bmp
+  obsolete: true
+  use-instead: image/bmp
   registered: false
 - !ruby/object:MIME::Type
   content-type: image/x-canon-cr2
