@@ -1,0 +1,12 @@
+diff --git a/lib/fluent/supervisor.rb b/lib/fluent/supervisor.rb
+index c03cde39..8f34278b 100644
+--- a/lib/fluent/supervisor.rb
++++ b/lib/fluent/supervisor.rb
+@@ -709,7 +709,6 @@ module Fluent
+         create_socket_manager if @standalone_worker
+         if @standalone_worker
+           ServerEngine::Privilege.change(@chuser, @chgroup)
+-          File.umask(0)
+         end
+         MessagePackFactory.init(enable_time_support: @system_config.enable_msgpack_time_support)
+         Fluent::Engine.init(@system_config)
