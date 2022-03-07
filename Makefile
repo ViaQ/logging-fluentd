@@ -24,6 +24,6 @@ test-unit:
 	# podman run logging-fluentd-unit-tests
 .PHONY: test-unit
 
-update-gems:
+update-vendor:
 	FLUENTD_VERSION=$(FLUENTD_VERSION) ./hack/update-fluentd-vendor-gems.sh
-.PHONY: update-gems
+.PHONY: update-vendor

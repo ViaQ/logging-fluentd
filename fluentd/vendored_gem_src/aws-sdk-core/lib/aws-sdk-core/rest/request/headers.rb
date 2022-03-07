@@ -32,11 +32,11 @@ module Aws
 
         def apply_header_value(headers, ref, value)
           value = apply_json_trait(value) if ref['jsonvalue']
-          headers[ref.location_name] =
-            case ref.shape
-            when TimestampShape then timestamp(ref, value)
-            else value.to_s
-            end
+          case ref.shape
+          when TimestampShape then headers[ref.location_name] = timestamp(ref, value)
+          when ListShape then list(headers, ref, value)
+          else headers[ref.location_name] = value.to_s
+          end
         end
 
         def timestamp(ref, value)
@@ -49,6 +49,18 @@ module Aws
           end
         end
 
+        def list(headers, ref, value)
+          return if !value || value.empty?
+          headers[ref.location_name] = value
+            .compact
+            .map { |s| escape_header_list_string(s.to_s) }
+            .join(",")
+        end
+
+        def escape_header_list_string(s)
+          (s.include?('"') || s.include?(",")) ? "\"#{s.gsub('"', '\"')}\"" : s
+        end
+
         def apply_header_map(headers, ref, values)
           prefix = ref.location_name || ''
           values.each_pair do |name, value|
@@ -57,7 +69,7 @@ module Aws
         end
 
         # With complex headers value in json syntax,
-        # base64 encodes value to aviod weird characters
+        # base64 encodes value to avoid weird characters
         # causing potential issues in headers
         def apply_json_trait(value)
           Base64.strict_encode64(value)
