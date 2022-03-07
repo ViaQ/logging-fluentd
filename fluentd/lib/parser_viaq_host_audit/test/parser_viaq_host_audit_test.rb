@@ -17,6 +17,17 @@ class ParserViaqHostAuditTest < Test::Unit::TestCase
   end
 
   sub_test_case 'plugin will parse auditd messages' do
+    test 'audit time is not the second field' do
+      d = create_driver()
+      message = "node=[somenode.com|http://somenode.com/] type=NETFILTER_CFG msg=audit(1644924200.294:43342801): table=nat:2;KUBE-SEP-G4T6AO6PAPRFVIHV:5576818034 family=2 entries=1330502105 op=nft_register_rule pid=93144 subj=system_u:system_r:spc_t:s0 comm=\"iptables-restor\""
+      d.instance.parse(message) do |time, record|
+        assert_equal('NETFILTER_CFG', record['audit.linux']['type'])
+        assert_equal('43342801', record['audit.linux']['record_id'])
+        assert_equal("2022-02-15T11:23:20.293999+00:00", record['time'])
+        assert_equal(message, record['message'])
+        assert_true(time.instance_of? Fluent::EventTime)
+      end
+    end
     test 'service_start is detected' do
       d = create_driver()
       message = "type=SERVICE_START msg=audit(1571910991.146:296): pid=1 uid=0 auid=4294967295 ses=4294967295 subj=system_u:system_r:init_t:s0 msg='unit=fprintd comm=\"systemd\" exe=\"/usr/lib/systemd/systemd\" hostname=? addr=? terminal=? res=success'UID=\"root\" AUID=\"unset\""
