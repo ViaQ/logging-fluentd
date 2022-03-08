@@ -12,32 +12,22 @@ module Aws
       end
 
       option(:sigv4_name) do |cfg|
-        cfg.api.metadata['signingName'] || cfg.api.metadata['endpointPrefix']
+        signingName = if cfg.region
+          Aws::Partitions::EndpointProvider.signing_service(
+            cfg.region, cfg.api.metadata['endpointPrefix']
+          )
+        end
+        signingName || cfg.api.metadata['signingName'] || cfg.api.metadata['endpointPrefix']
       end
 
       option(:sigv4_region) do |cfg|
-
-        # The signature version 4 signing region is most
-        # commonly the configured region. There are a few
-        # notable exceptions:
-        #
-        # * Some services have a global endpoint to the entire
-        #   partition. For example, when constructing a route53
-        #   client for a region like "us-west-2", we will
-        #   always use "route53.amazonaws.com". This endpoint
-        #   is actually global to the entire partition,
-        #   and must be signed as "us-east-1".
-        #
-        # * When the region is configured, but it is configured
-        #   to a non region, such as "aws-global". This is similar
-        #   to the previous case. We use the Aws::Partitions::EndpointProvider
-        #   to resolve to the actual signing region.
-        #
-        prefix = cfg.api.metadata['endpointPrefix']
-        if prefix && cfg.endpoint.to_s.match(/#{prefix}\.amazonaws\.com/)
-          'us-east-1'
-        elsif cfg.region
-          Aws::Partitions::EndpointProvider.signing_region(cfg.region, cfg.sigv4_name)
+        if cfg.region
+          if cfg.respond_to?(:sts_regional_endpoints)
+            sts_regional = cfg.sts_regional_endpoints
+          end
+          Aws::Partitions::EndpointProvider.signing_region(
+            cfg.region, cfg.api.metadata['endpointPrefix'], sts_regional
+          )
         end
       end
 
@@ -144,7 +134,7 @@ module Aws
         def apply_authtype(context)
           if context.operation['authtype'].eql?('v4-unsigned-body') &&
              context.http_request.endpoint.scheme.eql?('https')
-            context.http_request.headers['X-Amz-Content-Sha256'] = 'UNSIGNED-PAYLOAD'
+            context.http_request.headers['X-Amz-Content-Sha256'] ||= 'UNSIGNED-PAYLOAD'
           end
           context
         end

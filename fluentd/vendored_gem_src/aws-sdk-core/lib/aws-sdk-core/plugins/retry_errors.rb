@@ -163,9 +163,15 @@ a clock skew correction and retry requests with skewed client clocks.
       option(:clock_skew) { Retries::ClockSkew.new }
 
       def self.resolve_retry_mode(cfg)
-        value = ENV['AWS_RETRY_MODE'] ||
-                Aws.shared_config.retry_mode(profile: cfg.profile) ||
-                'legacy'
+        default_mode_value =
+          if cfg.respond_to?(:defaults_mode_config_resolver)
+            cfg.defaults_mode_config_resolver.resolve(:retry_mode)
+          end
+
+          value = ENV['AWS_RETRY_MODE'] ||
+                  Aws.shared_config.retry_mode(profile: cfg.profile) ||
+                  default_mode_value ||
+                  'legacy'
         # Raise if provided value is not one of the retry modes
         if value != 'legacy' && value != 'standard' && value != 'adaptive'
           raise ArgumentError,
@@ -176,11 +182,12 @@ a clock skew correction and retry requests with skewed client clocks.
       end
 
       def self.resolve_max_attempts(cfg)
-        value = (ENV['AWS_MAX_ATTEMPTS'] && ENV['AWS_MAX_ATTEMPTS'].to_i) ||
+        value = (ENV['AWS_MAX_ATTEMPTS']) ||
                 Aws.shared_config.max_attempts(profile: cfg.profile) ||
-                3
+                '3'
+        value = value.to_i
         # Raise if provided value is not a positive integer
-        if !value.is_a?(Integer) || value <= 0
+        if value <= 0
           raise ArgumentError,
             'Must provide a positive integer for max_attempts profile '\
             'option or for ENV[\'AWS_MAX_ATTEMPTS\']'

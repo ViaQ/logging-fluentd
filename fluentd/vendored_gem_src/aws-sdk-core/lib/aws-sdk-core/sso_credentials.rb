@@ -8,8 +8,7 @@ module Aws
   # AWS CLI with the correct profile.
   #
   # For more background on AWS SSO see the official
-  # {what is SSO}[https://docs.aws.amazon.com/singlesignon/latest/userguide/what-is.html]
-  # page.
+  # {https://docs.aws.amazon.com/singlesignon/latest/userguide/what-is.html what is SSO Userguide}
   #
   # ## Refreshing Credentials from SSO
   #
@@ -64,6 +63,11 @@ module Aws
     #
     # @option options [SSO::Client] :client Optional `SSO::Client`.  If not
     #   provided, a client will be constructed.
+    #
+    # @option options [Callable] before_refresh Proc called before
+    #   credentials are refreshed. `before_refresh` is called
+    #   with an instance of this object when
+    #   AWS credentials are required and need to be refreshed.
     def initialize(options = {})
 
       missing_keys = SSO_REQUIRED_OPTS.select { |k| options[k].nil? }
@@ -101,7 +105,7 @@ module Aws
         raise ArgumentError, 'Cached SSO Token is expired.'
       end
       cached_token
-    rescue Aws::Json::ParseError, ArgumentError
+    rescue Errno::ENOENT, Aws::Json::ParseError, ArgumentError
       raise Errors::InvalidSSOCredentials, SSO_LOGIN_GUIDANCE
     end
 

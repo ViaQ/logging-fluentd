@@ -100,7 +100,7 @@ module Aws
     #   or `nil` if no valid credentials were found.
     def credentials(opts = {})
       p = opts[:profile] || @profile_name
-      validate_profile_exists(p) if credentials_present?
+      validate_profile_exists(p)
       if (credentials = credentials_from_shared(p, opts))
         credentials
       elsif (credentials = credentials_from_config(p, opts))
@@ -163,6 +163,10 @@ module Aws
       :ca_bundle,
       :credential_process,
       :endpoint_discovery_enabled,
+      :use_dualstack_endpoint,
+      :use_fips_endpoint,
+      :ec2_metadata_service_endpoint,
+      :ec2_metadata_service_endpoint_mode,
       :max_attempts,
       :retry_mode,
       :adaptive_retry_wait_to_fill,
@@ -173,7 +177,9 @@ module Aws
       :csm_port,
       :sts_regional_endpoints,
       :s3_use_arn_region,
-      :s3_us_east_1_regional_endpoint
+      :s3_us_east_1_regional_endpoint,
+      :s3_disable_multiregion_access_points,
+      :defaults_mode
     )
 
     private
@@ -189,11 +195,6 @@ module Aws
       value
     end
 
-    def credentials_present?
-      (@parsed_credentials && !@parsed_credentials.empty?) ||
-        (@parsed_config && !@parsed_config.empty?)
-    end
-
     def assume_role_from_profile(cfg, profile, opts, chain_config)
       if cfg && prof_cfg = cfg[profile]
         opts[:source_profile] ||= prof_cfg['source_profile']
@@ -205,6 +206,7 @@ module Aws
             'a credential_source. For assume role credentials, must '\
             'provide only source_profile or credential_source, not both.'
         elsif opts[:source_profile]
+          opts[:visited_profiles] ||= Set.new
           opts[:credentials] = resolve_source_profile(opts[:source_profile], opts)
           if opts[:credentials]
             opts[:role_session_name] ||= prof_cfg['role_session_name']
@@ -214,6 +216,7 @@ module Aws
             opts[:external_id] ||= prof_cfg['external_id']
             opts[:serial_number] ||= prof_cfg['mfa_serial']
             opts[:profile] = opts.delete(:source_profile)
+            opts.delete(:visited_profiles)
             AssumeRoleCredentials.new(opts)
           else
             raise Errors::NoSourceProfileError,
@@ -246,8 +249,21 @@ module Aws
     end
 
     def resolve_source_profile(profile, opts = {})
+      if opts[:visited_profiles] && opts[:visited_profiles].include?(profile)
+        raise Errors::SourceProfileCircularReferenceError
+      end
+      opts[:visited_profiles].add(profile) if opts[:visited_profiles]
+
+      profile_config = @parsed_credentials[profile]
+      if @config_enabled
+        profile_config ||= @parsed_config[profile]
+      end
+
       if (creds = credentials(profile: profile))
         creds # static credentials
+      elsif profile_config && profile_config['source_profile']
+        opts.delete(:source_profile)
+        assume_role_credentials_from_config(opts.merge(profile: profile))
       elsif (provider = assume_role_web_identity_credentials_from_config(opts.merge(profile: profile)))
         provider.credentials if provider.credentials.set?
       elsif (provider = assume_role_process_credentials_from_config(profile))
@@ -274,7 +290,10 @@ module Aws
 
     def assume_role_process_credentials_from_config(profile)
       validate_profile_exists(profile)
-      credential_process = @parsed_config[profile]['credential_process']
+      credential_process = @parsed_credentials.fetch(profile, {})['credential_process']
+      if @parsed_config
+        credential_process ||= @parsed_config.fetch(profile, {})['credential_process']
+      end
       ProcessCredentials.new(credential_process) if credential_process
     end
 
