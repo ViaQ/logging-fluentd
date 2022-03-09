@@ -16,4 +16,4 @@ venv
 .vendor
 *.swo
 *.swp
-fluentd/1.14.*
+fluentd/1.*
