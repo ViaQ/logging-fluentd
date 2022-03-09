@@ -4,16 +4,16 @@ filters:
     approvers:
       - jcantrill
       - alanconway
-      - periklis
+      - vimalk78
     reviewers:
       - jcantrill
       - alanconway
       - vimalk78
       - syedriko
-      - periklis
       - vparfonov
       - eranra
       - pmoogi-redhat
+      - Pranjal-Gupta2
       - ajaygupta978
       - shwetaap
       - cahartma
