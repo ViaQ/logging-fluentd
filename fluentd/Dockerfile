@@ -1,7 +1,7 @@
 ### This is a generated file from Dockerfile.in ###
 
 #@follow_tag(registry.redhat.io/ubi8/ruby-25:latest)
-FROM registry.ci.openshift.org/ocp/builder:ubi8.ruby.25
+FROM registry.access.redhat.com/ubi8/ruby-25
 ENV BUILD_VERSION=1.14.5
 ENV SOURCE_GIT_COMMIT=${CI_ORIGIN_AGGREGATED_LOGGING_UPSTREAM_COMMIT:-}
 ENV SOURCE_GIT_URL=${CI_ORIGIN_AGGREGATED_LOGGING_UPSTREAM_URL:-}
