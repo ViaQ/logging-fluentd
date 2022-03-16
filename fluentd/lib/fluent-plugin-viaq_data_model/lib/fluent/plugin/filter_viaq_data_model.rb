@@ -499,6 +499,7 @@ module Fluent
       check_for_match_and_format(tag, time, record)
       add_pipeline_metadata(tag, time, record)
       handle_undefined_fields(tag, time, record)
+      add_openshift_data(record)
       # remove the field from record if it is not in the list of fields to keep and
       # it is empty
       record.delete_if{|k,v| !@keep_empty_fields_hash.key?(k) && (v.nil? || isempty(delempty(v)) || isempty(v))}
