@@ -1,4 +1,4 @@
-diff --git a/fluentd/vendored_gem_src/fluentd/lib/fluent/command/fluentd.rb b/fluentd/vendored_gem_src/fluentd/lib/fluent/command/fluentd.rb
+diff --git a/lib/fluent/command/fluentd.rb b/lib/fluent/command/fluentd.rb
 index 1c37b10e..ed1ad221 100644
 --- a/lib/fluent/command/fluentd.rb
 +++ b/lib/fluent/command/fluentd.rb
@@ -6,7 +6,7 @@ index 1c37b10e..ed1ad221 100644
    opts[:chgroup] = s
  }
  
-+opts[:chumask] = 0
++opts[:chumask] = "0"
 +op.on('--umask UMASK', "change umask") {|s|
 +  opts[:chumask] = s
 +}
@@ -14,7 +14,7 @@ index 1c37b10e..ed1ad221 100644
  op.on('-o', '--log PATH', "log file path") {|s|
    opts[:log_path] = s
  }
-diff --git a/fluentd/vendored_gem_src/fluentd/lib/fluent/supervisor.rb b/fluentd/vendored_gem_src/fluentd/lib/fluent/supervisor.rb
+diff --git a/lib/fluent/supervisor.rb b/lib/fluent/supervisor.rb
 index c03cde39..0f8bcf5c 100644
 --- a/lib/fluent/supervisor.rb
 +++ b/lib/fluent/supervisor.rb
