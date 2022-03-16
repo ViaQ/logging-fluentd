@@ -29,8 +29,6 @@ module Fluent::Plugin
     def initialize
       super
       @registry = ::Prometheus::Client.registry
-      # As per k8 regex for container logfile symlink ref :
-      # https://github.com/fabric8io/fluent-plugin-kubernetes_metadata_filter/blob/master/lib/fluent/plugin/filter_kubernetes_metadata.rb#L56
     end
 
     def multi_workers_ready?
@@ -47,6 +45,7 @@ module Fluent::Plugin
         unless value.is_a?(String)
           raise Fluent::ConfigError, "record accessor syntax is not available in collected_tail_monitor"
         end
+
         @base_labels[key] = expander.expand(value)
       end
 
@@ -69,15 +68,14 @@ module Fluent::Plugin
       timer_execute(:in_collected_tail_monitor, @interval, &method(:update_monitor_info))
     end
 
-
     def update_monitor_info
       opts = {
         ivars: MONITOR_IVARS,
       }
 
-     agent_info = @monitor_agent.plugins_info_all(opts).select do |info|
+      agent_info = @monitor_agent.plugins_info_all(opts).select do |info|
         info['type'] == 'tail'.freeze
-     end
+      end
       agent_info.each do |info|
         tails = info['instance_variables'][:tails]
         next if tails.nil?
@@ -96,11 +94,11 @@ module Fluent::Plugin
           if pe.read_inode == old_inode && pe.read_pos >= old_pos
             # Same file, has not been truncated since last we looked. Add the delta.
             @log.trace "delta bytes #{pe.read_pos}  #{old_pos}"
-            @metrics[:total_bytes_collected].increment(by: pe.read_pos - old_pos, labels: label)
+            @metrics[:total_bytes_collected].increment(label, pe.read_pos)
           else
             # Changed file or truncated the existing file. Add the initial content.
             @log.trace "delta bytes #{pe.read_pos}"
-            @metrics[:total_bytes_collected].increment(by: pe.read_pos, labels: label)
+            @metrics[:total_bytes_collected].increment(label, pe.read_pos)
           end
         end
       end
