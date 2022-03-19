@@ -6,18 +6,22 @@ module Prometheus
     # Prometheus specification.
     class LabelSetValidator
       # TODO: we might allow setting :instance in the future
-      RESERVED_LABELS = [:job, :instance].freeze
+      BASE_RESERVED_LABELS = [:job, :instance, :pid].freeze
+      LABEL_NAME_REGEX = /\A[a-zA-Z_][a-zA-Z0-9_]*\Z/
 
       class LabelSetError < StandardError; end
       class InvalidLabelSetError < LabelSetError; end
       class InvalidLabelError < LabelSetError; end
       class ReservedLabelError < LabelSetError; end
 
-      def initialize
-        @validated = {}
+      attr_reader :expected_labels, :reserved_labels
+
+      def initialize(expected_labels:, reserved_labels: [])
+        @expected_labels = expected_labels.sort
+        @reserved_labels = BASE_RESERVED_LABELS + reserved_labels
       end
 
-      def valid?(labels)
+      def validate_symbols!(labels)
         unless labels.respond_to?(:all?)
           raise InvalidLabelSetError, "#{labels} is not a valid label set"
         end
@@ -29,24 +33,24 @@ module Prometheus
         end
       end
 
-      def validate(labels)
-        return labels if @validated.key?(labels.hash)
-
-        valid?(labels)
-
-        unless @validated.empty? || match?(labels, @validated.first.last)
-          raise InvalidLabelSetError, "labels must have the same signature " \
-                                      "(keys given: #{labels.keys.sort} vs." \
-                                      " keys expected: #{@validated.first.last.keys.sort}"
+      def validate_labelset!(labelset)
+        begin
+          return labelset if keys_match?(labelset)
+        rescue ArgumentError
+          # If labelset contains keys that are a mixture of strings and symbols, this will
+          # raise when trying to sort them, but the error should be the same:
+          # InvalidLabelSetError
         end
 
-        @validated[labels.hash] = labels
+        raise InvalidLabelSetError, "labels must have the same signature " \
+                                    "(keys given: #{labelset.keys} vs." \
+                                    " keys expected: #{expected_labels}"
       end
 
       private
 
-      def match?(a, b)
-        a.keys.sort == b.keys.sort
+      def keys_match?(labelset)
+        labelset.keys.sort == expected_labels
       end
 
       def validate_symbol(key)
@@ -56,13 +60,19 @@ module Prometheus
       end
 
       def validate_name(key)
-        return true unless key.to_s.start_with?('__')
+        if key.to_s.start_with?('__')
+          raise ReservedLabelError, "label #{key} must not start with __"
+        end
 
-        raise ReservedLabelError, "label #{key} must not start with __"
+        unless key.to_s =~ LABEL_NAME_REGEX
+          raise InvalidLabelError, "label name must match /#{LABEL_NAME_REGEX}/"
+        end
+
+        true
       end
 
       def validate_reserved_key(key)
-        return true unless RESERVED_LABELS.include?(key)
+        return true unless reserved_labels.include?(key)
 
         raise ReservedLabelError, "#{key} is reserved"
       end

@@ -7,12 +7,6 @@ module Faraday
   class Response
     # Used for simple response middleware.
     class Middleware < Faraday::Middleware
-      def call(env)
-        @app.call(env).on_complete do |environment|
-          on_complete(environment)
-        end
-      end
-
       # Override this to modify the environment after the response has finished.
       # Calls the `parse` method if defined
       # `parse` method can be defined as private, public and protected
@@ -28,7 +22,8 @@ module Faraday
 
     register_middleware File.expand_path('response', __dir__),
                         raise_error: [:RaiseError, 'raise_error'],
-                        logger: [:Logger, 'logger']
+                        logger: [:Logger, 'logger'],
+                        json: [:Json, 'json']
 
     def initialize(env = nil)
       @env = Env.from(env) if env
@@ -48,6 +43,7 @@ module Faraday
     def headers
       finished? ? env.response_headers : {}
     end
+
     def_delegator :headers, :[]
 
     def body

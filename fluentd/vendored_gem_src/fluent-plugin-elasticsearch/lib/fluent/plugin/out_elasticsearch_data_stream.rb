@@ -1,3 +1,4 @@
+
 require_relative 'out_elasticsearch'
 
 module Fluent::Plugin
@@ -8,6 +9,11 @@ module Fluent::Plugin
     helpers :event_emitter
 
     config_param :data_stream_name, :string
+    config_param :data_stream_ilm_name, :string, :default => nil
+    config_param :data_stream_template_name, :string, :default => nil
+    config_param :data_stream_ilm_policy, :string, :default => nil
+    config_param :data_stream_ilm_policy_overwrite, :bool, :default => false
+
     # Elasticsearch 7.9 or later always support new style of index template.
     config_set_default :use_legacy_template, false
 
@@ -17,137 +23,186 @@ module Fluent::Plugin
     def configure(conf)
       super
 
-      begin
-        require 'elasticsearch/api'
-        require 'elasticsearch/xpack'
-      rescue LoadError
-        raise Fluent::ConfigError, "'elasticsearch/api', 'elasticsearch/xpack' are required for <@elasticsearch_data_stream>."
+      if Gem::Version.new(TRANSPORT_CLASS::VERSION) < Gem::Version.new("8.0.0")
+        begin
+          require 'elasticsearch/api'
+          require 'elasticsearch/xpack'
+        rescue LoadError
+          raise Fluent::ConfigError, "'elasticsearch/api', 'elasticsearch/xpack' are required for <@elasticsearch_data_stream>."
+        end
+      else
+        begin
+          require 'elasticsearch/api'
+        rescue LoadError
+          raise Fluent::ConfigError, "'elasticsearch/api is required for <@elasticsearch_data_stream>."
+        end
       end
+
+      @data_stream_ilm_name = "#{@data_stream_name}_policy" if @data_stream_ilm_name.nil?
+      @data_stream_template_name = "#{@data_stream_name}_template" if @data_stream_template_name.nil?
+      @data_stream_ilm_policy = File.read(File.join(File.dirname(__FILE__), "default-ilm-policy.json")) if @data_stream_ilm_policy.nil?
 
       # ref. https://www.elastic.co/guide/en/elasticsearch/reference/master/indices-create-data-stream.html
       unless placeholder?(:data_stream_name_placeholder, @data_stream_name)
-        validate_data_stream_name
+        validate_data_stream_parameters
       else
         @use_placeholder = true
         @data_stream_names = []
       end
 
-      @client = client
       unless @use_placeholder
         begin
           @data_stream_names = [@data_stream_name]
-          create_ilm_policy(@data_stream_name)
-          create_index_template(@data_stream_name)
-          create_data_stream(@data_stream_name)
+          retry_operate(@max_retry_putting_template,
+                        @fail_on_putting_template_retry_exceed,
+                        @catch_transport_exception_on_retry) do
+            create_ilm_policy(@data_stream_name, @data_stream_template_name, @data_stream_ilm_name)
+            create_index_template(@data_stream_name, @data_stream_template_name, @data_stream_ilm_name)
+            create_data_stream(@data_stream_name)
+          end
         rescue => e
           raise Fluent::ConfigError, "Failed to create data stream: <#{@data_stream_name}> #{e.message}"
         end
       end
     end
 
-    def validate_data_stream_name
-      unless valid_data_stream_name?
-        unless start_with_valid_characters?
-          if not_dots?
-            raise Fluent::ConfigError, "'data_stream_name' must not start with #{INVALID_START_CHRACTERS.join(",")}: <#{@data_stream_name}>"
-          else
-            raise Fluent::ConfigError, "'data_stream_name' must not be . or ..: <#{@data_stream_name}>"
+    def validate_data_stream_parameters
+      {"data_stream_name" => @data_stream_name,
+       "data_stream_template_name"=> @data_stream_template_name,
+       "data_stream_ilm_name" => @data_stream_ilm_name}.each do |parameter, value|
+        unless valid_data_stream_parameters?(value)
+          unless start_with_valid_characters?(value)
+            if not_dots?(value)
+              raise Fluent::ConfigError, "'#{parameter}' must not start with #{INVALID_START_CHRACTERS.join(",")}: <#{value}>"
+            else
+              raise Fluent::ConfigError, "'#{parameter}' must not be . or ..: <#{value}>"
+            end
           end
-        end
-        unless valid_characters?
-          raise Fluent::ConfigError, "'data_stream_name' must not contain invalid characters #{INVALID_CHARACTERS.join(",")}: <#{@data_stream_name}>"
-        end
-        unless lowercase_only?
-          raise Fluent::ConfigError, "'data_stream_name' must be lowercase only: <#{@data_stream_name}>"
-        end
-        if @data_stream_name.bytes.size > 255
-          raise Fluent::ConfigError, "'data_stream_name' must not be longer than 255 bytes: <#{@data_stream_name}>"
+          unless valid_characters?(value)
+            raise Fluent::ConfigError, "'#{parameter}' must not contain invalid characters #{INVALID_CHARACTERS.join(",")}: <#{value}>"
+          end
+          unless lowercase_only?(value)
+            raise Fluent::ConfigError, "'#{parameter}' must be lowercase only: <#{value}>"
+          end
+          if value.bytes.size > 255
+            raise Fluent::ConfigError, "'#{parameter}' must not be longer than 255 bytes: <#{value}>"
+          end
         end
       end
     end
 
-    def create_ilm_policy(name)
-      return if data_stream_exist?(name)
+    def create_ilm_policy(datastream_name, template_name, ilm_name, host = nil)
+      unless @data_stream_ilm_policy_overwrite
+        return if data_stream_exist?(datastream_name, host) or template_exists?(template_name, host) or ilm_policy_exists?(ilm_name, host)
+      end
+
       params = {
-        policy_id: "#{name}_policy",
-        body: File.read(File.join(File.dirname(__FILE__), "default-ilm-policy.json"))
+        body: @data_stream_ilm_policy
       }
       retry_operate(@max_retry_putting_template,
                     @fail_on_putting_template_retry_exceed,
                     @catch_transport_exception_on_retry) do
-        @client.xpack.ilm.put_policy(params)
+        if Gem::Version.new(TRANSPORT_CLASS::VERSION) >= Gem::Version.new("8.0.0")
+          client(host).enrich.put_policy(params.merge(name: ilm_name))
+        else
+          client(host).xpack.ilm.put_policy(params.merge(policy_id: ilm_name))
+        end
       end
     end
 
-    def create_index_template(name)
-      return if data_stream_exist?(name)
+    def create_index_template(datastream_name, template_name, ilm_name, host = nil)
+      return if data_stream_exist?(datastream_name, host) or template_exists?(template_name, host)
       body = {
-        "index_patterns" => ["#{name}*"],
+        "index_patterns" => ["#{datastream_name}*"],
         "data_stream" => {},
         "template" => {
           "settings" => {
-            "index.lifecycle.name" => "#{name}_policy"
+            "index.lifecycle.name" => "#{ilm_name}"
           }
         }
       }
       params = {
-        name: name,
+        name: template_name,
         body: body
       }
       retry_operate(@max_retry_putting_template,
                     @fail_on_putting_template_retry_exceed,
                     @catch_transport_exception_on_retry) do
-        @client.indices.put_index_template(params)
+        client(host).indices.put_index_template(params)
       end
     end
 
-    def data_stream_exist?(name)
+    def data_stream_exist?(datastream_name, host = nil)
       params = {
-        "name": name
+        name: datastream_name
       }
       begin
-        response = @client.indices.get_data_stream(params)
-        return (not response.is_a?(Elasticsearch::Transport::Transport::Errors::NotFound))
-      rescue Elasticsearch::Transport::Transport::Errors::NotFound => e
+        response = client(host).indices.get_data_stream(params)
+        return (not response.is_a?(TRANSPORT_CLASS::Transport::Errors::NotFound))
+      rescue TRANSPORT_CLASS::Transport::Errors::NotFound => e
         log.info "Specified data stream does not exist. Will be created: <#{e}>"
         return false
       end
     end
 
-    def create_data_stream(name)
-      return if data_stream_exist?(name)
+    def create_data_stream(datastream_name, host = nil)
+      return if data_stream_exist?(datastream_name, host)
       params = {
-        "name": name
+        name: datastream_name
       }
       retry_operate(@max_retry_putting_template,
                     @fail_on_putting_template_retry_exceed,
                     @catch_transport_exception_on_retry) do
-        @client.indices.create_data_stream(params)
+        client(host).indices.create_data_stream(params)
       end
     end
 
-    def valid_data_stream_name?
-      lowercase_only? and
-        valid_characters? and
-        start_with_valid_characters? and
-        not_dots? and
-        @data_stream_name.bytes.size <= 255
+    def ilm_policy_exists?(policy_id, host = nil)
+      begin
+        if Gem::Version.new(TRANSPORT_CLASS::VERSION) >= Gem::Version.new("8.0.0")
+          client(host).enrich.get_policy(name: policy_id)
+        else
+          client(host).ilm.get_policy(policy_id: policy_id)
+        end
+        true
+      rescue
+        false
+      end
     end
 
-    def lowercase_only?
-      @data_stream_name.downcase == @data_stream_name
+    def template_exists?(name, host = nil)
+      if @use_legacy_template
+        client(host).indices.get_template(:name => name)
+      else
+        client(host).indices.get_index_template(:name => name)
+      end
+      return true
+    rescue TRANSPORT_CLASS::Transport::Errors::NotFound
+      return false
     end
 
-    def valid_characters?
-      not (INVALID_CHARACTERS.each.any? do |v| @data_stream_name.include?(v) end)
+    def valid_data_stream_parameters?(data_stream_parameter)
+      lowercase_only?(data_stream_parameter) and
+        valid_characters?(data_stream_parameter) and
+        start_with_valid_characters?(data_stream_parameter) and
+        not_dots?(data_stream_parameter) and
+        data_stream_parameter.bytes.size <= 255
     end
 
-    def start_with_valid_characters?
-      not (INVALID_START_CHRACTERS.each.any? do |v| @data_stream_name.start_with?(v) end)
+    def lowercase_only?(data_stream_parameter)
+      data_stream_parameter.downcase == data_stream_parameter
     end
 
-    def not_dots?
-      not (@data_stream_name == "." or @data_stream_name == "..")
+    def valid_characters?(data_stream_parameter)
+      not (INVALID_CHARACTERS.each.any? do |v| data_stream_parameter.include?(v) end)
+    end
+
+    def start_with_valid_characters?(data_stream_parameter)
+      not (INVALID_START_CHRACTERS.each.any? do |v| data_stream_parameter.start_with?(v) end)
+    end
+
+    def not_dots?(data_stream_parameter)
+      not (data_stream_parameter == "." or data_stream_parameter == "..")
     end
 
     def client_library_version
@@ -160,12 +215,18 @@ module Fluent::Plugin
 
     def write(chunk)
       data_stream_name = @data_stream_name
+      data_stream_template_name = @data_stream_template_name
+      data_stream_ilm_name = @data_stream_ilm_name
+      host = nil
       if @use_placeholder
+        host = extract_placeholders(@host, chunk)
         data_stream_name = extract_placeholders(@data_stream_name, chunk)
+        data_stream_template_name = extract_placeholders(@data_stream_template_name, chunk)
+        data_stream_ilm_name = extract_placeholders(@data_stream_ilm_name, chunk)
         unless @data_stream_names.include?(data_stream_name)
           begin
-            create_ilm_policy(data_stream_name)
-            create_index_template(data_stream_name)
+            create_ilm_policy(data_stream_name, data_stream_template_name, data_stream_ilm_name, host)
+            create_index_template(data_stream_name, data_stream_template_name, data_stream_ilm_name, host)
             create_data_stream(data_stream_name)
             @data_stream_names << data_stream_name
           rescue => e
@@ -182,6 +243,10 @@ module Fluent::Plugin
       chunk.msgpack_each do |time, record|
         next unless record.is_a? Hash
 
+        if @include_tag_key
+          record[@tag_key] = tag
+        end
+
         begin
           record.merge!({"@timestamp" => Time.at(time).iso8601(@time_precision)})
           bulk_message = append_record_to_messages(CREATE_OP, {}, headers, record, bulk_message)
@@ -195,12 +260,12 @@ module Fluent::Plugin
         body: bulk_message
       }
       begin
-        response = @client.bulk(params)
+        response = client(host).bulk(params)
         if response['errors']
           log.error "Could not bulk insert to Data Stream: #{data_stream_name} #{response}"
         end
       rescue => e
-        log.error "Could not bulk insert to Data Stream: #{data_stream_name} #{e.message}"
+        raise RecoverableRequestFailure, "could not push logs to Elasticsearch cluster (#{data_stream_name}): #{e.message}"
       end
     end
 

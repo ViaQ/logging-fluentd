@@ -1,52 +1,77 @@
 #!/usr/bin/env ruby
 
-$: << File.dirname(__FILE__)
-$oj_dir = File.dirname(File.expand_path(File.dirname(__FILE__)))
-%w(lib ext).each do |dir|
-  $: << File.join($oj_dir, dir)
+$: << '.'
+$: << File.join(File.dirname(__FILE__), "../lib")
+$: << File.join(File.dirname(__FILE__), "../ext")
+
+require "oj"
+require "socket"
+require 'io/nonblock'
+
+=begin
+#pid = spawn("nc -d 0.1 -l 5000", out: "/dev/null")
+pid = spawn("nc -i 1 -l 7777", out: "/dev/null")
+at_exit { Process.kill 9, pid }
+sleep 0.2
+s = Socket.tcp("localhost", 7777)
+#s.nonblock = false
+1_000_000.times do |x|
+  Oj.to_stream(s, { x: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]})
 end
+=end
 
-require 'json'
+=begin
+IO.pipe do |r, w|
+  if fork
+    r.close
+    #w.nonblock = false
+    1_000_000.times do |i|
+      begin
+	Oj.to_stream(w, { x: i})
+      rescue IOError => e
+	puts "*** #{i} raised #{e.class}: #{e}"
+	IO.select(nil, [w])
+	retry
+      end
+      w.puts
+    end
+  else
+    w.close
+    sleep(0.1)
+    r.each_line { |b|
+      #print b
+    }
+    r.close
+    Process.exit(0)
+  end
+end
+=end
 
-t = [Time.now.utc]
-
-puts "t.to_json - #{t.to_json}"
-
-puts "--- active support"
-
-require 'active_support'
-require "active_support/json"
-
-ActiveSupport::JSON::Encoding.use_standard_json_time_format = false
-
-puts "t.as_json - #{t.as_json}"
-puts "t.to_json - #{t.to_json}"
-
-require 'oj'
-
-t = [Time.now.utc]
-
-puts "-----------------------"
-
-#puts "t.as_json - #{t.as_json}"
-puts "t.to_json - #{t.to_json}"
-
-#Oj.mimic_JSON
-
-#puts "Oj - t.as_json - #{t.as_json}"
-
-puts "--- active support"
-
-require 'active_support'
-require "active_support/json"
-
-ActiveSupport::JSON::Encoding.use_standard_json_time_format = false
-
-puts "t.as_json - #{t.as_json}"
-puts "t.to_json - #{t.to_json}"
-
-puts "--- optimize"
-Oj.optimize_rails
-
-puts "t.as_json - #{t.as_json}"
-puts "t.to_json - #{t.to_json}"
+IO.pipe do |r, w|
+  if fork
+    r.close
+    #w.nonblock = false
+    a = []
+    10_000.times do |i|
+      a << i
+    end
+    begin
+      Oj.to_stream(w, a, indent: 2)
+    rescue IOError => e
+      puts "*** raised #{e.class}: #{e}"
+      puts "*** fileno: #{w.fileno}"
+      puts "*** is an IO?: #{w.kind_of?(IO)}"
+      IO.select(nil, [w])
+      retry
+    end
+    w.puts
+  else
+    w.close
+    sleep(0.5)
+    r.each_line { |b|
+      #print b
+    }
+    r.close
+    Process.exit(0)
+  end
+end

@@ -1,3 +1,36 @@
+## Rails 6.1.5 (March 09, 2022) ##
+
+*   Fix `ActiveSupport::Duration.build` to support negative values.
+
+    The algorithm to collect the `parts` of the `ActiveSupport::Duration`
+    ignored the sign of the `value` and accumulated incorrect part values. This
+    impacted `ActiveSupport::Duration#sum` (which is dependent on `parts`) but
+    not `ActiveSupport::Duration#eql?` (which is dependent on `value`).
+
+    *Caleb Buxton*, *Braden Staudacher*
+
+*   `Time#change` and methods that call it (eg. `Time#advance`) will now
+    return a `Time` with the timezone argument provided, if the caller was
+    initialized with a timezone argument.
+
+    Fixes [#42467](https://github.com/rails/rails/issues/42467).
+
+    *Alex Ghiculescu*
+
+*   Clone to keep extended Logger methods for tagged logger.
+
+    *Orhan Toy*
+
+*   `assert_changes` works on including `ActiveSupport::Assertions` module.
+
+    *Pedro Medeiros*
+
+
+## Rails 6.1.4.7 (March 08, 2022) ##
+
+*   No changes.
+
+
 ## Rails 6.1.4.6 (February 11, 2022) ##
 
 *   Fix Reloader method signature to work with the new Executor signature
@@ -303,7 +336,7 @@
 
     *Max Gurewitz*
 
-*   `URI.parser` is deprecated and will be removed in Rails 6.2. Use
+*   `URI.parser` is deprecated and will be removed in Rails 7.0. Use
     `URI::DEFAULT_PARSER` instead.
 
     *Jean Boussier*

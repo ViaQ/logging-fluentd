@@ -2,6 +2,38 @@
 
 ### [Unreleased]
 
+### 5.2.1
+- respect include\_tag\_key and tag\_key setting when using data streams (#936)
+- Handle unsupported version error (#956)
+- Display deprecated warning on ES dynamic plugin (#955)
+
+### 5.2.0
+-  Migrate to handle Elasticsearch 8 (#949)
+
+### 5.1.5
+- Make retryable DataStreams creation at configure phase (#943)
+- Handle @hosts parameter on data_stream plugin (#942)
+- allow specifying custom ILM policies for data streams (#933)
+
+### 5.1.4
+- Handle ES8 or above more strictly (#931)
+- fixing double "\_policy" in index lifecycle management policy for elasticsearch\_data\_stream output (#930)
+
+### 5.1.3
+-  fixing execution order for dynamic data stream creation (#928)
+
+### 5.1.2
+-  Fix default values of datastream parameters (#926)
+
+### 5.1.1
+- Report appropriate error for data_stream parameters (#922)
+- Add ILM and template parameters for data streams (#920)
+- Support Buffer in Data Stream Output (#917)
+
+### 5.1.0
+- Correct default target bytes value (#914)
+- Handle elasticsearch-ruby 7.14 properly (#913)
+
 ### 5.0.5
 - Drop json_parse_exception messages for bulk failures (#900)
 - GitHub Actions: Drop Ruby 2.5 due to EOL (#894)
