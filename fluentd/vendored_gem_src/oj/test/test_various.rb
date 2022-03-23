@@ -123,6 +123,8 @@ class Juice < Minitest::Test
       compat_bigdecimal: true,
       create_id: 'classy',
       create_additions: true,
+      cache_keys: false,
+      cache_str: 5,
       space: 'z',
       array_nl: 'a',
       object_nl: 'o',
@@ -526,7 +528,7 @@ class Juice < Minitest::Test
     assert_equal(58, obj.y)
   end
 
-# Stream Deeply Nested
+  # Stream Deeply Nested
   def test_deep_nest_dump
     begin
       a = []
@@ -539,7 +541,7 @@ class Juice < Minitest::Test
     assert(false, "*** expected an exception")
   end
 
-# Stream IO
+  # Stream IO
   def test_io_string
     src = { 'x' => true, 'y' => 58, 'z' => [1, 2, 3]}
     output = StringIO.open("", "w+")
@@ -551,6 +553,9 @@ class Juice < Minitest::Test
   end
 
   def test_io_file
+    # Windows does not support fork
+    return if RbConfig::CONFIG['host_os'] =~ /(mingw|mswin)/
+
     src = { 'x' => true, 'y' => 58, 'z' => [1, 2, 3]}
     filename = File.join(File.dirname(__FILE__), 'open_file_test.json')
     File.open(filename, "w") { |f|
@@ -560,6 +565,28 @@ class Juice < Minitest::Test
     obj = Oj.load(f, :mode => :strict)
     f.close()
     assert_equal(src, obj)
+  end
+
+  def test_io_stream
+    IO.pipe do |r, w|
+      if fork
+	r.close
+	#w.nonblock = false
+	a = []
+	10_000.times do |i|
+	  a << i
+	end
+	Oj.to_stream(w, a, indent: 2)
+	w.close
+      else
+	w.close
+	sleep(0.1) # to force a busy
+	cnt = 0
+	r.each_line { cnt += 1 }
+	r.close
+	Process.exit(0)
+      end
+    end
   end
 
 # comments

@@ -1,6 +1,31 @@
 Unreleased Changes
 ------------------
 
+1.568.0 (2022-03-16)
+------------------
+
+* Feature - Added support for enumerating regions for `Aws::BillingConductor`.
+
+1.567.0 (2022-03-14)
+------------------
+
+* Feature - Updated the partitions source data the determines the AWS service regions and endpoints.
+
+1.566.0 (2022-03-10)
+------------------
+
+* Feature - Updated the partitions source data the determines the AWS service regions and endpoints.
+
+1.565.0 (2022-03-09)
+------------------
+
+* Feature - Updated the partitions source data the determines the AWS service regions and endpoints.
+
+1.564.0 (2022-03-08)
+------------------
+
+* Feature - Updated the partitions source data the determines the AWS service regions and endpoints.
+
 1.563.0 (2022-03-03)
 ------------------
 

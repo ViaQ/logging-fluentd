@@ -1,3 +1,15 @@
+# Rails Quickstart
+
+To universally replace Rails' use of the json gem with Oj, and also
+have Oj "take over" many methods on the JSON constant (`load`, `parse`, etc.) with
+their faster Oj counterparts, add this to an initializer:
+
+```ruby
+Oj.optimize_rails()
+```
+
+For more details and options, read on...
+
 # Oj Rails Compatibility
 
 The `:rails` mode mimics the ActiveSupport version 5 encoder. Rails and
@@ -41,7 +53,7 @@ The globals that ActiveSupport uses for encoding are:
 
 Those globals are aliased to also be accessed from the ActiveSupport module
 directly so `ActiveSupport::JSON::Encoding.time_precision` can also be accessed
-from `ActiveSupport.time_precision`. Oj makes use of these globals in mimicing
+from `ActiveSupport.time_precision`. Oj makes use of these globals in mimicking
 Rails after the `Oj::Rails.set_encode()` method is called. That also sets the
 `ActiveSupport.json_encoder` to the `Oj::Rails::Encoder` class.
 
@@ -125,7 +137,7 @@ gem 'oj', '3.7.12'
    Ruby which is used by the json gem and by Rails. Ruby varies the
    significant digits which can be either 16 or 17 depending on the value.
 
-2. Optimized Hashs do not collapse keys that become the same in the output. As
+2. Optimized Hashes do not collapse keys that become the same in the output. As
    an example, a non-String object that has a `to_s()` method will become the
    return value of the `to_s()` method in the output without checking to see if
    that has already been used. This could occur is a mix of String and Symbols

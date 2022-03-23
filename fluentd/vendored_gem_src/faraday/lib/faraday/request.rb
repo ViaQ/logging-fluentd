@@ -12,7 +12,7 @@ module Faraday
   #     req.body = 'abc'
   #   end
   #
-  # @!attribute method
+  # @!attribute http_method
   #   @return [Symbol] the HTTP method of the Request
   # @!attribute path
   #   @return [URI, String] the path
@@ -26,15 +26,15 @@ module Faraday
   #   @return [RequestOptions] options
   #
   # rubocop:disable Style/StructInheritance
-  class Request < Struct.new(:method, :path, :params, :headers, :body, :options)
+  class Request < Struct.new(
+    :http_method, :path, :params, :headers, :body, :options
+  )
     # rubocop:enable Style/StructInheritance
 
     extend MiddlewareRegistry
 
     register_middleware File.expand_path('request', __dir__),
                         url_encoded: [:UrlEncoded, 'url_encoded'],
-                        multipart: [:Multipart, 'multipart'],
-                        retry: [:Retry, 'retry'],
                         authorization: [:Authorization, 'authorization'],
                         basic_auth: [
                           :BasicAuthentication,
@@ -44,7 +44,8 @@ module Faraday
                           :TokenAuthentication,
                           'token_authentication'
                         ],
-                        instrumentation: [:Instrumentation, 'instrumentation']
+                        instrumentation: [:Instrumentation, 'instrumentation'],
+                        json: [:Json, 'json']
 
     # @param request_method [String]
     # @yield [request] for block customization, if block given
@@ -54,6 +55,14 @@ module Faraday
       new(request_method).tap do |request|
         yield(request) if block_given?
       end
+    end
+
+    def method
+      warn <<~TEXT
+        WARNING: `Faraday::Request##{__method__}` is deprecated; use `#http_method` instead. It will be removed in or after version 2.0.
+        `Faraday::Request##{__method__}` called from #{caller_locations(1..1).first}
+      TEXT
+      http_method
     end
 
     # Replace params, preserving the existing hash type.
@@ -116,7 +125,7 @@ module Faraday
     # @return [Hash] the hash ready to be serialized in Marshal.
     def marshal_dump
       {
-        method: method,
+        http_method: http_method,
         body: body,
         headers: headers,
         path: path,
@@ -129,17 +138,17 @@ module Faraday
     # Restores the instance variables according to the +serialised+.
     # @param serialised [Hash] the serialised object.
     def marshal_load(serialised)
-      self.method  = serialised[:method]
-      self.body    = serialised[:body]
+      self.http_method = serialised[:http_method]
+      self.body = serialised[:body]
       self.headers = serialised[:headers]
-      self.path    = serialised[:path]
-      self.params  = serialised[:params]
+      self.path = serialised[:path]
+      self.params = serialised[:params]
       self.options = serialised[:options]
     end
 
     # @return [Env] the Env for this Request
     def to_env(connection)
-      Env.new(method, body, connection.build_exclusive_url(path, params),
+      Env.new(http_method, body, connection.build_exclusive_url(path, params),
               options, headers, connection.ssl, connection.parallel_manager)
     end
   end

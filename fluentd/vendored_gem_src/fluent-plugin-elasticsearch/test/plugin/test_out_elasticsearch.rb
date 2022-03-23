@@ -19,7 +19,15 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     log.out.logs.slice!(0, log.out.logs.length)
   end
 
-  def driver(conf='', es_version=5, client_version="\"5.0\"")
+  def elasticsearch_version
+    if Gem::Version.new(TRANSPORT_CLASS::VERSION) >= Gem::Version.new("7.14.0")
+      TRANSPORT_CLASS::VERSION.split(".")[0..1].join(".")
+    else
+      "7.17".freeze
+    end
+  end
+
+  def driver(conf='', es_version=elasticsearch_version.to_i, client_version="\"#{elasticsearch_version}\"")
     # For request stub to detect compatibility.
     @es_version ||= es_version
     @client_version ||= client_version
@@ -45,6 +53,14 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     }.configure(conf)
   end
 
+  def elasticsearch_transport_layer_decoupling?
+    Gem::Version.create(::TRANSPORT_CLASS::VERSION) >= Gem::Version.new("7.14.0")
+  end
+
+  def elastic_transport_layer?
+    Gem::Version.create(::TRANSPORT_CLASS::VERSION) >= Gem::Version.new("8.0.0")
+  end
+
   def default_type_name
     Fluent::Plugin::ElasticsearchOutput::DEFAULT_TYPE_NAME
   end
@@ -59,9 +75,10 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     }
   end
 
-  def stub_elastic_info(url="http://localhost:9200/", version="6.4.2")
-    body ="{\"version\":{\"number\":\"#{version}\"}}"
-    stub_request(:get, url).to_return({:status => 200, :body => body, :headers => { 'Content-Type' => 'json' } })
+  def stub_elastic_info(url="http://localhost:9200/", version=elasticsearch_version)
+    body ="{\"version\":{\"number\":\"#{version}\", \"build_flavor\":\"default\"},\"tagline\" : \"You Know, for Search\"}"
+    stub_request(:get, url)
+      .to_return({:status => 200, :body => body, :headers => { 'Content-Type' => 'json', 'X-elastic-product' => 'Elasticsearch' } })
   end
 
   def stub_elastic(url="http://localhost:9200/_bulk")
@@ -261,7 +278,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     assert_true instance.verify_es_version_at_startup
     assert_equal Fluent::Plugin::ElasticsearchOutput::DEFAULT_ELASTICSEARCH_VERSION, instance.default_elasticsearch_version
     assert_false instance.log_es_400_reason
-    assert_equal 20 * 1024 * 1024, Fluent::Plugin::ElasticsearchOutput::TARGET_BULK_BYTES
+    assert_equal -1, Fluent::Plugin::ElasticsearchOutput::DEFAULT_TARGET_BULK_BYTES
     assert_false instance.compression
     assert_equal :no_compression, instance.compression_level
     assert_true instance.http_backend_excon_nonblock
@@ -269,7 +286,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   end
 
   test 'configure compression' do
-    omit "elastisearch-ruby v7.2.0 or later is needed." if Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.2.0")
+    omit "elastisearch-ruby v7.2.0 or later is needed." if Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.2.0")
 
     config = %{
       compression_level best_compression
@@ -280,7 +297,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   end
 
   test 'check compression strategy' do
-    omit "elastisearch-ruby v7.2.0 or later is needed." if Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.2.0")
+    omit "elastisearch-ruby v7.2.0 or later is needed." if Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.2.0")
 
     config = %{
       compression_level best_speed
@@ -291,43 +308,69 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   end
 
   test 'check content-encoding header with compression' do
-    omit "elastisearch-ruby v7.2.0 or later is needed." if Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.2.0")
+    omit "elastisearch-ruby v7.2.0 or later is needed." if Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.2.0")
 
     config = %{
       compression_level best_compression
     }
     instance = driver(config).instance
 
-    assert_equal nil, instance.client.transport.options[:transport_options][:headers]["Content-Encoding"]
+    if elastic_transport_layer?
+      assert_equal nil, instance.client.transport.options[:transport_options][:headers]["Content-Encoding"]
+    elsif elasticsearch_transport_layer_decoupling?
+      assert_equal nil, instance.client.transport.transport.options[:transport_options][:headers]["Content-Encoding"]
+    else
+      assert_equal nil, instance.client.transport.options[:transport_options][:headers]["Content-Encoding"]
+    end
 
     stub_request(:post, "http://localhost:9200/_bulk").
       to_return(status: 200, body: "", headers: {})
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
     compressable = instance.compressable_connection
 
-    assert_equal "gzip", instance.client(nil, compressable).transport.options[:transport_options][:headers]["Content-Encoding"]
+    if elastic_transport_layer?
+      assert_equal "gzip", instance.client(nil, compressable).transport.options[:transport_options][:headers]["Content-Encoding"]
+    elsif elasticsearch_transport_layer_decoupling?
+      assert_equal "gzip", instance.client(nil, compressable).transport.transport.options[:transport_options][:headers]["Content-Encoding"]
+    else
+      assert_equal "gzip", instance.client(nil, compressable).transport.options[:transport_options][:headers]["Content-Encoding"]
+    end
   end
 
   test 'check compression option is passed to transport' do
-    omit "elastisearch-ruby v7.2.0 or later is needed." if Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.2.0")
+    omit "elastisearch-ruby v7.2.0 or later is needed." if Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.2.0")
 
     config = %{
       compression_level best_compression
     }
     instance = driver(config).instance
 
-    assert_equal false, instance.client.transport.options[:compression]
+    if elastic_transport_layer?
+      assert_equal false, instance.client.transport.options[:compression]
+    elsif elasticsearch_transport_layer_decoupling?
+      assert_equal false, instance.client.transport.transport.options[:compression]
+    else
+      assert_equal false, instance.client.transport.options[:compression]
+    end
 
     stub_request(:post, "http://localhost:9200/_bulk").
       to_return(status: 200, body: "", headers: {})
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
     compressable = instance.compressable_connection
 
-    assert_equal true, instance.client(nil, compressable).transport.options[:compression]
+    if elastic_transport_layer?
+      assert_equal true, instance.client(nil, compressable).transport.options[:compression]
+    elsif elasticsearch_transport_layer_decoupling?
+      assert_equal true, instance.client(nil, compressable).transport.transport.options[:compression]
+    else
+      assert_equal true, instance.client(nil, compressable).transport.options[:compression]
+    end
   end
 
   test 'check configure cloud_id based client' do
@@ -414,12 +457,12 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     end
 
     def stub_elastic_info_bad(url="http://localhost:9200/", version="6.4.2")
-      body ="{\"version\":{\"number\":\"#{version}\"}}"
+      body ="{\"version\":{\"number\":\"#{version}\",\"build_flavor\":\"default\"},\"tagline\":\"You Know, for Search\"}"
       stub_request(:get, url).to_return({:status => 200, :body => body, :headers => { 'Content-Type' => 'text/plain' } })
     end
 
     test 'handle invalid client.info' do
-      stub_elastic_info_bad("https://logs.fluentd.com:24225/es//", "7.7.1")
+      stub_elastic_info_bad("https://logs.fluentd.com:24225/es//", elasticsearch_version)
       config = %{
         host     logs.fluentd.com
         port     24225
@@ -431,9 +474,19 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
         scheme https
         @log_level info
       }
-      d = create_driver(config, 7, "\"7.10.1\"")
-      logs = d.logs
-      assert_logs_include(logs, /can not dig version information. Assuming Elasticsearch 7/)
+      if elastic_transport_layer?
+        assert_raise(NoMethodError) do
+          d = create_driver(config, 8, "\"8.0.0\"")
+        end
+      elsif elasticsearch_transport_layer_decoupling?
+        assert_raise(NoMethodError) do
+          d = create_driver(config, 7, "\"7.10.1\"")
+        end
+      else
+        d = create_driver(config, 7, "\"7.10.1\"")
+        logs = d.logs
+        assert_logs_include(logs, /can not dig version information. Assuming Elasticsearch 7/)
+      end
     end
   end
 
@@ -453,21 +506,31 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
 
   sub_test_case 'ILM default config' do
     setup do
-      begin
-        require "elasticsearch/xpack"
-      rescue LoadError
-        omit "ILM testcase needs elasticsearch-xpack gem."
+      if Gem::Version.new(TRANSPORT_CLASS::VERSION) < Gem::Version.new("8.0.0")
+        begin
+          require "elasticsearch/xpack"
+        rescue LoadError
+          omit "ILM testcase needs elasticsearch-xpack gem."
+        end
+      end
+    end
+
+    def ilm_endpoint
+      if Gem::Version.new(TRANSPORT_CLASS::VERSION) >= Gem::Version.new("8.0.0")
+        '_enrich'.freeze
+      else
+        '_ilm'.freeze
       end
     end
 
     data("legacy_template" => [true, "_template"],
          "new_template"    => [false, "_index_template"])
     test 'valid configuration of index lifecycle management' do |data|
-      if Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.4.0")
+      if Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.4.0")
         omit "elastisearch-ruby v7.4.0 or later is needed for ILM."
       end
       use_legacy_template_flag, endpoint = data
-      if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+      if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
         omit "elastisearch-ruby v7.8.0 or later is needed."
       end
       cwd = File.dirname(__FILE__)
@@ -491,11 +554,12 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       stub_request(:get, "http://localhost:9200/_xpack").
         to_return(:status => 200, :body => '{"features":{"ilm":{"available":true,"enabled":true}}}',
                   :headers => {"Content-Type"=> "application/json"})
-      stub_request(:get, "http://localhost:9200/_ilm/policy/logstash-policy").
+      stub_request(:get, "http://localhost:9200/#{ilm_endpoint}/policy/logstash-policy").
         to_return(status: 404, body: "", headers: {})
-      stub_request(:put, "http://localhost:9200/_ilm/policy/logstash-policy").
+      stub_request(:put, "http://localhost:9200/#{ilm_endpoint}/policy/logstash-policy").
         with(body: "{\"policy\":{\"phases\":{\"hot\":{\"actions\":{\"rollover\":{\"max_size\":\"50gb\",\"max_age\":\"30d\"}}}}}}").
         to_return(status: 200, body: "", headers: {})
+      stub_elastic_info
 
       assert_nothing_raised {
         driver(config)
@@ -505,11 +569,11 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     data("legacy_template" => [true, "_template"],
          "new_template"    => [false, "_index_template"])
     test 'valid configuration of overwriting ilm_policy' do |data|
-      if Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.4.0")
+      if Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.4.0")
         omit "elastisearch-ruby v7.4.0 or later is needed for ILM."
       end
       use_legacy_template_flag, endpoint = data
-      if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+      if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
         omit "elastisearch-ruby v7.8.0 or later is needed."
       end
       cwd = File.dirname(__FILE__)
@@ -535,11 +599,12 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       stub_request(:get, "http://localhost:9200/_xpack").
         to_return(:status => 200, :body => '{"features":{"ilm":{"available":true,"enabled":true}}}',
                   :headers => {"Content-Type"=> "application/json"})
-      stub_request(:get, "http://localhost:9200/_ilm/policy/logstash-policy").
+      stub_request(:get, "http://localhost:9200/#{ilm_endpoint}/policy/logstash-policy").
         to_return(status: 200, body: "", headers: {})
-      stub_request(:put, "http://localhost:9200/_ilm/policy/logstash-policy").
+      stub_request(:put, "http://localhost:9200/#{ilm_endpoint}/policy/logstash-policy").
         with(body: "{\"policy\":{\"phases\":{\"hot\":{\"actions\":{\"rollover\":{\"max_size\":\"75gb\",\"max_age\":\"50d\"}}}}}}").
         to_return(status: 200, body: "", headers: {})
+      stub_elastic_info
 
       assert_nothing_raised {
         driver(config)
@@ -556,6 +621,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
         template_file #{template_file}
         ilm_policy_overwrite true
       }
+      stub_elastic_info
 
       assert_raise(Fluent::ConfigError) {
         driver(config)
@@ -854,6 +920,67 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     end
   end
 
+  class GetElasticsearchIncompatibleVersionTest < self
+    def create_driver(conf='', client_version="7.14")
+      # For request stub to detect compatibility.
+      @client_version ||= client_version
+      # Ensure original implementation existence.
+      Fluent::Plugin::ElasticsearchOutput.module_eval(<<-CODE)
+        def detect_es_major_version
+          begin
+            @_es_info ||= client.info
+          rescue Elasticsearch::UnsupportedProductError => e
+            raise Fluent::ConfigError, "Using Elasticsearch client #{@client_version} is not compatible for your Elasticsearch server. Please check your using elasticsearch gem version and Elasticsearch server."
+          end
+          begin
+            unless version = @_es_info.dig("version", "number")
+              version = @default_elasticsearch_version
+            end
+          rescue NoMethodError => e
+            log.warn "#{@_es_info} can not dig version information. Assuming Elasticsearch #{@default_elasticsearch_version}", error: e
+            version = @default_elasticsearch_version
+          end
+          version.to_i
+        end
+      CODE
+      Fluent::Plugin::ElasticsearchOutput.module_eval(<<-CODE)
+        def client_library_version
+          #{@client_version}
+        end
+      CODE
+      Fluent::Test::Driver::Output.new(Fluent::Plugin::ElasticsearchOutput).configure(conf)
+    end
+
+    def test_incompatible_es_version
+      if Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.14.0")
+        omit "This test is not effective before elasticsearch 7.14"
+      end
+      config = %{
+        host            logs.google.com
+        port            778
+        scheme          https
+        path            /es/
+        user            john
+        password        doe
+        verify_es_version_at_startup true
+        max_retry_get_es_version 1
+      }
+
+      connection_resets = 0
+      stub_request(:get, "https://logs.google.com:778/es//").
+        with(basic_auth: ['john', 'doe']) do |req|
+        connection_resets += 1
+        raise Elasticsearch::UnsupportedProductError
+      end
+
+      assert_raise(Fluent::ConfigError) do
+        create_driver(config)
+      end
+
+      assert_equal(1, connection_resets)
+    end
+  end
+
   class GetElasticsearchVersionWithFallbackTest < self
     def create_driver(conf='', client_version="\"5.0\"")
       # For request stub to detect compatibility.
@@ -915,7 +1042,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
        "new_template"    => [false, "_index_template"])
   def test_template_already_present(data)
     use_legacy_template_flag, endpoint = data
-    if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+    if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
       omit "elastisearch-ruby v7.8.0 or later is needed."
     end
     config = %{
@@ -938,6 +1065,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     stub_request(:get, "https://logs.google.com:777/es//#{endpoint}/logstash").
       with(basic_auth: ['john', 'doe']).
       to_return(:status => 200, :body => "", :headers => {})
+    stub_elastic_info("https://logs.google.com:777/es//")
 
     driver(config)
 
@@ -948,7 +1076,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
        "new_template"    => [false, "_index_template"])
   def test_template_create(data)
     use_legacy_template_flag, endpoint = data
-    if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+    if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
       omit "elastisearch-ruby v7.8.0 or later is needed."
     end
     cwd = File.dirname(__FILE__)
@@ -982,6 +1110,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     stub_request(:put, "https://logs.google.com:777/es//#{endpoint}/logstash").
       with(basic_auth: ['john', 'doe']).
       to_return(:status => 200, :body => "", :headers => {})
+    stub_elastic_info("https://logs.google.com:777/es//")
 
     driver(config)
 
@@ -992,7 +1121,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
        "new_template"    => [false, "_index_template"])
   def test_template_create_with_rollover_index_and_template_related_placeholders(data)
     use_legacy_template_flag, endpoint = data
-    if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+    if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
       omit "elastisearch-ruby v7.8.0 or later is needed."
     end
     cwd = File.dirname(__FILE__)
@@ -1045,6 +1174,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     driver(config)
 
     elastic_request = stub_elastic("https://logs.google.com:777/es//_bulk")
+    stub_elastic_info("https://logs.google.com:777/es//")
     driver.run(default_tag: 'test.template') do
       driver.feed(sample_record)
     end
@@ -1060,7 +1190,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
        "new_template"    => [false, "_index_template"])
   def test_template_create_with_rollover_index_and_template_related_placeholders_with_truncating_caches(data)
     use_legacy_template_flag, endpoint = data
-    if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+    if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
       omit "elastisearch-ruby v7.8.0 or later is needed."
     end
     cwd = File.dirname(__FILE__)
@@ -1110,6 +1240,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       with(basic_auth: ['john', 'doe'],
            body: "{\"aliases\":{\"myapp_deflector-test.template\":{\"is_write_index\":true}}}").
       to_return(:status => 200, :body => "", :headers => {})
+    stub_elastic_info("https://logs.google.com:777/es//")
 
     driver(config)
 
@@ -1133,13 +1264,23 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
 
   class TemplateIndexLifecycleManagementTest < self
     def setup
-      begin
-        require "elasticsearch/xpack"
-      rescue LoadError
-        omit "ILM testcase needs elasticsearch-xpack gem."
+      if Gem::Version.new(Elasticsearch::VERSION) < Gem::Version.new("8.0.0")
+        begin
+          require "elasticsearch/xpack"
+        rescue LoadError
+          omit "ILM testcase needs elasticsearch-xpack gem."
+        end
       end
-      if Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.4.0")
+      if Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.4.0")
         omit "elastisearch-ruby v7.4.0 or later is needed for ILM."
+      end
+    end
+
+    def ilm_endpoint
+      if Gem::Version.new(TRANSPORT_CLASS::VERSION) >= Gem::Version.new("8.0.0")
+        '_enrich'.freeze
+      else
+        '_ilm'.freeze
       end
     end
 
@@ -1147,7 +1288,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
          "new_template"    => [false, "_index_template"])
     def test_template_create_with_rollover_index_and_default_ilm(data)
       use_legacy_template_flag, endpoint = data
-      if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+      if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
         omit "elastisearch-ruby v7.8.0 or later is needed."
       end
       cwd = File.dirname(__FILE__)
@@ -1213,13 +1354,14 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       stub_request(:get, "https://logs.google.com:777/es//_xpack").
         with(basic_auth: ['john', 'doe']).
         to_return(:status => 200, :body => '{"features":{"ilm":{"available":true,"enabled":true}}}', :headers => {"Content-Type"=> "application/json"})
-      stub_request(:get, "https://logs.google.com:777/es//_ilm/policy/logstash-policy").
+      stub_request(:get, "https://logs.google.com:777/es//#{ilm_endpoint}/policy/logstash-policy").
         with(basic_auth: ['john', 'doe']).
         to_return(:status => 404, :body => "", :headers => {})
-      stub_request(:put, "https://logs.google.com:777/es//_ilm/policy/logstash-policy").
+      stub_request(:put, "https://logs.google.com:777/es//#{ilm_endpoint}/policy/logstash-policy").
         with(basic_auth: ['john', 'doe'],
              :body => "{\"policy\":{\"phases\":{\"hot\":{\"actions\":{\"rollover\":{\"max_size\":\"50gb\",\"max_age\":\"30d\"}}}}}}").
         to_return(:status => 200, :body => "", :headers => {})
+      stub_elastic_info("https://logs.google.com:777/es//")
 
       driver(config)
 
@@ -1230,7 +1372,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
          "new_template"    => [false, "_index_template"])
     def test_template_create_with_rollover_index_and_default_ilm_on_logstash_format(data)
       use_legacy_template_flag, endpoint = data
-      if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+      if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
         omit "elastisearch-ruby v7.8.0 or later is needed."
       end
       cwd = File.dirname(__FILE__)
@@ -1299,13 +1441,14 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       stub_request(:get, "https://logs.google.com:777/es//_xpack").
         with(basic_auth: ['john', 'doe']).
         to_return(:status => 200, :body => '{"features":{"ilm":{"available":true,"enabled":true}}}', :headers => {"Content-Type"=> "application/json"})
-      stub_request(:get, "https://logs.google.com:777/es//_ilm/policy/logstash-policy").
+      stub_request(:get, "https://logs.google.com:777/es//#{ilm_endpoint}/policy/logstash-policy").
         with(basic_auth: ['john', 'doe']).
         to_return(:status => 404, :body => "", :headers => {})
-      stub_request(:put, "https://logs.google.com:777/es//_ilm/policy/logstash-policy").
+      stub_request(:put, "https://logs.google.com:777/es//#{ilm_endpoint}/policy/logstash-policy").
         with(basic_auth: ['john', 'doe'],
              :body => "{\"policy\":{\"phases\":{\"hot\":{\"actions\":{\"rollover\":{\"max_size\":\"50gb\",\"max_age\":\"30d\"}}}}}}").
         to_return(:status => 200, :body => "", :headers => {})
+      stub_elastic_info("https://logs.google.com:777/es//")
 
       driver(config)
 
@@ -1322,7 +1465,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
          "new_template"    => [false, "_index_template"])
     def test_template_create_with_rollover_index_and_default_ilm_and_ilm_policy_overwrite(data)
       use_legacy_template_flag, endpoint = data
-      if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+      if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
         omit "elastisearch-ruby v7.8.0 or later is needed."
       end
       cwd = File.dirname(__FILE__)
@@ -1390,13 +1533,14 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       stub_request(:get, "https://logs.google.com:777/es//_xpack").
         with(basic_auth: ['john', 'doe']).
         to_return(:status => 200, :body => '{"features":{"ilm":{"available":true,"enabled":true}}}', :headers => {"Content-Type"=> "application/json"})
-      stub_request(:get, "https://logs.google.com:777/es//_ilm/policy/logstash-policy").
+      stub_request(:get, "https://logs.google.com:777/es//#{ilm_endpoint}/policy/logstash-policy").
         with(basic_auth: ['john', 'doe']).
         to_return(:status => 200, :body => "", :headers => {})
-      stub_request(:put, "https://logs.google.com:777/es//_ilm/policy/logstash-policy").
+      stub_request(:put, "https://logs.google.com:777/es//#{ilm_endpoint}/policy/logstash-policy").
         with(basic_auth: ['john', 'doe'],
              :body => "{\"policy\":{\"phases\":{\"hot\":{\"actions\":{\"rollover\":{\"max_size\":\"60gb\",\"max_age\":\"45d\"}}}}}}").
         to_return(:status => 200, :body => "", :headers => {})
+      stub_elastic_info("https://logs.google.com:777/es//")
 
       driver(config)
 
@@ -1432,7 +1576,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
          "new_template"    => [false, "_index_template"])
     def test_template_create_with_rollover_index_and_default_ilm_with_empty_index_date_pattern(data)
       use_legacy_template_flag, endpoint = data
-      if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+      if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
         omit "elastisearch-ruby v7.8.0 or later is needed."
       end
       cwd = File.dirname(__FILE__)
@@ -1498,13 +1642,14 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       stub_request(:get, "https://logs.google.com:777/es//_xpack").
         with(basic_auth: ['john', 'doe']).
         to_return(:status => 200, :body => '{"features":{"ilm":{"available":true,"enabled":true}}}', :headers => {"Content-Type"=> "application/json"})
-      stub_request(:get, "https://logs.google.com:777/es//_ilm/policy/logstash-policy").
+      stub_request(:get, "https://logs.google.com:777/es//#{ilm_endpoint}/policy/logstash-policy").
         with(basic_auth: ['john', 'doe']).
         to_return(:status => 404, :body => "", :headers => {})
-      stub_request(:put, "https://logs.google.com:777/es//_ilm/policy/logstash-policy").
+      stub_request(:put, "https://logs.google.com:777/es//#{ilm_endpoint}/policy/logstash-policy").
         with(basic_auth: ['john', 'doe'],
              :body => "{\"policy\":{\"phases\":{\"hot\":{\"actions\":{\"rollover\":{\"max_size\":\"50gb\",\"max_age\":\"30d\"}}}}}}").
         to_return(:status => 200, :body => "", :headers => {})
+      stub_elastic_info("https://logs.google.com:777/es//")
 
       driver(config)
 
@@ -1515,7 +1660,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
          "new_template"    => [false, "_index_template"])
     def test_template_create_with_rollover_index_and_custom_ilm(data)
       use_legacy_template_flag, endpoint = data
-      if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+      if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
         omit "elastisearch-ruby v7.8.0 or later is needed."
       end
       cwd = File.dirname(__FILE__)
@@ -1582,13 +1727,14 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       stub_request(:get, "https://logs.google.com:777/es//_xpack").
         with(basic_auth: ['john', 'doe']).
         to_return(:status => 200, :body => '{"features":{"ilm":{"available":true,"enabled":true}}}', :headers => {"Content-Type"=> "application/json"})
-      stub_request(:get, "https://logs.google.com:777/es//_ilm/policy/fluentd-policy").
+      stub_request(:get, "https://logs.google.com:777/es//#{ilm_endpoint}/policy/fluentd-policy").
         with(basic_auth: ['john', 'doe']).
         to_return(:status => 404, :body => "", :headers => {})
-      stub_request(:put, "https://logs.google.com:777/es//_ilm/policy/fluentd-policy").
+      stub_request(:put, "https://logs.google.com:777/es//#{ilm_endpoint}/policy/fluentd-policy").
         with(basic_auth: ['john', 'doe'],
              :body => "{\"policy\":{\"phases\":{\"hot\":{\"actions\":{\"rollover\":{\"max_size\":\"70gb\",\"max_age\":\"30d\"}}}}}}").
         to_return(:status => 200, :body => "", :headers => {})
+      stub_elastic_info("https://logs.google.com:777/es//")
 
       driver(config)
 
@@ -1599,7 +1745,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
          "new_template"    => [false, "_index_template"])
     def test_template_create_with_rollover_index_and_ilm_policies_and_placeholderstest_template_create_with_rollover_index_and_ilm_policies_and_placeholders(data)
       use_legacy_template_flag, endpoint = data
-      if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+      if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
         omit "elastisearch-ruby v7.8.0 or later is needed."
       end
       cwd = File.dirname(__FILE__)
@@ -1666,13 +1812,14 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       stub_request(:get, "https://logs.google.com:777/es//_xpack").
         with(basic_auth: ['john', 'doe']).
         to_return(:status => 200, :body => '{"features":{"ilm":{"available":true,"enabled":true}}}', :headers => {"Content-Type"=> "application/json"})
-      stub_request(:get, "https://logs.google.com:777/es//_ilm/policy/fluentd-policy").
+      stub_request(:get, "https://logs.google.com:777/es//#{ilm_endpoint}/policy/fluentd-policy").
         with(basic_auth: ['john', 'doe']).
         to_return(:status => 404, :body => "", :headers => {})
-      stub_request(:put, "https://logs.google.com:777/es//_ilm/policy/fluentd-policy").
+      stub_request(:put, "https://logs.google.com:777/es//#{ilm_endpoint}/policy/fluentd-policy").
         with(basic_auth: ['john', 'doe'],
              :body => "{\"policy\":{\"phases\":{\"hot\":{\"actions\":{\"rollover\":{\"max_size\":\"70gb\",\"max_age\":\"30d\"}}}}}}").
         to_return(:status => 200, :body => "", :headers => {})
+      stub_elastic_info("https://logs.google.com:777/es//")
 
       driver(config)
 
@@ -1690,7 +1837,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
            "new_template"    => [false, "_index_template"])
       def test_tag_placeholder(data)
         use_legacy_template_flag, endpoint = data
-        if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+        if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
           omit "elastisearch-ruby v7.8.0 or later is needed."
         end
         cwd = File.dirname(__FILE__)
@@ -1757,13 +1904,14 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
         stub_request(:get, "https://logs.google.com:777/es//_xpack").
           with(basic_auth: ['john', 'doe']).
           to_return(:status => 200, :body => '{"features":{"ilm":{"available":true,"enabled":true}}}', :headers => {"Content-Type"=> "application/json"})
-        stub_request(:get, "https://logs.google.com:777/es//_ilm/policy/fluentd-policy").
+        stub_request(:get, "https://logs.google.com:777/es//#{ilm_endpoint}/policy/fluentd-policy").
           with(basic_auth: ['john', 'doe']).
           to_return(:status => 404, :body => "", :headers => {})
-        stub_request(:put, "https://logs.google.com:777/es//_ilm/policy/fluentd-policy").
+        stub_request(:put, "https://logs.google.com:777/es//#{ilm_endpoint}/policy/fluentd-policy").
           with(basic_auth: ['john', 'doe'],
                body: "{\"policy\":{\"phases\":{\"hot\":{\"actions\":{\"rollover\":{\"max_size\":\"70gb\",\"max_age\":\"30d\"}}}}}}").
           to_return(:status => 200, :body => "", :headers => {})
+        stub_elastic_info("https://logs.google.com:777/es//")
 
         driver(config)
 
@@ -1780,7 +1928,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
            "new_template"    => [false, "_index_template"])
       def test_tag_placeholder_with_multiple_policies(data)
         use_legacy_template_flag, endpoint = data
-        if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+        if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
           omit "elastisearch-ruby v7.8.0 or later is needed."
         end
         cwd = File.dirname(__FILE__)
@@ -1847,13 +1995,14 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
         stub_request(:get, "https://logs.google.com:777/es//_xpack").
           with(basic_auth: ['john', 'doe']).
           to_return(:status => 200, :body => '{"features":{"ilm":{"available":true,"enabled":true}}}', :headers => {"Content-Type"=> "application/json"})
-        stub_request(:get, "https://logs.google.com:777/es//_ilm/policy/fluentd-policy2").
+        stub_request(:get, "https://logs.google.com:777/es//#{ilm_endpoint}/policy/fluentd-policy2").
           with(basic_auth: ['john', 'doe']).
           to_return(:status => 404, :body => "", :headers => {})
-        stub_request(:put, "https://logs.google.com:777/es//_ilm/policy/fluentd-policy2").
+        stub_request(:put, "https://logs.google.com:777/es//#{ilm_endpoint}/policy/fluentd-policy2").
           with(basic_auth: ['john', 'doe'],
                body: "{\"policy\":{\"phases\":{\"hot\":{\"actions\":{\"rollover\":{\"max_size\":\"80gb\",\"max_age\":\"20d\"}}}}}}").
           to_return(:status => 200, :body => "", :headers => {})
+        stub_elastic_info("https://logs.google.com:777/es//")
 
         driver(config)
 
@@ -1871,7 +2020,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
          "new_template"    => [false, "_index_template"])
     def test_template_create_with_rollover_index_and_default_ilm_and_placeholders(data)
       use_legacy_template_flag, endpoint = data
-      if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+      if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
         omit "elastisearch-ruby v7.8.0 or later is needed."
       end
       cwd = File.dirname(__FILE__)
@@ -1937,10 +2086,10 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       stub_request(:get, "https://logs.google.com:777/es//_xpack").
         with(basic_auth: ['john', 'doe']).
         to_return(:status => 200, :body => '{"features":{"ilm":{"available":true,"enabled":true}}}', :headers => {"Content-Type"=> "application/json"})
-      stub_request(:get, "https://logs.google.com:777/es//_ilm/policy/logstash-policy").
+      stub_request(:get, "https://logs.google.com:777/es//#{ilm_endpoint}/policy/logstash-policy").
         with(basic_auth: ['john', 'doe']).
         to_return(:status => 404, :body => "", :headers => {})
-      stub_request(:put, "https://logs.google.com:777/es//_ilm/policy/logstash-policy").
+      stub_request(:put, "https://logs.google.com:777/es//#{ilm_endpoint}/policy/logstash-policy").
         with(basic_auth: ['john', 'doe'],
              :body => "{\"policy\":{\"phases\":{\"hot\":{\"actions\":{\"rollover\":{\"max_size\":\"50gb\",\"max_age\":\"30d\"}}}}}}").
         to_return(:status => 200, :body => "", :headers => {})
@@ -1972,13 +2121,14 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       stub_request(:get, "https://logs.google.com:777/es//_xpack").
         with(basic_auth: ['john', 'doe']).
         to_return(:status => 200, :body => '{"features":{"ilm":{"available":true,"enabled":true}}}', :headers => {"Content-Type"=> "application/json"})
-      stub_request(:get, "https://logs.google.com:777/es//_ilm/policy/logstash-policy").
+      stub_request(:get, "https://logs.google.com:777/es//#{ilm_endpoint}/policy/logstash-policy").
         with(basic_auth: ['john', 'doe']).
         to_return(:status => 404, :body => "", :headers => {})
-      stub_request(:put, "https://logs.google.com:777/es//_ilm/policy/logstash-policy").
+      stub_request(:put, "https://logs.google.com:777/es//#{ilm_endpoint}/policy/logstash-policy").
         with(basic_auth: ['john', 'doe'],
              :body => "{\"policy\":{\"phases\":{\"hot\":{\"actions\":{\"rollover\":{\"max_size\":\"50gb\",\"max_age\":\"30d\"}}}}}}").
         to_return(:status => 200, :body => "", :headers => {})
+      stub_elastic_info("https://logs.google.com:777/es//")
 
       driver(config)
 
@@ -2001,7 +2151,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
          "new_template"    => [false, "_index_template"])
     def test_template_create_with_rollover_index_and_default_ilm_and_placeholders_and_index_separator(data)
       use_legacy_template_flag, endpoint = data
-      if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+      if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
         omit "elastisearch-ruby v7.8.0 or later is needed."
       end
       cwd = File.dirname(__FILE__)
@@ -2068,13 +2218,14 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       stub_request(:get, "https://logs.google.com:777/es//_xpack").
         with(basic_auth: ['john', 'doe']).
         to_return(:status => 200, :body => '{"features":{"ilm":{"available":true,"enabled":true}}}', :headers => {"Content-Type"=> "application/json"})
-      stub_request(:get, "https://logs.google.com:777/es//_ilm/policy/logstash-policy").
+      stub_request(:get, "https://logs.google.com:777/es//#{ilm_endpoint}/policy/logstash-policy").
         with(basic_auth: ['john', 'doe']).
         to_return(:status => 404, :body => "", :headers => {})
-      stub_request(:put, "https://logs.google.com:777/es//_ilm/policy/logstash-policy").
+      stub_request(:put, "https://logs.google.com:777/es//#{ilm_endpoint}/policy/logstash-policy").
         with(basic_auth: ['john', 'doe'],
              :body => "{\"policy\":{\"phases\":{\"hot\":{\"actions\":{\"rollover\":{\"max_size\":\"50gb\",\"max_age\":\"30d\"}}}}}}").
         to_return(:status => 200, :body => "", :headers => {})
+      stub_elastic_info("https://logs.google.com:777/es//")
 
       driver(config)
 
@@ -2093,7 +2244,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
          "new_template"    => [false, "_index_template"])
     def test_template_create_with_rollover_index_and_default_ilm_and_custom_and_time_placeholders(data)
       use_legacy_template_flag, endpoint = data
-      if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+      if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
         omit "elastisearch-ruby v7.8.0 or later is needed."
       end
       cwd = File.dirname(__FILE__)
@@ -2164,13 +2315,14 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       stub_request(:get, "https://logs.google.com:777/es//_xpack").
         with(basic_auth: ['john', 'doe']).
         to_return(:status => 200, :body => '{"features":{"ilm":{"available":true,"enabled":true}}}', :headers => {"Content-Type"=> "application/json"})
-      stub_request(:get, "https://logs.google.com:777/es//_ilm/policy/logstash-policy").
+      stub_request(:get, "https://logs.google.com:777/es//#{ilm_endpoint}/policy/logstash-policy").
         with(basic_auth: ['john', 'doe']).
         to_return(:status => 404, :body => "", :headers => {})
-      stub_request(:put, "https://logs.google.com:777/es//_ilm/policy/logstash-policy").
+      stub_request(:put, "https://logs.google.com:777/es//#{ilm_endpoint}/policy/logstash-policy").
         with(basic_auth: ['john', 'doe'],
              :body => "{\"policy\":{\"phases\":{\"hot\":{\"actions\":{\"rollover\":{\"max_size\":\"50gb\",\"max_age\":\"30d\"}}}}}}").
         to_return(:status => 200, :body => "", :headers => {})
+      stub_elastic_info("https://logs.google.com:777/es//")
 
       driver(config)
 
@@ -2191,7 +2343,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   def test_custom_template_create(data)
     use_legacy_template_flag, endpoint = data
 
-    if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+    if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
       omit "elastisearch-ruby v7.8.0 or later is needed."
     end
     cwd = File.dirname(__FILE__)
@@ -2226,6 +2378,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     stub_request(:put, "https://logs.google.com:777/es//#{endpoint}/myapp_alias_template").
       with(basic_auth: ['john', 'doe']).
       to_return(:status => 200, :body => "", :headers => {})
+    stub_elastic_info("https://logs.google.com:777/es//")
 
     driver(config)
 
@@ -2236,7 +2389,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
        "new_template"    => [false, "_index_template"])
   def test_custom_template_create_with_customize_template_related_placeholders(data)
     use_legacy_template_flag, endpoint = data
-    if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+    if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
       omit "elastisearch-ruby v7.8.0 or later is needed."
     end
     cwd = File.dirname(__FILE__)
@@ -2278,6 +2431,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     driver(config)
 
     stub_elastic("https://logs.google.com:777/es//_bulk")
+    stub_elastic_info("https://logs.google.com:777/es//")
     driver.run(default_tag: 'test.template') do
       driver.feed(sample_record)
     end
@@ -2289,7 +2443,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
        "new_template"    => [false, "_index_template"])
   def test_custom_template_installation_for_host_placeholder(data)
     use_legacy_template_flag, endpoint = data
-    if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+    if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
       omit "elastisearch-ruby v7.8.0 or later is needed."
     end
     cwd = File.dirname(__FILE__)
@@ -2329,6 +2483,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     driver(config)
 
     stub_elastic("https://logs-test.google.com:777/es//_bulk")
+    stub_elastic_info("https://logs-test.google.com:777/es//")
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
@@ -2338,7 +2493,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
        "new_template"    => [false, "_index_template"])
   def test_custom_template_with_rollover_index_create(data)
     use_legacy_template_flag, endpoint = data
-    if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+    if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
       omit "elastisearch-ruby v7.8.0 or later is needed."
     end
     cwd = File.dirname(__FILE__)
@@ -2389,6 +2544,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     stub_request(:put, "https://logs.google.com:777/es//%3Cmylogs-myapp-%7Bnow%2Fw%7Bxxxx.ww%7D%7D-000001%3E/#{alias_endpoint}/mylogs").
       with(basic_auth: ['john', 'doe']).
       to_return(:status => 200, :body => "", :headers => {})
+    stub_elastic_info("https://logs.google.com:777/es//")
 
     driver(config)
 
@@ -2399,7 +2555,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
        "new_template"    => [false, "_index_template"])
   def test_custom_template_with_rollover_index_create_and_deflector_alias(data)
     use_legacy_template_flag, endpoint = data
-    if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+    if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
       omit "elastisearch-ruby v7.8.0 or later is needed."
     end
     cwd = File.dirname(__FILE__)
@@ -2451,6 +2607,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     stub_request(:put, "https://logs.google.com:777/es//%3Cmylogs-myapp-%7Bnow%2Fw%7Bxxxx.ww%7D%7D-000001%3E/#{alias_endpoint}/myapp_deflector").
       with(basic_auth: ['john', 'doe']).
       to_return(:status => 200, :body => "", :headers => {})
+    stub_elastic_info("https://logs.google.com:777/es//")
 
     driver(config)
 
@@ -2461,7 +2618,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
        "new_template"    => [false, "_index_template"])
   def test_custom_template_with_rollover_index_create_with_logstash_format(data)
     use_legacy_template_flag, endpoint = data
-    if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+    if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
       omit "elastisearch-ruby v7.8.0 or later is needed."
     end
     cwd = File.dirname(__FILE__)
@@ -2519,6 +2676,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     driver(config)
 
     elastic_request = stub_elastic("https://logs.google.com:777/es//_bulk")
+    stub_elastic_info("https://logs.google.com:777/es//")
     driver.run(default_tag: 'custom-test') do
       driver.feed(sample_record)
     end
@@ -2527,13 +2685,24 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
 
   class CustomTemplateIndexLifecycleManagementTest < self
     def setup
-      begin
-        require "elasticsearch/xpack"
-      rescue LoadError
-        omit "ILM testcase needs elasticsearch-xpack gem."
+      if Gem::Version.new(TRANSPORT_CLASS::VERSION) < Gem::Version.new("8.0.0")
+        begin
+          require "elasticsearch/xpack"
+        rescue LoadError
+          omit "ILM testcase needs elasticsearch-xpack gem."
+        end
       end
-      if Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.4.0")
+      if Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.4.0")
         omit "elastisearch-ruby v7.4.0 or later is needed."
+      end
+    end
+
+
+    def ilm_endpoint
+      if Gem::Version.new(TRANSPORT_CLASS::VERSION) >= Gem::Version.new("8.0.0")
+        '_enrich'.freeze
+      else
+        '_ilm'.freeze
       end
     end
 
@@ -2541,7 +2710,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
          "new_template"    => [false, "_index_template"])
     def test_custom_template_with_rollover_index_create_and_default_ilm(data)
       use_legacy_template_flag, endpoint = data
-      if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+      if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
         omit "elastisearch-ruby v7.8.0 or later is needed."
       end
       cwd = File.dirname(__FILE__)
@@ -2611,14 +2780,14 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       stub_request(:get, "https://logs.google.com:777/es//_xpack").
         with(basic_auth: ['john', 'doe']).
         to_return(:status => 200, :body => '{"features":{"ilm":{"available":true,"enabled":true}}}', :headers => {"Content-Type"=> "application/json"})
-      stub_request(:get, "https://logs.google.com:777/es//_ilm/policy/fluentd-policy").
+      stub_request(:get, "https://logs.google.com:777/es//#{ilm_endpoint}/policy/fluentd-policy").
         with(basic_auth: ['john', 'doe']).
         to_return(:status => 404, :body => "", :headers => {})
-      stub_request(:put, "https://logs.google.com:777/es//_ilm/policy/fluentd-policy").
+      stub_request(:put, "https://logs.google.com:777/es//#{ilm_endpoint}/policy/fluentd-policy").
         with(basic_auth: ['john', 'doe'],
              :body => "{\"policy\":{\"phases\":{\"hot\":{\"actions\":{\"rollover\":{\"max_size\":\"50gb\",\"max_age\":\"30d\"}}}}}}").
         to_return(:status => 200, :body => "", :headers => {})
-
+      stub_elastic_info("https://logs.google.com:777/es//")
       driver(config)
 
       assert_requested(:put, "https://logs.google.com:777/es//#{endpoint}/mylogs", times: 1)
@@ -2628,7 +2797,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
          "new_template"    => [false, "_index_template"])
     def test_custom_template_with_rollover_index_create_and_default_ilm_and_ilm_policy_overwrite(data)
       use_legacy_template_flag, endpoint = data
-      if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+      if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
         omit "elastisearch-ruby v7.8.0 or later is needed."
       end
       cwd = File.dirname(__FILE__)
@@ -2700,13 +2869,14 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       stub_request(:get, "https://logs.google.com:777/es//_xpack").
         with(basic_auth: ['john', 'doe']).
         to_return(:status => 200, :body => '{"features":{"ilm":{"available":true,"enabled":true}}}', :headers => {"Content-Type"=> "application/json"})
-      stub_request(:get, "https://logs.google.com:777/es//_ilm/policy/fluentd-policy").
+      stub_request(:get, "https://logs.google.com:777/es//#{ilm_endpoint}/policy/fluentd-policy").
         with(basic_auth: ['john', 'doe']).
         to_return(:status => 200, :body => "", :headers => {})
-      stub_request(:put, "https://logs.google.com:777/es//_ilm/policy/fluentd-policy").
+      stub_request(:put, "https://logs.google.com:777/es//#{ilm_endpoint}/policy/fluentd-policy").
         with(basic_auth: ['john', 'doe'],
              :body => "{\"policy\":{\"phases\":{\"hot\":{\"actions\":{\"rollover\":{\"max_size\":\"60gb\",\"max_age\":\"45d\"}}}}}}").
         to_return(:status => 200, :body => "", :headers => {})
+      stub_elastic_info("https://logs.google.com:777/es//")
 
       driver(config)
 
@@ -2736,6 +2906,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       }
 
       # Should raise error because multiple alias indices IllegalArgument Error on executing ILM feature
+      stub_elastic_info("https://logs.google.com:777/es//")
       assert_raise(Fluent::ConfigError) do
         driver(config)
       end
@@ -2745,7 +2916,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
          "new_template"    => [false, "_index_template"])
     def test_custom_template_with_rollover_index_create_and_default_ilm_and_placeholders(data)
       use_legacy_template_flag, endpoint = data
-      if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+      if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
         omit "elastisearch-ruby v7.8.0 or later is needed."
       end
       cwd = File.dirname(__FILE__)
@@ -2817,10 +2988,10 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       stub_request(:get, "https://logs.google.com:777/es//_xpack").
         with(basic_auth: ['john', 'doe']).
         to_return(:status => 200, :body => '{"features":{"ilm":{"available":true,"enabled":true}}}', :headers => {"Content-Type"=> "application/json"})
-      stub_request(:get, "https://logs.google.com:777/es//_ilm/policy/fluentd-policy").
+      stub_request(:get, "https://logs.google.com:777/es//#{ilm_endpoint}/policy/fluentd-policy").
         with(basic_auth: ['john', 'doe']).
         to_return(:status => 404, :body => "", :headers => {})
-      stub_request(:put, "https://logs.google.com:777/es//_ilm/policy/fluentd-policy").
+      stub_request(:put, "https://logs.google.com:777/es//#{ilm_endpoint}/policy/fluentd-policy").
         with(basic_auth: ['john', 'doe'],
              :body => "{\"policy\":{\"phases\":{\"hot\":{\"actions\":{\"rollover\":{\"max_size\":\"50gb\",\"max_age\":\"30d\"}}}}}}").
         to_return(:status => 200, :body => "", :headers => {})
@@ -2864,13 +3035,14 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       stub_request(:get, "https://logs.google.com:777/es//_xpack").
         with(basic_auth: ['john', 'doe']).
         to_return(:status => 200, :body => '{"features":{"ilm":{"available":true,"enabled":true}}}', :headers => {"Content-Type"=> "application/json"})
-      stub_request(:get, "https://logs.google.com:777/es//_ilm/policy/fluentd-policy").
+      stub_request(:get, "https://logs.google.com:777/es//#{ilm_endpoint}/policy/fluentd-policy").
         with(basic_auth: ['john', 'doe']).
         to_return(:status => 404, :body => "", :headers => {})
-      stub_request(:put, "https://logs.google.com:777/es//_ilm/policy/fluentd-policy").
+      stub_request(:put, "https://logs.google.com:777/es//#{ilm_endpoint}/policy/fluentd-policy").
         with(basic_auth: ['john', 'doe'],
              :body => "{\"policy\":{\"phases\":{\"hot\":{\"actions\":{\"rollover\":{\"max_size\":\"50gb\",\"max_age\":\"30d\"}}}}}}").
         to_return(:status => 200, :body => "", :headers => {})
+      stub_elastic_info("https://logs.google.com:777/es//")
 
       driver(config)
 
@@ -2891,7 +3063,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
          "new_template"    => [false, "_index_template"])
     def test_custom_template_with_rollover_index_create_and_custom_ilm(data)
       use_legacy_template_flag, endpoint = data
-      if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+      if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
         omit "elastisearch-ruby v7.8.0 or later is needed."
       end
       cwd = File.dirname(__FILE__)
@@ -2954,14 +3126,14 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       stub_request(:get, "https://logs.google.com:777/es//_xpack").
         with(basic_auth: ['john', 'doe']).
         to_return(:status => 200, :body => '{"features":{"ilm":{"available":true,"enabled":true}}}', :headers => {"Content-Type"=> "application/json"})
-      stub_request(:get, "https://logs.google.com:777/es//_ilm/policy/fluentd-policy").
+      stub_request(:get, "https://logs.google.com:777/es//#{ilm_endpoint}/policy/fluentd-policy").
         with(basic_auth: ['john', 'doe']).
         to_return(:status => 404, :body => "", :headers => {})
-      stub_request(:put, "https://logs.google.com:777/es//_ilm/policy/fluentd-policy").
+      stub_request(:put, "https://logs.google.com:777/es//#{ilm_endpoint}/policy/fluentd-policy").
         with(basic_auth: ['john', 'doe'],
              :body => "{\"policy\":{\"phases\":{\"hot\":{\"actions\":{\"rollover\":{\"max_size\":\"70gb\",\"max_age\":\"30d\"}}}}}}").
         to_return(:status => 200, :body => "", :headers => {})
-
+      stub_elastic_info("https://logs.google.com:777/es//")
       driver(config)
 
       assert_requested(:put, "https://logs.google.com:777/es//#{endpoint}/mylogs", times: 1)
@@ -2972,7 +3144,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
        "new_template"    => [false, "_index_template"])
   def test_template_overwrite(data)
     use_legacy_template_flag, endpoint = data
-    if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+    if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
       omit "elastisearch-ruby v7.8.0 or later is needed."
     end
     cwd = File.dirname(__FILE__)
@@ -3007,6 +3179,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     stub_request(:put, "https://logs.google.com:777/es//#{endpoint}/logstash").
       with(basic_auth: ['john', 'doe']).
       to_return(:status => 200, :body => "", :headers => {})
+    stub_elastic_info("https://logs.google.com:777/es//")
 
     driver(config)
 
@@ -3017,7 +3190,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
        "new_template"    => [false, "_index_template"])
   def test_custom_template_overwrite(data)
     use_legacy_template_flag, endpoint = data
-    if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+    if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
       omit "elastisearch-ruby v7.8.0 or later is needed."
     end
     cwd = File.dirname(__FILE__)
@@ -3053,6 +3226,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     stub_request(:put, "https://logs.google.com:777/es//#{endpoint}/myapp_alias_template").
       with(basic_auth: ['john', 'doe']).
       to_return(:status => 200, :body => "", :headers => {})
+    stub_elastic_info("https://logs.google.com:777/es//")
 
     driver(config)
 
@@ -3063,7 +3237,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
        "new_template"    => [false, "_index_template"])
   def test_custom_template_with_rollover_index_overwrite(data)
     use_legacy_template_flag, endpoint = data
-    if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+    if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
       omit "elastisearch-ruby v7.8.0 or later is needed."
     end
     cwd = File.dirname(__FILE__)
@@ -3115,6 +3289,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     stub_request(:put, "https://logs.google.com:777/es//%3Cmylogs-myapp-%7Bnow%2Fd%7D-000001%3E/#{alias_endpoint}/myapp_deflector").
       with(basic_auth: ['john', 'doe']).
       to_return(:status => 200, :body => "", :headers => {})
+    stub_elastic_info("https://logs.google.com:777/es//")
 
     driver(config)
 
@@ -3141,7 +3316,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     stub_request(:get, "https://logs.google.com:777/es//_template/logstash").
       with(basic_auth: ['john', 'doe']).
       to_return(:status => 404, :body => "", :headers => {})
-
+    stub_elastic_info("https://logs.google.com:777/es//")
 
     assert_raise(RuntimeError) {
       driver(config)
@@ -3152,7 +3327,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
        "new_template"    => [false, "_index_template"])
   def test_template_create_for_host_placeholder(data)
     use_legacy_template_flag, endpoint = data
-    if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+    if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
       omit "elastisearch-ruby v7.8.0 or later is needed."
     end
     cwd = File.dirname(__FILE__)
@@ -3193,7 +3368,8 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
 
     driver(config)
 
-    stub_elastic("https://logs.google.com:777/es//_bulk")
+    stub_elastic("https://logs-test.google.com:777/es//_bulk")
+    stub_elastic_info("https://logs-test.google.com:777/es//")
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
@@ -3203,7 +3379,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
        "new_template"    => [false, "_index_template"])
   def test_template_retry_install_fails(data)
     use_legacy_template_flag, endpoint = data
-    if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+    if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
       omit "elastisearch-ruby v7.8.0 or later is needed."
     end
     cwd = File.dirname(__FILE__)
@@ -3233,6 +3409,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       connection_resets += 1
       raise Faraday::ConnectionFailed, "Test message"
     end
+    stub_elastic_info("https://logs.google.com:778/es//")
 
     assert_raise(Fluent::Plugin::ElasticsearchError::RetryableOperationExhaustedFailure) do
       driver(config)
@@ -3241,13 +3418,13 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     assert_equal(4, connection_resets)
   end
 
-  transport_errors_handled_separately = [Elasticsearch::Transport::Transport::Errors::NotFound]
-  transport_errors = Elasticsearch::Transport::Transport::Errors.constants.map { |err| [err, Elasticsearch::Transport::Transport::Errors.const_get(err)]  }
+  transport_errors_handled_separately = [TRANSPORT_CLASS::Transport::Errors::NotFound]
+  transport_errors = TRANSPORT_CLASS::Transport::Errors.constants.map { |err| [err, TRANSPORT_CLASS::Transport::Errors.const_get(err)]  }
   transport_errors_hash = Hash[transport_errors.select { |err| !transport_errors_handled_separately.include?(err[1]) } ]
 
   data(transport_errors_hash)
   def test_template_retry_transport_errors(error)
-    endpoint, use_legacy_template_flag = if Gem::Version.create(::Elasticsearch::Transport::VERSION) >= Gem::Version.create("7.8.0")
+    endpoint, use_legacy_template_flag = if Gem::Version.create(::TRANSPORT_CLASS::VERSION) >= Gem::Version.create("7.8.0")
                  ["_index_template".freeze, false]
                else
                  ["_template".freeze, true]
@@ -3274,6 +3451,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       retries += 1
       raise error
     end
+    stub_elastic_info("https://logs.google.com:778/es//")
 
     assert_raise(Fluent::Plugin::ElasticsearchError::RetryableOperationExhaustedFailure) do
       driver(config)
@@ -3286,7 +3464,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
        "new_template"    => [false, "_index_template"])
   def test_template_retry_install_does_not_fail(data)
     use_legacy_template_flag, endpoint = data
-    if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+    if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
       omit "elastisearch-ruby v7.8.0 or later is needed."
     end
     cwd = File.dirname(__FILE__)
@@ -3317,6 +3495,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       connection_resets += 1
       raise Faraday::ConnectionFailed, "Test message"
     end
+    stub_elastic_info("https://logs.google.com:778/es//")
 
     driver(config)
 
@@ -3327,7 +3506,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
        "new_template"    => [false, "_index_template"])
   def test_templates_create(data)
     use_legacy_template_flag, endpoint = data
-    if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+    if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
       omit "elastisearch-ruby v7.8.0 or later is needed."
     end
     cwd = File.dirname(__FILE__)
@@ -3372,6 +3551,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     stub_request(:put, "https://logs.google.com:777/es//#{endpoint}/logstash3").
       with(basic_auth: ['john', 'doe']).
       to_return(:status => 200, :body => "", :headers => {})
+    stub_elastic_info("https://logs.google.com:777/es//")
 
     driver(config)
 
@@ -3384,7 +3564,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
        "new_template"    => [false, "_index_template"])
   def test_templates_overwrite(data)
     use_legacy_template_flag, endpoint = data
-    if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+    if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
       omit "elastisearch-ruby v7.8.0 or later is needed."
     end
     cwd = File.dirname(__FILE__)
@@ -3429,6 +3609,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     stub_request(:put, "https://logs.google.com:777/es//#{endpoint}/logstash3").
       with(basic_auth: ['john', 'doe']).
       to_return(:status => 200, :body => "", :headers => {})
+    stub_elastic_info("https://logs.google.com:777/es//")
 
     driver(config)
 
@@ -3441,7 +3622,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
        "new_template"    => [false, "_index_template"])
   def test_templates_are_also_used(data)
     use_legacy_template_flag, endpoint = data
-    if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+    if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
       omit "elastisearch-ruby v7.8.0 or later is needed."
     end
     cwd = File.dirname(__FILE__)
@@ -3487,6 +3668,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     stub_request(:put, "https://logs.google.com:777/es//#{endpoint}/logstash2").
       with(basic_auth: ['john', 'doe']).
       to_return(:status => 200, :body => "", :headers => {})
+    stub_elastic_info("https://logs.google.com:777/es//")
 
     driver(config)
 
@@ -3500,7 +3682,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
        "new_template"    => [false, "_index_template"])
   def test_templates_can_be_partially_created_if_error_occurs(data)
     use_legacy_template_flag, endpoint = data
-    if !use_legacy_template_flag && Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.8.0")
+    if !use_legacy_template_flag && Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.8.0")
       omit "elastisearch-ruby v7.8.0 or later is needed."
     end
     cwd = File.dirname(__FILE__)
@@ -3537,6 +3719,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     stub_request(:put, "https://logs.google.com:777/es//#{endpoint}/logstash2").
       with(basic_auth: ['john', 'doe']).
       to_return(:status => 200, :body => "", :headers => {})
+    stub_elastic_info("https://logs.google.com:777/es//")
 
     assert_raise(RuntimeError) {
       driver(config)
@@ -3553,6 +3736,9 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       path     /es/
       port     123
     }
+    stub_elastic_info("https://host1:50")
+    stub_elastic_info("https://host2:100")
+    stub_elastic_info("https://host3:123")
     instance = driver(config).instance
 
     assert_equal 3, instance.get_connection_options[:hosts].length
@@ -3575,6 +3761,8 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       user     default_user
       password default_password
     }
+    stub_elastic_info("https://john:password@host1:443/elastic/")
+    stub_elastic_info("http://host2")
     instance = driver(config).instance
 
     assert_equal 2, instance.get_connection_options[:hosts].length
@@ -3601,6 +3789,9 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       user     default_user
       password default_password
     }
+    stub_elastic_info("https://j%2Bhn:passw%40rd@host1:443/elastic/")
+    stub_elastic_info("http://host2")
+
     instance = driver(config).instance
 
     assert_equal 2, instance.get_connection_options[:hosts].length
@@ -3801,6 +3992,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       elastic_request = stub_request(:post, "http://localhost:9200/_bulk").
                           with(headers: { "Content-Type" => "application/json" })
     end
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
@@ -3812,6 +4004,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       to_return(:status => 200, :body => "", :headers => {})
     elastic_request = stub_request(:post, "http://localhost:9200/_bulk").
                         with(headers: {'custom' => 'header1','and_others' => 'header2' })
+    stub_elastic_info
     driver.configure(%[custom_headers {"custom":"header1", "and_others":"header2"}])
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
@@ -3824,6 +4017,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       to_return(:status => 200, :body => "", :headers => {})
     elastic_request = stub_request(:post, "http://localhost:9200/_bulk").
                         with(headers: {'Authorization'=>'ApiKey dGVzdGF1dGhoZWFkZXI='})
+    stub_elastic_info
     driver.configure(%[api_key testauthheader])
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
@@ -3834,6 +4028,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   def test_write_message_with_bad_chunk
     driver.configure("target_index_key bad_value\n@log_level debug\n")
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed({'bad_value'=>"\255"})
     end
@@ -3849,6 +4044,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   def test_writes_to_default_index(data)
     version, index_name = data
     stub_elastic
+    stub_elastic_info
     driver("", version)
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
@@ -3867,7 +4063,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
 
 
   def test_writes_to_default_index_with_compression
-    omit "elastisearch-ruby v7.2.0 or later is needed." if Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.2.0")
+    omit "elastisearch-ruby v7.2.0 or later is needed." if Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.2.0")
 
     config = %[
       compression_level default_compression
@@ -3890,6 +4086,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
 
     elastic_request = stub_request(:post, "http://localhost:9200/_bulk").
         to_return(:status => 200, :headers => {'Content-Type' => 'Application/json'}, :body => compressed_body)
+    stub_elastic_info("http://localhost:9200/")
 
     driver(config)
     driver.run(default_tag: 'test') do
@@ -3906,6 +4103,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   def test_writes_to_default_type(data)
     version, index_type = data
     stub_elastic
+    stub_elastic_info
     driver("", version)
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
@@ -3916,6 +4114,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   def test_writes_to_speficied_index
     driver.configure("index_name myindex\n")
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
@@ -3935,6 +4134,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
                        ]
                      ))
     request = stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record('huge_record' => ("a" * 20 * 1024 * 1024)))
       driver.feed(sample_record('huge_record' => ("a" * 20 * 1024 * 1024)))
@@ -3954,11 +4154,19 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
                                                      }, [])
                        ]
                      ))
+    index_part = if Gem::Version.new(TRANSPORT_CLASS::VERSION) >= Gem::Version.new("8.0.0")
+                   '{"index":{"_index":"fluentd"}}'
+                 elsif Gem::Version.new(TRANSPORT_CLASS::VERSION) >= Gem::Version.new("7.0.0")
+                   '{"index":{"_index":"fluentd","_type":"_doc"}}'
+                 else
+                   '{"index":{"_index":"fluentd","_type":"fluentd"}}'
+                 end
     stub_request(:post, "http://localhost:9200/_bulk").
       with(
-        body: /{"index":{"_index":"fluentd","_type":"fluentd"}}\n{"age":26,"request_id":"42","parent_id":"parent","routing_id":"routing","#{chunk_id_key}":".*"}\n/) do |req|
+        body: /#{index_part}\n{"age":26,"request_id":"42","parent_id":"parent","routing_id":"routing","#{chunk_id_key}":".*"}\n/) do |req|
       @index_cmds = req.body.split("\n").map {|r| JSON.parse(r) }
     end
+    stub_elastic_info
     driver.run(default_tag: 'test', shutdown: false) do
       driver.feed(sample_record)
     end
@@ -3988,6 +4196,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
                        ]
                      ))
     request = stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record('huge_record' => ("a" * 20 * 1024 * 1024)))
       driver.feed(sample_record('huge_record' => ("a" * 20 * 1024 * 1024)))
@@ -4000,6 +4209,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     def test_writes_to_speficied_index_with_tag_placeholder
       driver.configure("index_name myindex.${tag}\n")
       stub_elastic
+      stub_elastic_info
       driver.run(default_tag: 'test') do
         driver.feed(sample_record)
       end
@@ -4019,6 +4229,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
                          ]
                        ))
       stub_elastic
+      stub_elastic_info
       time = Time.parse Date.today.iso8601
       driver.run(default_tag: 'test') do
         driver.feed(time.to_i, sample_record)
@@ -4039,6 +4250,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       pipeline_id = "mypipeline"
       logstash_index = "myindex.#{pipeline_id}"
       stub_elastic
+      stub_elastic_info
       driver.run(default_tag: 'test') do
         driver.feed(time.to_i, sample_record.merge({"pipeline_id" => pipeline_id}))
       end
@@ -4049,6 +4261,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   def test_writes_to_speficied_index_uppercase
     driver.configure("index_name MyIndex\n")
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
@@ -4060,6 +4273,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   def test_writes_to_target_index_key
     driver.configure("target_index_key @target_index\n")
     stub_elastic
+    stub_elastic_info
     record = sample_record.clone
     driver.run(default_tag: 'test') do
       driver.feed(sample_record.merge('@target_index' => 'local-override'))
@@ -4073,17 +4287,19 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
                       logstash_format true")
     time = Time.parse Date.today.iso8601
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(time.to_i, sample_record.merge('@target_index' => 'local-override'))
     end
     assert_equal('local-override', index_cmds.first['index']['_index'])
   end
 
-   def test_writes_to_target_index_key_logstash_uppercase
+  def test_writes_to_target_index_key_logstash_uppercase
     driver.configure("target_index_key @target_index
                       logstash_format true")
     time = Time.parse Date.today.iso8601
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(time.to_i, sample_record.merge('@target_index' => 'LOCAL-OVERRIDE'))
     end
@@ -4096,6 +4312,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     pipeline = "fluentd"
     driver.configure("pipeline #{pipeline}")
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
@@ -4192,6 +4409,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     ids = [my_id_value]
     indices = ["logstash-2021.04.28"]
     stub_elastic
+    stub_elastic_info
     stub_elastic_affinity_target_index_search(ids, indices)
     driver.run(default_tag: 'test') do
       driver.feed(sample_record('my_id' => my_id_value))
@@ -4209,6 +4427,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     ids = [my_id_value]
     indices = ["logstash-2021.04.28"]
     stub_elastic
+    stub_elastic_info
     stub_elastic_affinity_target_index_search(ids, indices)
     driver.run(default_tag: 'test') do
       driver.feed(sample_record('my_id' => my_id_value))
@@ -4225,6 +4444,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     my_id_value = "3408a2c8eecd4fbfb82e45012b54fa82"
     ids = [my_id_value]
     stub_elastic
+    stub_elastic_info
     stub_elastic_affinity_target_index_search_return_empty(ids)
     time = Time.parse Date.today.iso8601
     driver.run(default_tag: 'test') do
@@ -4243,6 +4463,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     my_id_value2 = "3408a2c8eecd4fbfb82e45012b54fa82"
     ids = [my_id_value, my_id_value2]
     indices = ["logstash-2021.04.29", "logstash-2021.04.28"]
+    stub_elastic_info
     stub_elastic_all_requests
     stub_elastic_affinity_target_index_search(ids, indices)
     driver.run(default_tag: 'test') do
@@ -4268,6 +4489,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     # Simulate the used sorting here, as search sorts indices in DESC order to pick only oldest index per single _id
     indices = ["logstash-2021.04.29", "logstash-2021.04.28"]
 
+    stub_elastic_info
     stub_elastic_all_requests
     stub_elastic_affinity_target_index_search(ids, indices)
     driver.run(default_tag: 'test') do
@@ -4286,6 +4508,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       pipeline = "fluentd-${tag}"
       driver.configure("pipeline #{pipeline}")
       stub_elastic
+      stub_elastic_info
       driver.run(default_tag: 'test.builtin.placeholder') do
         driver.feed(sample_record)
       end
@@ -4307,6 +4530,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       time = Time.parse Date.today.iso8601
       pipeline = "fluentd-#{time.getutc.strftime("%Y%m%d")}"
       stub_elastic
+      stub_elastic_info
       driver.run(default_tag: 'test') do
         driver.feed(time.to_i, sample_record)
       end
@@ -4326,6 +4550,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       pipeline_id = "mypipeline"
       logstash_index = "fluentd-#{pipeline_id}"
       stub_elastic
+      stub_elastic_info
       driver.run(default_tag: 'test') do
         driver.feed(time.to_i, sample_record.merge({"pipeline_id" => pipeline_id}))
       end
@@ -4336,6 +4561,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   def test_writes_to_target_index_key_fallack
     driver.configure("target_index_key @target_index\n")
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
@@ -4348,6 +4574,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     time = Time.parse Date.today.iso8601
     logstash_index = "logstash-#{time.getutc.strftime("%Y.%m.%d")}"
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(time.to_i, sample_record)
     end
@@ -4361,6 +4588,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   def test_writes_to_speficied_type(data)
     driver('', data["es_version"]).configure("type_name mytype\n")
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
@@ -4374,6 +4602,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   def test_writes_to_speficied_type_with_placeholders(data)
     driver('', data["es_version"]).configure("type_name mytype.${tag}\n")
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
@@ -4388,6 +4617,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     driver('', data["es_version"])
       .configure("type_name mytype.${tag}\nsuppress_type_name true")
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
@@ -4402,6 +4632,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   def test_writes_to_target_type_key(data)
     driver('', data["es_version"]).configure("target_type_key @target_type\n")
     stub_elastic
+    stub_elastic_info
     record = sample_record.clone
     driver.run(default_tag: 'test') do
       driver.feed(sample_record.merge('@target_type' => 'local-override'))
@@ -4413,20 +4644,34 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   def test_writes_to_target_type_key_fallack_to_default
     driver.configure("target_type_key @target_type\n")
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
-    assert_equal(default_type_name, index_cmds.first['index']['_type'])
+    if Gem::Version.new(TRANSPORT_CLASS::VERSION) >= Gem::Version.new("8.0.0")
+      assert_nil(index_cmds.first['index']['_type'])
+    elsif Gem::Version.new(TRANSPORT_CLASS::VERSION) >= Gem::Version.new("7.0.0")
+      assert_equal("_doc", index_cmds.first['index']['_type'])
+    else
+      assert_equal("fluentd", index_cmds.first['index']['_type'])
+    end
   end
 
   def test_writes_to_target_type_key_fallack_to_type_name
     driver.configure("target_type_key @target_type
                       type_name mytype")
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
-    assert_equal('mytype', index_cmds.first['index']['_type'])
+    if Gem::Version.new(TRANSPORT_CLASS::VERSION) >= Gem::Version.new("8.0.0")
+      assert_nil(index_cmds.first['index']['_type'])
+    elsif Gem::Version.new(TRANSPORT_CLASS::VERSION) >= Gem::Version.new("7.0.0")
+      assert_equal("_doc", index_cmds.first['index']['_type'])
+    else
+      assert_equal("fluentd", index_cmds.first['index']['_type'])
+    end
   end
 
   data("old"           => {"es_version" => 2, "_type" => "local-override"},
@@ -4437,6 +4682,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   def test_writes_to_target_type_key_nested(data)
     driver('', data["es_version"]).configure("target_type_key kubernetes.labels.log_type\n")
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record.merge('kubernetes' => {
         'labels' => {
@@ -4451,6 +4697,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   def test_writes_to_target_type_key_fallack_to_default_nested
     driver.configure("target_type_key kubernetes.labels.log_type\n")
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record.merge('kubernetes' => {
         'labels' => {
@@ -4458,12 +4705,19 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
         }
       }))
     end
-    assert_equal(default_type_name, index_cmds.first['index']['_type'])
+    if Gem::Version.new(TRANSPORT_CLASS::VERSION) >= Gem::Version.new("8.0.0")
+      assert_nil(index_cmds.first['index']['_type'])
+    elsif Gem::Version.new(TRANSPORT_CLASS::VERSION) >= Gem::Version.new("7.0.0")
+      assert_equal("_doc", index_cmds.first['index']['_type'])
+    else
+      assert_equal("fluentd", index_cmds.first['index']['_type'])
+    end
   end
 
   def test_writes_to_speficied_host
     driver.configure("host 192.168.33.50\n")
     elastic_request = stub_elastic("http://192.168.33.50:9200/_bulk")
+    stub_elastic_info("http://192.168.33.50:9200/")
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
@@ -4473,6 +4727,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   def test_writes_to_speficied_port
     driver.configure("port 9201\n")
     elastic_request = stub_elastic("http://localhost:9201/_bulk")
+    stub_elastic_info("http://localhost:9201")
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
@@ -4488,6 +4743,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     hosts.each do |host_info|
       host, port = host_info
       stub_elastic_with_store_index_command_counts("http://#{host}:#{port}/_bulk")
+      stub_elastic_info("http://#{host}:#{port}/")
     end
 
     driver.run(default_tag: 'test') do
@@ -4524,6 +4780,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     ]}
 
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(original_hash)
     end
@@ -4537,6 +4794,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     expected_output = {"foo" => {"bar" => "baz"}}
 
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(original_hash)
     end
@@ -4545,6 +4803,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
 
   def test_makes_bulk_request
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
       driver.feed(sample_record.merge('age' => 27))
@@ -4552,8 +4811,9 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     assert_equal(4, index_cmds.count)
   end
 
-  def test_all_records_are_preserved_in_bulk
+  def test_all_re
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
       driver.feed(sample_record.merge('age' => 27))
@@ -4569,6 +4829,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     dt = DateTime.new(2015, 6, 1, 0, 0, 1, "+01:00")
     logstash_index = "logstash-2015.05.31"
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(dt.to_time.to_i, sample_record)
     end
@@ -4583,6 +4844,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     time = Date.today.to_time
     index = "logstash-#{time.strftime("%Y.%m.%d")}"
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(time.to_i, sample_record)
     end
@@ -4595,6 +4857,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     time = Time.parse Date.today.iso8601
     logstash_index = "myprefix-#{time.getutc.strftime("%Y.%m.%d")}"
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(time.to_i, sample_record)
     end
@@ -4609,6 +4872,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     time = Time.parse Date.today.iso8601
     logstash_index = "myprefix#{separator}#{time.getutc.strftime("%Y.%m.%d")}"
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(time.to_i, sample_record)
     end
@@ -4622,6 +4886,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       time = Time.parse Date.today.iso8601
       logstash_index = "myprefix-test-#{time.getutc.strftime("%Y.%m.%d")}"
       stub_elastic
+      stub_elastic_info
       driver.run(default_tag: 'test') do
         driver.feed(time.to_i, sample_record)
       end
@@ -4644,6 +4909,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       time = Time.parse Date.today.iso8601
       logstash_index = "myprefix-#{time.getutc.strftime("%H")}-#{time.getutc.strftime("%Y.%m.%d")}"
       stub_elastic
+      stub_elastic_info
       driver.run(default_tag: 'test') do
         driver.feed(time.to_i, sample_record)
       end
@@ -4664,6 +4930,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       pipeline_id = "mypipeline"
       logstash_index = "myprefix-#{pipeline_id}-#{time.getutc.strftime("%Y.%m.%d")}"
       stub_elastic
+      stub_elastic_info
       driver.run(default_tag: 'test') do
         driver.feed(time.to_i, sample_record.merge({"pipeline_id" => pipeline_id}))
       end
@@ -4689,6 +4956,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       time = Time.parse Date.today.iso8601
       logstash_index = "myprefix-#{time.getutc.strftime("%Y.%m.%d")}"
       stub_elastic
+      stub_elastic_info
       driver.run(default_tag: 'test') do
         driver.feed(time.to_i, sample_record.merge('indexformat' => '%Y.%m.%d'))
       end
@@ -4712,6 +4980,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       time = Time.parse Date.today.iso8601
       logstash_index = "myprefix-#{time.getutc.strftime("%Y.%m")}"
       stub_elastic
+      stub_elastic_info
       driver.run(default_tag: 'test') do
         driver.feed(time.to_i, sample_record.merge('indexformat' => '%Y.%m'))
       end
@@ -4724,6 +4993,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       driver.configure("host ${tag}\n")
       time = Time.parse Date.today.iso8601
       elastic_request = stub_elastic("http://extracted-host:9200/_bulk")
+      stub_elastic_info("http://extracted-host:9200/")
       driver.run(default_tag: 'extracted-host') do
         driver.feed(time.to_i, sample_record)
       end
@@ -4740,6 +5010,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
         host, port = host_info
         host = "extracted-host" if host == '${tag}'
         stub_elastic_with_store_index_command_counts("http://#{host}:#{port}/_bulk")
+        stub_elastic_info("http://#{host}:#{port}")
       end
 
       driver.run(default_tag: 'extracted-host') do
@@ -4774,8 +5045,10 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
                          ]
                        ))
       stub_elastic
+      stub_elastic_info
       time = Time.parse Date.today.iso8601
       elastic_request = stub_elastic("http://host-#{time.utc.strftime('%Y%m%d')}:9200/_bulk")
+      stub_elastic_info("http://host-#{time.utc.strftime('%Y%m%d')}:9200/")
       driver.run(default_tag: 'test') do
         driver.feed(time.to_i, sample_record)
       end
@@ -4796,6 +5069,8 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       second_pipeline_id = "2"
       first_request = stub_elastic("http://myhost-1:9200/_bulk")
       second_request = stub_elastic("http://myhost-2:9200/_bulk")
+      stub_elastic_info("http://myhost-1:9200/")
+      stub_elastic_info("http://myhost-2:9200/")
       driver.run(default_tag: 'test') do
         driver.feed(time.to_i, sample_record.merge({"pipeline_id" => first_pipeline_id}))
         driver.feed(time.to_i, sample_record.merge({"pipeline_id" => second_pipeline_id}))
@@ -4816,6 +5091,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       time = Time.parse Date.today.iso8601
       pipeline_id = "1"
       request = stub_elastic_unavailable("http://myhost-1:9200/_bulk")
+      stub_elastic_info("http://myhost-1:9200/")
       exception = assert_raise(Fluent::Plugin::ElasticsearchOutput::RecoverableRequestFailure) {
         driver.run(default_tag: 'test') do
           driver.feed(time.to_i, sample_record.merge({"pipeline_id" => pipeline_id}))
@@ -4831,6 +5107,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     time = Time.parse Date.today.iso8601
     logstash_index = "myprefix-#{time.getutc.strftime("%Y.%m.%d")}"
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(time.to_i, sample_record)
     end
@@ -4845,6 +5122,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     time = Time.parse Date.today.iso8601
     logstash_index = "logstash-#{time.getutc.strftime("%Y.%m")}"
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(time.to_i, sample_record)
     end
@@ -4858,6 +5136,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     time = Time.parse Date.today.iso8601
     logstash_index = "myprefix-#{time.getutc.strftime("%Y.%m")}"
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(time.to_i, sample_record)
     end
@@ -4884,6 +5163,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
 
   def test_doesnt_add_logstash_timestamp_by_default
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
@@ -4893,6 +5173,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   def test_adds_timestamp_when_logstash
     driver.configure("logstash_format true\n")
     stub_elastic
+    stub_elastic_info
     ts = DateTime.now
     time = Fluent::EventTime.from_time(ts.to_time)
     driver.run(default_tag: 'test') do
@@ -4905,6 +5186,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   def test_adds_timestamp_when_include_timestamp
     driver.configure("include_timestamp true\n")
     stub_elastic
+    stub_elastic_info
     ts = DateTime.now
     time = Fluent::EventTime.from_time(ts.to_time)
     driver.run(default_tag: 'test') do
@@ -4917,6 +5199,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   def test_uses_custom_timestamp_when_included_in_record
     driver.configure("logstash_format true\n")
     stub_elastic
+    stub_elastic_info
     ts = DateTime.new(2001,2,3).iso8601
     driver.run(default_tag: 'test') do
       driver.feed(sample_record.merge!('@timestamp' => ts))
@@ -4928,6 +5211,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   def test_uses_custom_timestamp_when_included_in_record_without_logstash
     driver.configure("include_timestamp true\n")
     stub_elastic
+    stub_elastic_info
     ts = DateTime.new(2001,2,3).iso8601
     driver.run(default_tag: 'test') do
       driver.feed(sample_record.merge!('@timestamp' => ts))
@@ -4940,6 +5224,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     driver.configure("logstash_format true
                       time_key vtm\n")
     stub_elastic
+    stub_elastic_info
     ts = DateTime.new(2001,2,3).iso8601(9)
     driver.run(default_tag: 'test') do
       driver.feed(sample_record.merge!('vtm' => ts))
@@ -4953,6 +5238,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
                       time_precision 3
                       time_key vtm\n")
     stub_elastic
+    stub_elastic_info
     time = Time.now
     float_time = time.to_f
     driver.run(default_tag: 'test') do
@@ -4967,6 +5253,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
                       time_key_format %Y-%m-%d %H:%M:%S.%N%z
                       time_key vtm\n")
     stub_elastic
+    stub_elastic_info
     ts = "2001-02-03 13:14:01.673+02:00"
     driver.run(default_tag: 'test') do
       driver.feed(sample_record.merge!('vtm' => ts))
@@ -4981,6 +5268,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
                       time_key_format %Y-%m-%d %H:%M:%S.%N%z
                       time_key vtm\n")
     stub_elastic
+    stub_elastic_info
     ts = "2001-02-03 13:14:01.673+02:00"
     time = Time.parse(ts)
     current_zone_offset = Time.new(2001, 02, 03).to_datetime.offset
@@ -4998,6 +5286,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
                       time_key_format %Y-%m-%d %H:%M:%S.%N%z
                       time_key vtm\n")
     stub_elastic
+    stub_elastic_info
     ts = "2001-02-03 13:14:01.673+02:00"
     driver.run(default_tag: 'test') do
       driver.feed(sample_record.merge!('vtm' => ts))
@@ -5012,6 +5301,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
                       time_key vtm
                       time_key_exclude_timestamp true\n")
     stub_elastic
+    stub_elastic_info
     ts = DateTime.new(2001,2,3).iso8601
     driver.run(default_tag: 'test') do
       driver.feed(sample_record.merge!('vtm' => ts))
@@ -5023,6 +5313,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     driver.configure("logstash_format true
                       time_key_format %Y-%m-%dT%H:%M:%S.%N%z\n")
     stub_elastic
+    stub_elastic_info
     ts = "2001-02-03T13:14:01.673+02:00"
     driver.run(default_tag: 'test') do
       driver.feed(sample_record.merge!('@timestamp' => ts))
@@ -5037,6 +5328,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
                       index_name test
                       time_key_format %Y-%m-%dT%H:%M:%S.%N%z\n")
     stub_elastic
+    stub_elastic_info
     ts = "2001-02-03T13:14:01.673+02:00"
     driver.run(default_tag: 'test') do
       driver.feed(sample_record.merge!('@timestamp' => ts))
@@ -5054,6 +5346,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     driver.configure("logstash_format true
                       time_key_format %Y-%m-%dT%H:%M:%S.%N%z\n#{tag_config}\n")
     stub_elastic
+    stub_elastic_info
 
     ts = "2001/02/03 13:14:01,673+02:00"
     index = "logstash-#{Time.now.getutc.strftime("%Y.%m.%d")}"
@@ -5074,6 +5367,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     driver.configure("logstash_format true
                       time_key_format %a %b %d %H:%M:%S %Z %Y\n")
     stub_elastic
+    stub_elastic_info
     ts = "Thu Nov 29 14:33:20 GMT 2001"
     driver.run(default_tag: 'test') do
       driver.feed(sample_record.merge!('@timestamp' => ts))
@@ -5086,6 +5380,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   def test_uses_nanosecond_precision_by_default
     driver.configure("logstash_format true\n")
     stub_elastic
+    stub_elastic_info
     time = Fluent::EventTime.new(Time.now.to_i, 123456789)
     driver.run(default_tag: 'test') do
       driver.feed(time, sample_record)
@@ -5098,6 +5393,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     driver.configure("logstash_format true
                       time_precision 3\n")
     stub_elastic
+    stub_elastic_info
     time = Fluent::EventTime.new(Time.now.to_i, 123456789)
     driver.run(default_tag: 'test') do
       driver.feed(time, sample_record)
@@ -5108,6 +5404,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
 
   def test_doesnt_add_tag_key_by_default
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
@@ -5117,6 +5414,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   def test_adds_tag_key_when_configured
     driver.configure("include_tag_key true\n")
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'mytag') do
       driver.feed(sample_record)
     end
@@ -5127,6 +5425,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   def test_adds_id_key_when_configured
     driver.configure("id_key request_id\n")
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
@@ -5137,6 +5436,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     def test_adds_nested_id_key_with_dot
       driver.configure("id_key nested.request_id\n")
       stub_elastic
+      stub_elastic_info
       driver.run(default_tag: 'test') do
         driver.feed(nested_sample_record)
       end
@@ -5146,6 +5446,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     def test_adds_nested_id_key_with_dollar_dot
       driver.configure("id_key $.nested.request_id\n")
       stub_elastic
+      stub_elastic_info
       driver.run(default_tag: 'test') do
         driver.feed(nested_sample_record)
       end
@@ -5155,6 +5456,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     def test_adds_nested_id_key_with_bracket
       driver.configure("id_key $['nested']['request_id']\n")
       stub_elastic
+      stub_elastic_info
       driver.run(default_tag: 'test') do
         driver.feed(nested_sample_record)
       end
@@ -5165,6 +5467,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   def test_doesnt_add_id_key_if_missing_when_configured
     driver.configure("id_key another_request_id\n")
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
@@ -5173,6 +5476,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
 
   def test_adds_id_key_when_not_configured
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
@@ -5182,6 +5486,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   def test_adds_parent_key_when_configured
     driver.configure("parent_key parent_id\n")
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
@@ -5192,6 +5497,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     def test_adds_nested_parent_key_with_dot
       driver.configure("parent_key nested.parent_id\n")
       stub_elastic
+      stub_elastic_info
       driver.run(default_tag: 'test') do
         driver.feed(nested_sample_record)
       end
@@ -5201,6 +5507,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     def test_adds_nested_parent_key_with_dollar_dot
       driver.configure("parent_key $.nested.parent_id\n")
       stub_elastic
+      stub_elastic_info
       driver.run(default_tag: 'test') do
         driver.feed(nested_sample_record)
       end
@@ -5210,6 +5517,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     def test_adds_nested_parent_key_with_bracket
       driver.configure("parent_key $['nested']['parent_id']\n")
       stub_elastic
+      stub_elastic_info
       driver.run(default_tag: 'test') do
         driver.feed(nested_sample_record)
       end
@@ -5220,6 +5528,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   def test_doesnt_add_parent_key_if_missing_when_configured
     driver.configure("parent_key another_parent_id\n")
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
@@ -5228,6 +5537,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
 
   def test_adds_parent_key_when_not_configured
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
@@ -5238,19 +5548,23 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     def test_es6
       driver("routing_key routing_id\n", 6)
       stub_elastic
+      stub_elastic_info
       driver.run(default_tag: 'test') do
         driver.feed(sample_record)
       end
-      assert_equal('routing', index_cmds[0]['index']['_routing'])
+      routing_key = driver.instance.instance_variable_get(:@routing_key_name)
+      assert_equal('routing', index_cmds[0]['index'][routing_key])
     end
 
     def test_es7
       driver("routing_key routing_id\n", 7)
       stub_elastic
+      stub_elastic_info
       driver.run(default_tag: 'test') do
         driver.feed(sample_record)
       end
-      assert_equal('routing', index_cmds[0]['index']['routing'])
+      routing_key = driver.instance.instance_variable_get(:@routing_key_name)
+      assert_equal('routing', index_cmds[0]['index'][routing_key])
     end
   end
 
@@ -5258,51 +5572,62 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     def test_adds_nested_routing_key_with_dot
       driver.configure("routing_key nested.routing_id\n")
       stub_elastic
+      stub_elastic_info
       driver.run(default_tag: 'test') do
         driver.feed(nested_sample_record)
       end
-      assert_equal('routing', index_cmds[0]['index']['_routing'])
+      routing_key = driver.instance.instance_variable_get(:@routing_key_name)
+      assert_equal('routing', index_cmds[0]['index'][routing_key])
     end
 
     def test_adds_nested_routing_key_with_dollar_dot
       driver.configure("routing_key $.nested.routing_id\n")
       stub_elastic
+      stub_elastic_info
       driver.run(default_tag: 'test') do
         driver.feed(nested_sample_record)
       end
-      assert_equal('routing', index_cmds[0]['index']['_routing'])
+      routing_key = driver.instance.instance_variable_get(:@routing_key_name)
+      assert_equal('routing', index_cmds[0]['index'][routing_key])
     end
 
     def test_adds_nested_routing_key_with_bracket
       driver.configure("routing_key $['nested']['routing_id']\n")
       stub_elastic
+      stub_elastic_info
       driver.run(default_tag: 'test') do
         driver.feed(nested_sample_record)
       end
-      assert_equal('routing', index_cmds[0]['index']['_routing'])
+      routing_key = driver.instance.instance_variable_get(:@routing_key_name)
+      assert_equal('routing', index_cmds[0]['index'][routing_key])
     end
   end
 
   def test_doesnt_add_routing_key_if_missing_when_configured
     driver.configure("routing_key another_routing_id\n")
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
-    assert(!index_cmds[0]['index'].has_key?('_routing'))
+    routing_key = driver.instance.instance_variable_get(:@routing_key_name)
+    assert(!index_cmds[0]['index'].has_key?(routing_key))
   end
 
   def test_adds_routing_key_when_not_configured
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
-    assert(!index_cmds[0]['index'].has_key?('_routing'))
+    routing_key = driver.instance.instance_variable_get(:@routing_key_name)
+    assert(!index_cmds[0]['index'].has_key?(routing_key))
   end
 
   def test_remove_one_key
     driver.configure("remove_keys key1\n")
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record.merge('key1' => 'v1', 'key2' => 'v2'))
     end
@@ -5313,6 +5638,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   def test_remove_multi_keys
     driver.configure("remove_keys key1, key2\n")
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record.merge('key1' => 'v1', 'key2' => 'v2'))
     end
@@ -5321,6 +5647,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   end
 
   def test_request_error
+    stub_elastic_info
     stub_elastic_unavailable
     assert_raise(Fluent::Plugin::ElasticsearchOutput::RecoverableRequestFailure) {
       driver.run(default_tag: 'test', shutdown: false) do
@@ -5332,6 +5659,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   def test_request_forever
     omit("retry_forever test is unstable.") if ENV["CI"]
     stub_elastic
+    stub_elastic_info
     driver.configure(Fluent::Config::Element.new(
                'ROOT', '', {
                  '@type' => 'elasticsearch',
@@ -5356,6 +5684,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       connection_resets += 1
       raise Faraday::ConnectionFailed, "Test message"
     end
+    stub_elastic_info
 
     assert_raise(Fluent::Plugin::ElasticsearchOutput::RecoverableRequestFailure) {
       driver.run(default_tag: 'test', shutdown: false) do
@@ -5372,6 +5701,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       connection_resets += 1
       raise ZeroDivisionError, "any not host_unreachable_exceptions exception"
     end
+    stub_elastic_info
 
     driver.configure("reconnect_on_error true\n")
 
@@ -5398,6 +5728,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
       connection_resets += 1
       raise ZeroDivisionError, "any not host_unreachable_exceptions exception"
     end
+    stub_elastic_info
 
     driver.configure("reconnect_on_error false\n")
 
@@ -5441,6 +5772,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
         })
      }
     end)
+    stub_elastic_info
 
     driver.run(default_tag: 'test') do
       driver.feed(1, sample_record)
@@ -5512,6 +5844,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
         })
                      }
                    end)
+      stub_elastic_info
 
       # Check buffer fulfillment condition
       assert_raise(Fluent::Plugin::ElasticsearchOutput::RetryStreamEmitFailure) do
@@ -5558,6 +5891,8 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
         })
      }
     end)
+    stub_elastic_info
+
     sample_record1 = sample_record('my_id' => 'abc')
     sample_record4 = sample_record('my_id' => 'xyz')
 
@@ -5607,6 +5942,8 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
         })
      }
     end)
+    stub_elastic_info
+
     sample_record1 = sample_record('my_id' => 'abc')
     sample_record4 = sample_record('my_id' => 'xyz')
 
@@ -5677,6 +6014,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
         })
      }
     end)
+    stub_elastic_info
 
     driver.run(default_tag: 'test') do
       driver.feed(1, sample_record)
@@ -5693,6 +6031,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   def test_update_should_not_write_if_theres_no_id
     driver.configure("write_operation update\n")
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
@@ -5702,6 +6041,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   def test_upsert_should_not_write_if_theres_no_id
     driver.configure("write_operation upsert\n")
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
@@ -5711,6 +6051,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   def test_create_should_not_write_if_theres_no_id
     driver.configure("write_operation create\n")
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
@@ -5721,6 +6062,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     driver.configure("write_operation update
                       id_key request_id")
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
@@ -5734,6 +6076,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
                       id_key request_id
                       remove_keys_on_update parent_id")
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
@@ -5745,6 +6088,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     driver.configure("write_operation upsert
                       id_key request_id")
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
@@ -5758,6 +6102,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
                       id_key request_id
                       remove_keys_on_update parent_id")
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
@@ -5772,6 +6117,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
                       id_key request_id
                       remove_keys_on_update parent_id")
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
@@ -5785,6 +6131,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
                       id_key id
                       remove_keys_on_update foo,baz")
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed("id" => 1, "foo" => "bar", "baz" => "quix", "zip" => "zam")
     end
@@ -5809,6 +6156,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
                       id_key id
                       remove_keys_on_update_key keys_to_skip")
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed("id" => 1, "foo" => "bar", "baz" => "quix", "keys_to_skip" => ["baz"])
     end
@@ -5833,6 +6181,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
                       remove_keys_on_update foo,bar
                       remove_keys_on_update_key keys_to_skip")
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed("id" => 1, "foo" => "bar", "baz" => "quix", "keys_to_skip" => ["baz"])
     end
@@ -5857,6 +6206,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
     driver.configure("write_operation create
                       id_key request_id")
     stub_elastic
+    stub_elastic_info
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
     end
@@ -5865,6 +6215,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
 
   def test_include_index_in_url
     stub_elastic('http://localhost:9200/logstash-2018.01.01/_bulk')
+    stub_elastic_info('http://localhost:9200/')
 
     driver.configure("index_name logstash-2018.01.01
                       include_index_in_url true")
@@ -5878,8 +6229,8 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
 
   def test_use_simple_sniffer
     require 'fluent/plugin/elasticsearch_simple_sniffer'
-    stub_elastic_info
     stub_elastic
+    stub_elastic_info
     config = %[
       sniffer_class_name Fluent::Plugin::ElasticsearchSimpleSniffer
       log_level debug
@@ -5903,6 +6254,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
                       remove_keys id
                       suppress_doc_wrap true')
     stub_elastic
+    stub_elastic_info
     doc_body = {'field' => 'value'}
     script_body = {'source' => 'ctx._source.counter += params.param1',
                    'lang' => 'painless',
@@ -5929,6 +6281,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
                       remove_keys id
                       suppress_doc_wrap true')
     stub_elastic
+    stub_elastic_info
     doc_body = {'field' => 'value'}
     script_body = {'source' => 'ctx._source.counter += params.param1',
                    'lang' => 'painless',
@@ -5953,8 +6306,14 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   end
 
   def test_ignore_exception
-    driver.configure('ignore_exceptions ["Elasticsearch::Transport::Transport::Errors::ServiceUnavailable"]')
+    ignore_classes = if Gem::Version.new(TRANSPORT_CLASS::VERSION) >= Gem::Version.new("8.0.0")
+                     ["Elastic::Transport::Transport::Errors::ServiceUnavailable"]
+                   else
+                     ["Elasticsearch::Transport::Transport::Errors::ServiceUnavailable"]
+                   end
+    driver.configure("ignore_exceptions #{ignore_classes}")
     stub_elastic_unavailable
+    stub_elastic_info
 
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
@@ -5962,8 +6321,14 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   end
 
   def test_ignore_exception_with_superclass
-    driver.configure('ignore_exceptions ["Elasticsearch::Transport::Transport::ServerError"]')
+    ignore_classes = if Gem::Version.new(TRANSPORT_CLASS::VERSION) >= Gem::Version.new("8.0.0")
+                       ["Elastic::Transport::Transport::Errors::ServiceUnavailable"]
+                     else
+                       ["Elasticsearch::Transport::Transport::Errors::ServiceUnavailable"]
+                     end
+    driver.configure("ignore_exceptions #{ignore_classes}")
     stub_elastic_unavailable
+    stub_elastic_info
 
     driver.run(default_tag: 'test') do
       driver.feed(sample_record)
@@ -5973,6 +6338,7 @@ class ElasticsearchOutputTest < Test::Unit::TestCase
   def test_ignore_excetion_handles_appropriate_ones
     driver.configure('ignore_exceptions ["Faraday::ConnectionFailed"]')
     stub_elastic_unavailable
+    stub_elastic_info
 
     assert_raise(Fluent::Plugin::ElasticsearchOutput::RecoverableRequestFailure) {
       driver.run(default_tag: 'test', shutdown: false) do

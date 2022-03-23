@@ -22,7 +22,7 @@ module Prometheus
         name = metric.name
 
         @mutex.synchronize do
-          if exist?(name.to_sym)
+          if @metrics.key?(name.to_sym)
             raise AlreadyRegisteredError, "#{name} has already been registered"
           end
           @metrics[name.to_sym] = metric
@@ -37,33 +37,51 @@ module Prometheus
         end
       end
 
-      def counter(name, docstring, base_labels = {})
-        register(Counter.new(name, docstring, base_labels))
+      def counter(name, docstring:, labels: [], preset_labels: {}, store_settings: {})
+        register(Counter.new(name,
+                             docstring: docstring,
+                             labels: labels,
+                             preset_labels: preset_labels,
+                             store_settings: store_settings))
       end
 
-      def summary(name, docstring, base_labels = {})
-        register(Summary.new(name, docstring, base_labels))
+      def summary(name, docstring:, labels: [], preset_labels: {}, store_settings: {})
+        register(Summary.new(name,
+                             docstring: docstring,
+                             labels: labels,
+                             preset_labels: preset_labels,
+                             store_settings: store_settings))
       end
 
-      def gauge(name, docstring, base_labels = {})
-        register(Gauge.new(name, docstring, base_labels))
+      def gauge(name, docstring:, labels: [], preset_labels: {}, store_settings: {})
+        register(Gauge.new(name,
+                           docstring: docstring,
+                           labels: labels,
+                           preset_labels: preset_labels,
+                           store_settings: store_settings))
       end
 
-      def histogram(name, docstring, base_labels = {},
-                    buckets = Histogram::DEFAULT_BUCKETS)
-        register(Histogram.new(name, docstring, base_labels, buckets))
+      def histogram(name, docstring:, labels: [], preset_labels: {},
+                    buckets: Histogram::DEFAULT_BUCKETS,
+                    store_settings: {})
+        register(Histogram.new(name,
+                               docstring: docstring,
+                               labels: labels,
+                               preset_labels: preset_labels,
+                               buckets: buckets,
+                               store_settings: store_settings))
       end
 
       def exist?(name)
-        @metrics.key?(name)
+        @mutex.synchronize { @metrics.key?(name) }
       end
 
       def get(name)
-        @metrics[name.to_sym]
+        @mutex.synchronize { @metrics[name.to_sym] }
       end
 
       def metrics
-        @metrics.values
+        @mutex.synchronize { @metrics.values }
       end
     end
   end

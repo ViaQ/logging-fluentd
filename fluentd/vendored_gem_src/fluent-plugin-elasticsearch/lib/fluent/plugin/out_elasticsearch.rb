@@ -3,10 +3,6 @@ require 'date'
 require 'excon'
 require 'elasticsearch'
 require 'set'
-begin
-  require 'elasticsearch/xpack'
-rescue LoadError
-end
 require 'json'
 require 'uri'
 require 'base64'
@@ -23,6 +19,7 @@ require 'fluent/time'
 require 'fluent/unique_id'
 require 'fluent/log-ext'
 require 'zlib'
+require_relative 'elasticsearch_compat'
 require_relative 'elasticsearch_constants'
 require_relative 'elasticsearch_error'
 require_relative 'elasticsearch_error_handler'
@@ -72,7 +69,7 @@ module Fluent::Plugin
     DEFAULT_TYPE_NAME_ES_7x = "_doc".freeze
     DEFAULT_TYPE_NAME = "fluentd".freeze
     DEFAULT_RELOAD_AFTER = -1
-    TARGET_BULK_BYTES = 20 * 1024 * 1024
+    DEFAULT_TARGET_BULK_BYTES = -1
     DEFAULT_POLICY_ID = "logstash-policy"
 
     config_param :host, :string,  :default => 'localhost'
@@ -166,7 +163,7 @@ EOC
     config_param :suppress_doc_wrap, :bool, :default => false
     config_param :ignore_exceptions, :array, :default => [], value_type: :string, :desc => "Ignorable exception list"
     config_param :exception_backup, :bool, :default => true, :desc => "Chunk backup flag when ignore exception occured"
-    config_param :bulk_message_request_threshold, :size, :default => TARGET_BULK_BYTES
+    config_param :bulk_message_request_threshold, :size, :default => DEFAULT_TARGET_BULK_BYTES
     config_param :compression_level, :enum, list: [:no_compression, :best_speed, :best_compression, :default_compression], :default => :no_compression
     config_param :enable_ilm, :bool, :default => false
     config_param :ilm_policy_id, :string, :default => DEFAULT_POLICY_ID
@@ -413,11 +410,11 @@ EOC
         end
       end
 
-      if Gem::Version.create(::Elasticsearch::Transport::VERSION) < Gem::Version.create("7.2.0")
+      if Gem::Version.create(::TRANSPORT_CLASS::VERSION) < Gem::Version.create("7.2.0")
         if compression
           raise Fluent::ConfigError, <<-EOC
             Cannot use compression with elasticsearch-transport plugin version < 7.2.0
-            Your elasticsearch-transport plugin version version is #{Elasticsearch::Transport::VERSION}.
+            Your elasticsearch-transport plugin version version is #{TRANSPORT_CLASS::VERSION}.
             Please consider to upgrade ES client.
           EOC
         end
@@ -495,7 +492,11 @@ EOC
     end
 
     def detect_es_major_version
-      @_es_info ||= client.info
+      begin
+        @_es_info ||= client.info
+      rescue Elasticsearch::UnsupportedProductError => e
+        raise Fluent::ConfigError, "Using Elasticsearch client #{client_library_version} is not compatible for your Elasticsearch server. Please check your using elasticsearch gem version and Elasticsearch server."
+      end
       begin
         unless version = @_es_info.dig("version", "number")
           version = @default_elasticsearch_version
@@ -613,7 +614,7 @@ EOC
                     .merge(gzip_headers)
         ssl_options = { verify: @ssl_verify, ca_file: @ca_file}.merge(@ssl_version_options)
 
-        transport = Elasticsearch::Transport::Transport::HTTP::Faraday.new(connection_options.merge(
+        transport = TRANSPORT_CLASS::Transport::HTTP::Faraday.new(connection_options.merge(
                                                                             options: {
                                                                               reload_connections: local_reload_connections,
                                                                               reload_on_failure: @reload_on_failure,
@@ -987,12 +988,12 @@ EOC
         elsif @last_seen_major_version == 7
           log.warn "Detected ES 7.x: `_doc` will be used as the document `_type`."
           target_type = '_doc'.freeze
-        elsif @last_seen_major_version >=8
+        elsif @last_seen_major_version >= 8
           log.debug "Detected ES 8.x or above: document type will not be used."
           target_type = nil
         end
       else
-        if @suppress_type_name && @last_seen_major_version >= 7
+        if @suppress_type_name && @last_seen_major_version == 7
           target_type = nil
         elsif @last_seen_major_version == 7 && @type_name != DEFAULT_TYPE_NAME_ES_7x
           log.warn "Detected ES 7.x: `_doc` will be used as the document `_type`."

@@ -1,3 +1,39 @@
+## Rails 6.1.5 (March 09, 2022) ##
+
+*   Clear secure password cache if password is set to `nil`
+
+    Before:
+
+       user.password = 'something'
+       user.password = nil
+
+       user.password # => 'something'
+
+    Now:
+
+       user.password = 'something'
+       user.password = nil
+
+       user.password # => nil
+
+    *Markus Doits*
+
+*   Fix delegation in `ActiveModel::Type::Registry#lookup` and `ActiveModel::Type.lookup`
+
+    Passing a last positional argument `{}` would be incorrectly considered as keyword argument.
+
+    *Benoit Daloze*
+
+*   Fix `to_json` after `changes_applied` for `ActiveModel::Dirty` object.
+
+    *Ryuta Kamizono*
+
+
+## Rails 6.1.4.7 (March 08, 2022) ##
+
+*   No changes.
+
+
 ## Rails 6.1.4.6 (February 11, 2022) ##
 
 *   No changes.
@@ -123,6 +159,10 @@
     some edge cases won’t be covered, like `errors#first` will return `ActiveModel::Error` and manipulating
     `errors.messages` and `errors.details` hashes directly will have no effect. Moving forward,
     please convert those direct manipulations to use provided API methods instead.
+    Please note that `errors#add` now accepts `options` as keyword arguments instead of `Hash` which
+    introduced a change in Ruby 3 to [keyword arguments][kwargs-ann].
+
+    [kwargs-ann]: https://www.ruby-lang.org/en/news/2019/12/12/separation-of-positional-and-keyword-arguments-in-ruby-3-0/
 
     The list of deprecated methods and their planned future behavioral changes at the next major release are:
 

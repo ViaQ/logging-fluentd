@@ -115,7 +115,7 @@ module Excon
           # we already have data from a middleware, so bail
           return datum
         else
-          socket(datum)
+          socket(datum).data = datum
           # start with "METHOD /path"
           request = datum[:method].to_s.upcase + ' '
           if datum[:proxy] && datum[:scheme] != HTTPS
@@ -190,6 +190,11 @@ module Excon
         case error
         when Excon::Errors::InvalidHeaderKey, Excon::Errors::InvalidHeaderValue, Excon::Errors::StubNotFound, Excon::Errors::Timeout
           raise(error)
+        when Errno::EPIPE
+          # Read whatever remains in the pipe to aid in debugging
+          response = socket.read
+          error = Excon::Error.new(response + error.message)
+          raise_socket_error(error)
         else
           raise_socket_error(error)
         end
@@ -246,6 +251,11 @@ module Excon
       # Some web servers will reject the request if it comes too late, so let's hoist it to the top.
       if (host = datum[:headers].delete('Host'))
         datum[:headers] = { 'Host' => host }.merge(datum[:headers])
+      end
+
+      # default to GET if no method specified
+      unless datum[:method]
+        datum[:method] = :get
       end
 
       # if path is empty or doesn't start with '/', insert one
