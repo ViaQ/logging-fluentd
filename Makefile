@@ -27,3 +27,9 @@ test-unit:
 update-vendor:
 	FLUENTD_VERSION=$(FLUENTD_VERSION) ./hack/update-fluentd-vendor-gems.sh
 .PHONY: update-vendor
+
+install-gems:
+	FLUENTD_VERSION=$(FLUENTD_VERSION); \
+	gem install bundler:$$(grep -r -C 1 'BUNDLED WITH' fluentd/Gemfile.lock | grep -o '[0-9\.]*') && \
+	pushd fluentd && bundler install && popd
+.PHONY: install-gems
