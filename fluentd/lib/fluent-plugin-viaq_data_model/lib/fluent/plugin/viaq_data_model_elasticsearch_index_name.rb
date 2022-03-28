@@ -26,6 +26,10 @@ module ViaqDataModel
                     end
                     matcher = ViaqMatchClass.new(ein.tag, nil)
                     ein.instance_eval{ @params[:matcher] = matcher }
+
+                    unless ein.structured_type_key.nil?
+                      ein.structured_type_key = ein.structured_type_key.split('.')
+                    end
                 end
             end
         end
@@ -48,7 +52,9 @@ module ViaqDataModel
       
                 case ein.name_type
                 when :static
-                  prefix = ein.static_index_name
+                  prefix = evaluate_for_static_name_type(ein)
+                when :structured
+                  prefix = evaluate_for_structured_name_type(ein, record)
                 when :audit_full, :audit_prefix
                   prefix = ".audit"
                 when :operations_full, :operations_prefix
@@ -82,6 +88,24 @@ module ViaqDataModel
                 break
               end
             end
+        end
+
+        def evaluate_for_static_name_type(ein)
+          ein.static_index_name
+        end
+
+        def evaluate_for_structured_name_type(ein, record)
+          if !record['structured'].nil? && record['structured'] != {} 
+            if !ein.structured_type_key.nil? && !(typeFromKey = record.dig(*ein.structured_type_key)).nil? 
+              "app-#{typeFromKey}-write"
+            elsif !ein.structured_type_name.nil? && !ein.structured_type_name.empty?
+              "app-#{ein.structured_type_name}-write"
+            else 
+              evaluate_for_static_name_type(ein)
+            end
+          else 
+            evaluate_for_static_name_type(ein)
           end
+        end
     end
 end

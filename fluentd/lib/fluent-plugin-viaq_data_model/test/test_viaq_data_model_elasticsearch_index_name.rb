@@ -53,12 +53,14 @@ class ViaqDataModelFilterTest < Test::Unit::TestCase
         @logs << args
     end
 
-    def configure_ein(name_type, static_index_name: '', enable: true)
+    def configure_ein(name_type, static_index_name: '', enable: true, structured_type_name: nil, structured_type_key: nil)
         ein = OpenStruct.new(
             name_type: name_type,
             tag: '**', 
             enabled: enable,
             static_index_name: static_index_name,
+            structured_type_name: structured_type_name,
+            structured_type_key: structured_type_key
         )
         ein.define_singleton_method(:matcher) do
             @params[:matcher]
@@ -117,6 +119,54 @@ class ViaqDataModelFilterTest < Test::Unit::TestCase
                 assert_equal('foo-bar', @rec['my_index_prefix'])
             end
             
+        end
+
+        sub_test_case 'when configured for name_type :structured' do
+
+            test "should use the typeFromKey field when structured and structuredType fields are present" do
+                @rec['kubernetes'] = { 
+                    "labels" => {
+                        "foo-bar" => "xyz"
+                    }
+                }
+                @rec['structured'] = { 
+                    level: "info"   
+                 }
+                configure_ein(:structured, static_index_name: 'foo-bar', structured_type_key: 'kubernetes.labels.foo-bar', structured_type_name: 'my-name')
+                add_elasticsearch_index_name_field('abc',nil, @rec)
+                assert_equal('app-xyz-write', @rec['viaq_index_name'])
+            end
+
+            test "should use the structuredTypename field when structured and field is present" do
+                @rec['kubernetes'] = { 
+                    "labels" => {
+                        "foo-bar" => "xyz"
+                    }
+                }
+                @rec['structured'] = { 
+                    level: "info"   
+                 }
+                configure_ein(:structured, static_index_name: 'foo-bar', structured_type_name: 'myname')
+                add_elasticsearch_index_name_field('abc',nil, @rec)
+                assert_equal('app-myname-write', @rec['viaq_index_name'])
+            end
+
+            test "should treat like :static when the structured record fields are missing the typefromkey and structuredtypename fields" do
+                @rec['kubernetes'] = { 
+                    "labels" => {
+                        "foo-bar" => "xyz"
+                    }
+                }
+                configure_ein(:structured, static_index_name: 'foo-bar')
+                add_elasticsearch_index_name_field('abc',nil, @rec)
+                assert_equal('foo-bar', @rec['viaq_index_name'])
+            end
+
+            test "should treat like :static when the structured record fields are absent" do
+                configure_ein(:structured, static_index_name: 'foo-bar')
+                add_elasticsearch_index_name_field('abc',nil, @rec)
+                assert_equal('foo-bar', @rec['viaq_index_name'])
+            end
         end
         
         sub_test_case 'when configured for name_type :operations_prefix' do

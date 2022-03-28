@@ -173,8 +173,14 @@ module Fluent
       desc 'create index names for records with this tag pattern'
       config_param :tag, :string
       desc 'type of index name to create'
-      config_param :name_type, :enum, list: [:operations_full, :project_full, :operations_prefix, :project_prefix, :audit_full, :audit_prefix, :static]
+      config_param :name_type, :enum, list: [:operations_full, :project_full, :operations_prefix, :project_prefix, :audit_full, :audit_prefix, :static, :structured]
       config_param :static_index_name, :string, default: ''
+      
+      desc 'the key from which to find the value to create a structured index name'
+      config_param :structured_type_key, :string
+
+      desc 'the name to use when creating a structured index name'
+      config_param :structured_type_name, :string
     end
     desc 'Store the Elasticsearch index name in this field'
     config_param :elasticsearch_index_name_field, :string, default: 'viaq_index_name'
