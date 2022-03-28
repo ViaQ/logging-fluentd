@@ -176,11 +176,14 @@ module Fluent
       config_param :name_type, :enum, list: [:operations_full, :project_full, :operations_prefix, :project_prefix, :audit_full, :audit_prefix, :static, :structured]
       config_param :static_index_name, :string, default: ''
       
+      desc 'the annotation prefix from which to find the value to create a structured index name for a container. Successfully matches for prefix/container_name'
+      config_param :structured_type_annotation_prefix, :string, default: nil
+
       desc 'the key from which to find the value to create a structured index name'
-      config_param :structured_type_key, :string
+      config_param :structured_type_key, :string, default: nil
 
       desc 'the name to use when creating a structured index name'
-      config_param :structured_type_name, :string
+      config_param :structured_type_name, :string, default: nil
     end
     desc 'Store the Elasticsearch index name in this field'
     config_param :elasticsearch_index_name_field, :string, default: 'viaq_index_name'
@@ -262,16 +265,6 @@ module Fluent
       
       configure_elasticsearch_index_names
 
-      # # create the elasticsearch index name tag matchers
-      # unless @elasticsearch_index_names.empty?
-      #   @elasticsearch_index_names.each do |ein|
-      #     if ein.name_type == :static && ein.static_index_name.empty?
-      #       raise Fluent::ConfigError, "'static' elasticsearch_index_name configurations must define 'static_index_name'"
-      #     end
-      #     matcher = ViaqMatchClass.new(ein.tag, nil)
-      #     ein.instance_eval{ @params[:matcher] = matcher }
-      #   end
-      # end
     end
 
     def start

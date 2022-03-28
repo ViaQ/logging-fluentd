@@ -30,6 +30,12 @@ module ViaqDataModel
                     unless ein.structured_type_key.nil?
                       ein.structured_type_key = ein.structured_type_key.split('.')
                     end
+
+                    unless ein.structured_type_annotation_prefix.nil?
+                      if ein.structured_type_annotation_prefix[ein.structured_type_annotation_prefix.length - 1] == '/'
+                        ein.structured_type_annotation_prefix = ein.structured_type_annotation_prefix[0,ein.structured_type_annotation_prefix.length - 1]
+                      end
+                    end
                 end
             end
         end
@@ -96,8 +102,10 @@ module ViaqDataModel
 
         def evaluate_for_structured_name_type(ein, record)
           if !record['structured'].nil? && record['structured'] != {} 
-            if !ein.structured_type_key.nil? && !(typeFromKey = record.dig(*ein.structured_type_key)).nil? 
-              "app-#{typeFromKey}-write"
+            if !(type_from_annotation = evaluate_for_container_type_annotation(ein, record)).nil?
+              "app-#{type_from_annotation}-write"
+            elsif !ein.structured_type_key.nil? && !(type_from_key = record.dig(*ein.structured_type_key)).nil? 
+              "app-#{type_from_key}-write"
             elsif !ein.structured_type_name.nil? && !ein.structured_type_name.empty?
               "app-#{ein.structured_type_name}-write"
             else 
@@ -106,6 +114,18 @@ module ViaqDataModel
           else 
             evaluate_for_static_name_type(ein)
           end
+        end
+
+        def evaluate_for_container_type_annotation(ein, record)
+          return nil if ein.structured_type_annotation_prefix.nil?
+          unless (annotations = record.dig("kubernetes","annotations")).nil? || (container_name = record.dig("kubernetes","container_name")).nil?
+            return nil if container_name.empty?
+            pattern = "#{ein.structured_type_annotation_prefix}/#{container_name}"
+            annotations.each do |k,v|
+              return v if k == pattern
+            end
+          end
+          nil
         end
     end
 end

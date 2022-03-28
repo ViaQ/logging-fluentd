@@ -136,6 +136,15 @@ class ViaqDataModelFilterTest < Test::Unit::TestCase
         ')
       }
     end
+    test 'static elasticsearch_index_name static_index_name' do
+        d = create_driver('
+      <elasticsearch_index_name>
+        tag "**"
+        name_type static
+        static_index_name foo
+      </elasticsearch_index_name>
+        ')
+    end
   end
 
   sub_test_case 'filtering' do

@@ -53,14 +53,15 @@ class ViaqDataModelFilterTest < Test::Unit::TestCase
         @logs << args
     end
 
-    def configure_ein(name_type, static_index_name: '', enable: true, structured_type_name: nil, structured_type_key: nil)
+    def configure_ein(name_type, static_index_name: '', enable: true, structured_type_name: nil, structured_type_key: nil, structured_type_annotation_prefix: nil)
         ein = OpenStruct.new(
             name_type: name_type,
             tag: '**', 
             enabled: enable,
             static_index_name: static_index_name,
             structured_type_name: structured_type_name,
-            structured_type_key: structured_type_key
+            structured_type_key: structured_type_key,
+            structured_type_annotation_prefix: structured_type_annotation_prefix
         )
         ein.define_singleton_method(:matcher) do
             @params[:matcher]
@@ -68,6 +69,18 @@ class ViaqDataModelFilterTest < Test::Unit::TestCase
         ein.instance_eval{@params = {}}
         @elasticsearch_index_names = [ein]
         configure_elasticsearch_index_names
+    end
+
+    sub_test_case '#configure_elasticsearch_index_names' do
+        sub_test_case 'when setting the structured_type_annotation_prefix' do
+            test 'should skip additional configuration when it is nil' do
+                configure_ein(:structured)
+            end
+            test 'should remove a trailing slash for use in evaluation' do
+                configure_ein(:structured, structured_type_annotation_prefix: 'containerType.logging.openshift.io/')
+                assert_equal('containerType.logging.openshift.io',@elasticsearch_index_names[0].structured_type_annotation_prefix)
+            end
+        end
     end
 
     sub_test_case '#elasticsearch_index_names' do
@@ -122,6 +135,43 @@ class ViaqDataModelFilterTest < Test::Unit::TestCase
         end
 
         sub_test_case 'when configured for name_type :structured' do
+
+            sub_test_case 'and container annotation is present' do
+                test "should use the type name field from the annotation when the container name matches" do
+                    @rec['kubernetes'] = { 
+                        "container_name" => "mycontainer",
+                        "annotations" => { 
+                          "containerType.logging.openshift.io/mycontainer" => "structuredcn"
+                        },
+                        "labels" => {
+                            "foo-bar" => "xyz"
+                        }
+                    }
+                    @rec['structured'] = { 
+                        level: "info"   
+                    }
+                    configure_ein(:structured, static_index_name: 'foo-bar', structured_type_annotation_prefix: 'containerType.logging.openshift.io',structured_type_key: 'kubernetes.labels.foo-bar', structured_type_name: 'my-name')
+                    add_elasticsearch_index_name_field('abc',nil, @rec)
+                    assert_equal('app-structuredcn-write', @rec['viaq_index_name'])
+                end
+                test "should not use the type name field from the annotation when the container names do not match" do
+                    @rec['kubernetes'] = { 
+                        "container_name" => "someothercontainer",
+                        "annotations" => { 
+                          "containerType.logging.openshift.io/mycontainer" => "structuredcn"
+                        },
+                        "labels" => {
+                            "foo-bar" => "xyz"
+                        }
+                    }
+                    @rec['structured'] = { 
+                        level: "info"   
+                    }
+                    configure_ein(:structured, static_index_name: 'foo-bar', structured_type_annotation_prefix: 'containerType.logging.openshift.io', structured_type_key: 'kubernetes.labels.foo-bar', structured_type_name: 'my-name')
+                    add_elasticsearch_index_name_field('abc',nil, @rec)
+                    assert_equal('app-xyz-write', @rec['viaq_index_name'])
+                end
+            end
 
             test "should use the typeFromKey field when structured and structuredType fields are present" do
                 @rec['kubernetes'] = { 
