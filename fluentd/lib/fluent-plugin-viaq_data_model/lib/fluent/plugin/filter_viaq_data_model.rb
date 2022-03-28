@@ -24,6 +24,7 @@ require 'fluent/log'
 require 'fluent/match'
 
 require_relative 'filter_viaq_data_model_systemd'
+require_relative 'viaq_data_model_elasticsearch_index_name'
 require_relative 'viaq_data_model_log_level_normalizer'
 require_relative 'viaq_data_model_openshift'
 
@@ -54,6 +55,7 @@ end
 module Fluent
   class ViaqDataModelFilter < Filter
     include ViaqDataModelFilterSystemd
+    include ViaqDataModel::ElasticsearchIndexName
     include ViaqDataModel::LogLevelNormalizer
     include ViaqDataModel::OpenShift
 
@@ -251,16 +253,19 @@ module Fluent
       end
       
       @pipeline_version = (ENV['FLUENTD_VERSION'] || 'unknown fluentd version') + ' ' + (ENV['DATA_VERSION'] || 'unknown data version')
-      # create the elasticsearch index name tag matchers
-      unless @elasticsearch_index_names.empty?
-        @elasticsearch_index_names.each do |ein|
-          if ein.name_type == :static && ein.static_index_name.empty?
-            raise Fluent::ConfigError, "'static' elasticsearch_index_name configurations must define 'static_index_name'"
-          end
-          matcher = ViaqMatchClass.new(ein.tag, nil)
-          ein.instance_eval{ @params[:matcher] = matcher }
-        end
-      end
+      
+      configure_elasticsearch_index_names
+
+      # # create the elasticsearch index name tag matchers
+      # unless @elasticsearch_index_names.empty?
+      #   @elasticsearch_index_names.each do |ein|
+      #     if ein.name_type == :static && ein.static_index_name.empty?
+      #       raise Fluent::ConfigError, "'static' elasticsearch_index_name configurations must define 'static_index_name'"
+      #     end
+      #     matcher = ViaqMatchClass.new(ein.tag, nil)
+      #     ein.instance_eval{ @params[:matcher] = matcher }
+      #   end
+      # end
     end
 
     def start
@@ -365,78 +370,6 @@ module Fluent
       record['pipeline_metadata'][pipeline_type]['name'] = 'fluentd'
       record['pipeline_metadata'][pipeline_type]['received_at'] = Time.now.utc.to_datetime.rfc3339(6)
       record['pipeline_metadata'][pipeline_type]['version'] = @pipeline_version
-    end
-
-    def add_elasticsearch_index_name_field(tag, time, record)
-      found = false
-      @elasticsearch_index_names.each do |ein|
-        if ein.matcher.match(tag)
-          found = true
-          return unless ein.enabled
-          if ein.name_type == :operations_full || ein.name_type == :project_full || ein.name_type == :audit_full
-            field_name = @elasticsearch_index_name_field
-            need_time = true
-          else
-            field_name = @elasticsearch_index_prefix_field
-            need_time = false
-          end
-
-          case ein.name_type
-          when :static
-            prefix = ein.static_index_name
-          when :audit_full, :audit_prefix
-            prefix = ".audit"
-          when :operations_full, :operations_prefix
-            prefix = ".operations"
-          when :project_full, :project_prefix
-            name, uuid = nil
-            unless record['kubernetes'].nil?
-              k8s = record['kubernetes']
-              name = k8s['namespace_name']
-              uuid = k8s['namespace_id']
-              if name.nil?
-                log.error("record cannot use elasticsearch index name type #{ein.name_type}: record is missing kubernetes.namespace_name field: #{record}")
-              end
-              if uuid.nil?
-                log.error("record cannot use elasticsearch index name type #{ein.name_type}: record is missing kubernetes.namespace_id field: #{record}")
-              end
-            else
-              log.error("record cannot use elasticsearch index name type #{ein.name_type}: record is missing kubernetes field: #{record}")
-            end
-            if name.nil? || uuid.nil?
-              name = @orphaned_namespace_name
-            end
-            prefix = name == @orphaned_namespace_name ? @orphaned_namespace_name : "project.#{name}.#{uuid}"
-          end
-
-          if ENV['CDM_DEBUG']
-            unless tag == ENV['CDM_DEBUG_IGNORE_TAG']
-              log.error("prefix #{prefix} need_time #{need_time} time #{record[@dest_time_name]}")
-            end
-          end
-
-          if need_time
-            ts = DateTime.parse(record[@dest_time_name])
-            record[field_name] = prefix + "." + ts.strftime("%Y.%m.%d")
-          else
-            record[field_name] = prefix
-          end
-          if ENV['CDM_DEBUG']
-            unless tag == ENV['CDM_DEBUG_IGNORE_TAG']
-              log.error("record[#{field_name}] = #{record[field_name]}")
-            end
-          end
-
-          break
-        end
-      end
-      unless found
-        if ENV['CDM_DEBUG']
-          unless tag == ENV['CDM_DEBUG_IGNORE_TAG']
-            log.error("no match for tag #{tag}")
-          end
-        end
-      end
     end
 
     def transform_eventrouter(tag, record, fmtr)
