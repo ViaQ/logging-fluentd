@@ -1,10 +1,17 @@
 ### This is a generated file from Dockerfile.in ###
+#@follow_tag(registry.redhat.io/ubi8:latest)
+FROM registry.redhat.io/ubi8:8.5-226 AS builder
+
+ARG upstream_code=upstream_code
+
+COPY ${REMOTE_SOURCE} upstream_code
 
 #@follow_tag(registry.redhat.io/ubi8/ruby-25:latest)
 FROM registry.ci.openshift.org/ocp/builder:ubi8.ruby.25
+
 ENV BUILD_VERSION=1.7.4
-ENV SOURCE_GIT_COMMIT=${CI_ORIGIN_AGGREGATED_LOGGING_UPSTREAM_COMMIT:-}
-ENV SOURCE_GIT_URL=${CI_ORIGIN_AGGREGATED_LOGGING_UPSTREAM_URL:-}
+ENV SOURCE_GIT_COMMIT=${CI_LOGGING_FLUENTD_UPSTREAM_COMMIT}
+ENV SOURCE_GIT_URL=${CI_LOGGING_FLUENTD_UPSTREAM_URL}
 
 ARG DATA_VERSION_VALUE=1.6.0
 ARG FLUENTD_VERSION_VALUE=1.7.4
@@ -16,14 +23,14 @@ ENV DATA_VERSION=$DATA_VERSION_VALUE \
     PATH=/opt/app-root/src/bin:/opt/app-root/bin:$PATH \
     container=$CONTAINER_VALUE
 
+ARG BUILD_PKGS="make gcc-c++ libffi-devel gcc gcc-gdb-plugin cpp nodejs autoconf automake libtool m4 redhat-rpm-config rubygem-bundler"    
+ARG RUNTIME_PKGS="hostname bc iproute"
+
 USER 0
-RUN : 'removed yum-config-manager' \
- &&   BUILD_PKGS="make gcc-c++ libffi-devel autoconf automake libtool m4 redhat-rpm-config" \
- &&   RUNTIME_PKGS="hostname   bc  iproute" \
- &&   yum install -y --setopt=tsflags=nodocs $BUILD_PKGS $RUNTIME_PKGS \
- &&   rpm -V $BUILD_PKGS \
- &&   rpm -V $RUNTIME_PKGS \
- &&   yum clean all
+RUN yum install -y --setopt=tsflags=nodocs $BUILD_PKGS $RUNTIME_PKGS && \    
+    rpm -V $BUILD_PKGS $RUNTIME_PKGS && \    
+    yum clean all
+
 
 ENV upstream_code=${upstream_code:-"."}
 COPY  ${upstream_code}/jemalloc/ /tmp/jemalloc/
@@ -49,12 +56,7 @@ COPY  ${upstream_code}/*.patch ${HOME}/vendored_gem_src/
 RUN cd ${HOME}/vendored_gem_src/ && ./install-gems.sh && cd / 
 RUN rm -rf ${HOME}/vendored_gem_src/
 
-RUN BUILD_PKGS="make gcc-c++ libffi-devel \
-                gcc gcc-gdb-plugin cpp \
-                nodejs \
-                autoconf automake libtool m4 \
-                redhat-rpm-config rubygem-bundler" && \
-    yum remove -y $BUILD_PKGS
+RUN yum remove -y $BUILD_PKGS
 
 RUN mkdir -p /etc/fluent/plugin
 
@@ -90,8 +92,8 @@ LABEL \
         name="openshift-logging/fluentd-rhel8" \
         com.redhat.component="logging-fluentd-container" \
         io.openshift.maintainer.product="OpenShift Container Platform" \
-        io.openshift.build.commit.id=${CI_ORIGIN_AGGREGATED_LOGGING_UPSTREAM_COMMIT} \
-        io.openshift.build.source-location=${CI_ORIGIN_AGGREGATED_LOGGING_UPSTREAM_URL} \
-        io.openshift.build.commit.url=${CI_ORIGIN_AGGREGATED_LOGGING_UPSTREAM_URL}/commit/${CI_ORIGIN_AGGREGATED_LOGGING_UPSTREAM_URL} \
+        io.openshift.build.commit.id=${CI_LOGGING_FLUENTD_UPSTREAM_COMMIT} \
+        io.openshift.build.source-location=${CI_LOGGING_FLUENTD_UPSTREAM_URL} \
+        io.openshift.build.commit.url=${CI_LOGGING_FLUENTD_UPSTREAM_URL}/commit/${CI_LOGGING_FLUENTD_UPSTREAM_COMMIT} \
         version=v1.7.4
 
