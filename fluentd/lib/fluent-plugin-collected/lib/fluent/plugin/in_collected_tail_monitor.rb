@@ -94,11 +94,11 @@ module Fluent::Plugin
           if pe.read_inode == old_inode && pe.read_pos >= old_pos
             # Same file, has not been truncated since last we looked. Add the delta.
             @log.trace "delta bytes #{pe.read_pos}  #{old_pos}"
-            @metrics[:total_bytes_collected].increment(label, pe.read_pos)
+            @metrics[:total_bytes_collected].increment(labels: label, by: pe.read_pos)
           else
             # Changed file or truncated the existing file. Add the initial content.
             @log.trace "delta bytes #{pe.read_pos}"
-            @metrics[:total_bytes_collected].increment(label, pe.read_pos)
+            @metrics[:total_bytes_collected].increment(labels: label, by: pe.read_pos)
           end
         end
       end
