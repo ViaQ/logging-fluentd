@@ -1,5 +1,5 @@
-require 'test_helper'
-require 'fluent/plugin/in_collected_tail_monitor'
+require "test_helper"
+require "fluent/plugin/in_collected_tail_monitor"
 
 class CollectedTailMonitorInputTest < Test::Unit::TestCase
   include Fluent
@@ -8,12 +8,16 @@ class CollectedTailMonitorInputTest < Test::Unit::TestCase
     Fluent::Test.setup
   end
 
-  MONITOR_CONFIG = %(
-    @type collected_tail_monitor
+  MONITOR_CONFIG = %[
+  @type tail
+     path /tmp/tmp.log, /var/log/containers/mypodname_mynamespace_mycontainername-34646d7fb38199129ab8d0e6f41833d26e1826cba92571100fd6c53904a5317e.log
+  
+  @type collected_tail_monitor
     <labels>
-      foo bar
+      tag mytag
+      host example.com
     </labels>
-    )
+]
 
   INVALID_MONITOR_CONFIG = %[
   @type collected_tail_monitor
@@ -30,34 +34,48 @@ class CollectedTailMonitorInputTest < Test::Unit::TestCase
     Fluent::Test::Driver::Input.new(Fluent::Plugin::CollectedTailMonitorInput).configure(conf)
   end
 
-  def test_labels_applied_to_metrics
+  def test_configure
     d = create_driver(MONITOR_CONFIG)
-    d.run do
-      d.instance.update_monitor_info
-
-      # Test /var/log/containers format
-    path = '/var/log/containers/mypodname_mynamespace_mycontainername-34646d7fb38199129ab8d0e6f41833d26e1826cba92571100fd6c53904a5317e.log'
-      labels = d.instance.labels({ 'plugin_id' => 'mypluginid', 'type' => 'input_plugin' }, path)
-      assert_equal('mynamespace', labels[:namespace])
-      assert_equal('mycontainername', labels[:containername])
-      assert_equal('mypodname', labels[:podname])
-      assert_equal('mypluginid', labels[:plugin_id])
-      assert_equal('bar', labels[:foo])
-
-      # Test /var/log/pods format
-      path = '/var/log/pods/mynamespace2_mypodname2_05682f61-8a44-47af-ae0f-41ad3792e20a/mycontainername2/1.log'
-      labels = d.instance.labels({ 'plugin_id' => 'mypluginid', 'type' => 'input_plugin' }, path)
-      assert_equal('mynamespace2', labels[:namespace])
-      assert_equal('mycontainername2', labels[:containername])
-      assert_equal('mypodname2', labels[:podname])
-      assert_equal('bar', labels[:foo])
-    end
   end
 
+  def test_labels_applied_to_metrics
+    conf = MONITOR_CONFIG
+    puts "passing this #{conf}"
+    d = create_driver(conf)
+    beforerunlabels = d.instance.instance_variable_get(:@base_labels)
+    puts "before base labels set to ...#{beforerunlabels}"
+    d.run {
+    d.instance.update_monitor_info()
+    postrunlabels = d.instance.instance_variable_get(:@base_labels)
+    path = "/tmp/tmp.log"
+    mergedlabels  = d.instance.labels({"plugin_id" => "mypluginid", "type" => "input_plugin"}, path)
+    puts "with logfilepath as #{path} post merging base labels set to ...#{mergedlabels}"
+
+    # Test /var/log/containers format
+    path = "/var/log/containers/mypodname_mynamespace_mycontainername-34646d7fb38199129ab8d0e6f41833d26e1826cba92571100fd6c53904a5317e.log"
+    newmergedlabels  = d.instance.labels({"plugin_id" => "mypluginid", "type" => "input_plugin"}, path)
+    puts "with logfilepath as #{path} post merging base labels set to ...#{newmergedlabels}"
+
+    assert_equal('mynamespace',newmergedlabels[:namespace])
+    assert_equal('mycontainername',newmergedlabels[:containername])
+    assert_equal('mypodname',newmergedlabels[:podname])
+
+
+    # Test /var/log/pods format
+    path = "/var/log/pods/mynamespace2_mypodname2_05682f61-8a44-47af-ae0f-41ad3792e20a/mycontainername2/1.log"
+    newmergedlabels  = d.instance.labels({"plugin_id" => "mypluginid", "type" => "input_plugin"}, path)
+    puts "with logfilepath as #{path} post merging base labels set to ...#{newmergedlabels}"
+    assert_equal('mypluginid',newmergedlabels[:plugin_id])
+    assert_equal('mynamespace2',newmergedlabels[:namespace])
+    assert_equal('mycontainername2',newmergedlabels[:containername])
+    assert_equal('mypodname2',newmergedlabels[:podname])
+    }
+ end
+
   def test_invalid_configure
-    assert_raise(Fluent::ConfigError) do
-      create_driver(INVALID_MONITOR_CONFIG)
-    end
+      assert_raise(Fluent::ConfigError) {
+        d = create_driver(INVALID_MONITOR_CONFIG)
+      }
   end
 
   test 'emit' do
@@ -66,8 +84,9 @@ class CollectedTailMonitorInputTest < Test::Unit::TestCase
 
     d.events.each do |tag, time, record|
       assert_equal('input.test', tag)
-      assert_equal({ 'plugin_id' => 'fluentd', 'type' => 'tail' }, record)
+      assert_equal({'plugin_id' => 'fluentd','type' => 'tail'}, record)
       assert(time.is_a?(Fluent::EventTime))
     end
   end
+
 end
