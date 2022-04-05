@@ -38,7 +38,7 @@ Note the bundler version should match the version from the end of `Gemfile.lock`
 ```
 rvm gemset create fluentd
 rvm gemset use fluentd
-gem install bundler -v 1.17.3
+gem install bundler -v 2.2.33
 bundle install
 ```
 
