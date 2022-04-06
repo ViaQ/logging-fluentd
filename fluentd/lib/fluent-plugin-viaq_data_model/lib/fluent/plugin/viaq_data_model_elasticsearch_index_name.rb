@@ -28,12 +28,12 @@ module ViaqDataModel
                     ein.instance_eval{ @params[:matcher] = matcher }
 
                     unless ein.structured_type_key.nil?
-                      ein.structured_type_key = ein.structured_type_key.split('.')
+                      ein.instance_eval{ @params[:structured_type_key] = ein.structured_type_key.split('.') }
                     end
 
                     unless ein.structured_type_annotation_prefix.nil?
                       if ein.structured_type_annotation_prefix[ein.structured_type_annotation_prefix.length - 1] == '/'
-                        ein.structured_type_annotation_prefix = ein.structured_type_annotation_prefix[0,ein.structured_type_annotation_prefix.length - 1]
+                        ein.instance_eval{ @params[:structured_type_annotation_prefix] = ein.structured_type_annotation_prefix[0,ein.structured_type_annotation_prefix.length - 1] }
                       end
                     end
                 end

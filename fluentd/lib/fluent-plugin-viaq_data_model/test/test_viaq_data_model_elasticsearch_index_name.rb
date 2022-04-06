@@ -54,7 +54,7 @@ class ViaqDataModelFilterTest < Test::Unit::TestCase
     end
 
     def configure_ein(name_type, static_index_name: '', enable: true, structured_type_name: nil, structured_type_key: nil, structured_type_annotation_prefix: nil)
-        ein = OpenStruct.new(
+        ein = Fluent::Config::Section.new({
             name_type: name_type,
             tag: '**', 
             enabled: enable,
@@ -62,11 +62,7 @@ class ViaqDataModelFilterTest < Test::Unit::TestCase
             structured_type_name: structured_type_name,
             structured_type_key: structured_type_key,
             structured_type_annotation_prefix: structured_type_annotation_prefix
-        )
-        ein.define_singleton_method(:matcher) do
-            @params[:matcher]
-          end
-        ein.instance_eval{@params = {}}
+        })
         @elasticsearch_index_names = [ein]
         configure_elasticsearch_index_names
     end
