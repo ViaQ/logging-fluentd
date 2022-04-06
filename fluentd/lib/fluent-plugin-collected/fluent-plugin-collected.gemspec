@@ -1,6 +1,6 @@
 Gem::Specification.new do |spec|
   spec.name          = "fluent-plugin-collected"
-  spec.version       = "1.0.0"
+  spec.version       = "1.1.0"
   spec.authors       = ["RedHat"]
   spec.email         = ["team-logging@redhat.com"]
   spec.homepage      = "https://github.com/openshift/origin-aggregated-logging/tree/master/fluentd/lib/fluent-plugin-collected"
@@ -13,12 +13,10 @@ Gem::Specification.new do |spec|
   spec.test_files    = spec.files.grep(%r{^(test|spec|features)/})
   spec.require_paths = ["lib"]
 
-  spec.add_dependency "fluentd", ">= 0.14.20", "< 2"
-  spec.add_dependency "prometheus-client", "< 0.10"
+  spec.add_dependency "fluentd", "=1.14.5"
+  spec.add_dependency "prometheus-client", ">=2.1.0"
   spec.add_development_dependency "rake", "~> 10.0"
   spec.add_development_dependency "test-unit", "~> 3.0"
   spec.add_development_dependency "test-unit-rr", "~> 1.0"
-  spec.add_development_dependency "fluent-plugin-prometheus", "~> 1.8.5"
-
-
+  spec.add_development_dependency "fluent-plugin-prometheus", "~> 2.0.2"
 end
