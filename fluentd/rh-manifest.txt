@@ -47,7 +47,7 @@ rubygem-http 4.4.1 https://github.com/httprb/http
 rubygem-http-cookie 1.0.4 https://github.com/sparklemotion/http-cookie
 rubygem-http-form_data 2.3.0 https://github.com/httprb/form_data.rb
 rubygem-http_parser.rb 0.6.0 http://github.com/tmm1/http_parser.rb
-rubygem-kubeclient 4.9.2 https://github.com/abonas/kubeclient
+rubygem-kubeclient 4.9.3 https://github.com/abonas/kubeclient
 rubygem-lru_redux 1.1.0 https://github.com/SamSaffron/lru_redux
 rubygem-mime-types 3.4.1 https://github.com/mime-types/ruby-mime-types/
 rubygem-mime-types-data 3.2022.0105 https://github.com/mime-types/mime-types-data/
@@ -60,7 +60,7 @@ rubygem-oj 3.11.3 http://www.ohler.com/oj
 rubygem-prometheus-client 0.9.0 https://github.com/prometheus/client_ruby
 rubygem-public_suffix 4.0.6 https://simonecarletti.com/code/publicsuffix-ruby
 rubygem-quantile 0.2.1 http://github.com/matttproud/ruby_quantile_estimation
-rubygem-rake 13.0.1 https://github.com/ruby/rake
+rubygem-rake 13.0.6 https://github.com/ruby/rake
 rubygem-recursive-open-struct 1.1.3 https://github.com/aetherknight/recursive-open-struct
 rubygem-rest-client 2.1.0 https://github.com/rest-client/rest-client
 rubygem-sigdump 0.2.4 https://github.com/frsyuki/sigdump
@@ -70,7 +70,7 @@ rubygem-typhoeus 1.4.0 https://github.com/typhoeus/typhoeus
 rubygem-tzinfo 2.0.2 https://tzinfo.github.io
 rubygem-tzinfo-data 1.2020.1 https://tzinfo.github.io
 rubygem-unf 0.1.4 https://github.com/knu/ruby-unf
-rubygem-unf_ext 0.0.8 https://github.com/knu/ruby-unf_ext
+rubygem-unf_ext 0.0.8.1 https://github.com/knu/ruby-unf_ext
 rubygem-uuidtools 2.1.5 https://github.com/sporkmonger/uuidtools
 rubygem-yajl-ruby 1.4.1 http://github.com/brianmario/yajl-ruby
 ruby-kafka 1.1.0 https://github.com/zendesk/ruby-kafka
