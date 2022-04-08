@@ -13,7 +13,9 @@ module Fluent::Plugin
     attr_reader :registry
 
     MONITOR_IVARS = [:tails].freeze
-    REGEX_LOG_PATH = Regexp.new('.*/(?<namespace>[a-z0-9-]+)_(?<pod_name>[a-z0-9-]+)_(?<pod_uuid>[a-z0-9-]+)/(?<container_name>[a-z0-9-]+)/.*\.log$').freeze
+    REGEX_LOG_PODS = Regexp.new('pods/(?<namespace>[a-z0-9-]+)_(?<pod_name>[a-z0-9-]+)_(?<pod_uuid>[a-z0-9-]+)/(?<container_name>[a-z0-9-]+)/.*\.log$').freeze
+    REGEX_LOG_CONTAINERS = Regexp.new('containers/(?<pod_name>[a-z0-9-]+)_(?<namespace>[a-z0-9-]+)_(?<container_name>[a-z0-9-]+)-(?<docker_id>[a-z0-9]{64})\.log$').freeze
+    REGEX_LOG_PATH=Regexp.new("(#{REGEX_LOG_PODS})|(#{REGEX_LOG_CONTAINERS})").freeze
 
     def initialize
       super
