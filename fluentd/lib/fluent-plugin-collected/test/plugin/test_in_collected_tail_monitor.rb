@@ -27,7 +27,7 @@ class CollectedTailMonitorInputTest < Test::Unit::TestCase
     create_driver(MONITOR_CONFIG)
   end
 
-  def test_labels
+  def test_labels_log_pods
     driver = create_driver(MONITOR_CONFIG)
     driver.run do
       driver.instance.update_monitor_info()
@@ -40,20 +40,19 @@ class CollectedTailMonitorInputTest < Test::Unit::TestCase
     end
   end
 
-  def test_regex
-    regex = Fluent::Plugin::CollectedTailMonitorInput::REGEX_LOG_PATH
-    path = '/var/log/pods/mynamespace2_mypodname2_05682f61-8a44-47af-ae0f-41ad3792e20a/mycontainername2/1.log'
-    assert_match(regex,path )
-    assert_equal(regex.match(path).to_a,
-                 [path,
-                  "mynamespace2",
-                  "mypodname2",
-                  "05682f61-8a44-47af-ae0f-41ad3792e20a",
-                  "mycontainername2"])
-    refute_match(regex, '/var/log/not-a-pod.log')
+  def test_labels_log_containers
+    driver = create_driver(MONITOR_CONFIG)
+    driver.run do
+      driver.instance.update_monitor_info()
+      path = '/var/log/containers/mypodname_mynamespace_mycontainername-34646d7fb38199129ab8d0e6f41833d26e1826cba92571100fd6c53904a5317e.log'
+      labels = driver.instance.labels({}, path)
+      assert_equal('mypodname', labels[:podname])
+      assert_equal('mynamespace', labels[:namespace])
+      assert_equal('mycontainername', labels[:containername])
+    end
   end
 
-  # Start a fluentd process and verify metrics are published for logs.
+  # Start a fluentd process and verify metrics with correct labels are published.
   def test_functional
     Dir.mktmpdir do |tmpdir|
       conf_path = File.join(tmpdir, "fluent.conf")
@@ -104,43 +103,39 @@ class CollectedTailMonitorInputTest < Test::Unit::TestCase
   @type null
 </match>
 ))
-      log_path = File.join(tmpdir, "fluent.log")
-      pod_log = File.join(tmpdir, 'mynamespace2_mypodname2_05682f61-8a44-47af-ae0f-41ad3792e20a/mycontainername2/1.log')
-      FileUtils.mkdir_p File.dirname(pod_log)
+      fluentd_log = File.join(tmpdir, "fluent.log")
+      pod_log = File.join(tmpdir, 'pods/mynamespace2_mypodname2_05682f61-8a44-47af-ae0f-41ad3792e20a/mycontainername2/1.log')
+      container_log = File.join(tmpdir, 'containers/mypodname_mynamespace_mycontainername-34646d7fb38199129ab8d0e6f41833d26e1826cba92571100fd6c53904a5317e.log')
+      [pod_log, container_log].each { |f| FileUtils.mkdir_p File.dirname(f) }
       uri = URI.parse("http://localhost:8888/metrics")
-      spawn_fluentd(tmpdir, ["-c", conf_path, "-o", log_path ]) do
+      spawn_fluentd(tmpdir, ["-c", conf_path, "-q", "-o", fluentd_log]) do
         Timeout.timeout(10) do
           File.write(pod_log, "hello\n")
-          response = Net::HTTP.get_response(uri)
+          File.write(container_log, "hello\n")
+          response = Net::HTTP.get_response(uri) rescue retry
           assert_equal(response.code, '200')
           assert_match(/.*TYPE log_collected_bytes_total counter.*/, response.body)
-          metrics = response.body.lines.grep(/^log_collected_bytes_total{.*/)
-          if !metrics.nil? && !metrics.empty?
-            assert_equal(metrics.size, 1)
-            metric = metrics[0]
-            assert_match(/hostname="#{Socket.gethostname}"/, metric)
-            assert_match(/namespace="mynamespace2"/,metric)
-            assert_match(/podname="mypodname2"/, metric)
-            assert_match(/poduuid="05682f61-8a44-47af-ae0f-41ad3792e20a"/, metric)
-            assert_match(/containername="mycontainername2"/, metric)
-            assert_match(/} 6.0$/, metric)
-          else
-            raise "retry"
-          end
-        rescue ::Test::Unit::AssertionFailedError
-          raise
-        rescue Exception => e
-          sleep 0.1
-          retry
+          metrics = response.body.lines.grep(/^log_collected_bytes_total{/)
+          redo if metrics.size < 2
+          assert_metrics_include?(metrics, "mynamespace2", "mypodname2", "05682f61-8a44-47af-ae0f-41ad3792e20a", "mycontainername2")
+          assert_metrics_include?(metrics, "mynamespace", "mypodname", "", "mycontainername")
         end
-      rescue
-        if File.exist? log_path
-          puts "================ fluent.log"
-          puts File.read(log_path)
-        end
-        raise
       end
+    rescue                      # Show the fluentd log file on failure
+      puts "==== fluent.log", File.read(fluentd_log), "====fluent.log ends"  if File.exist? fluentd_log
+      raise
     end
+  end
+
+  def assert_metrics_include?(metrics, namespace, pod, uuid, container)
+    patterns = [/hostname="#{Socket.gethostname}"/,
+                /namespace="#{namespace}"/,
+                /podname="#{pod}"/,
+                /poduuid="#{uuid}"/,
+                /containername="#{container}"/]
+    assert(
+      metrics.any?{|m| patterns.all?{|p| p.match(m)}},
+      "No match for [#{namespace}, #{pod}, #{uuid}, #{container}] in \n#{metrics.join}")
   end
 
   def spawn_fluentd(dir, args)
