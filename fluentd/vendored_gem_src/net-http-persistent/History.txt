@@ -1,4 +1,49 @@
-=== 3.1.0 2019-07-24
+=== 4.0.1 / 2021-01-12
+
+Bug fixes:
+
+* Loosen Ruby version requirement so Ruby 3.0 will work.
+
+=== 4.0.0 / 2020-04-30
+
+Breaking changes:
+
+* Removed built-in support for retrying failed requests as Net::HTTP has this
+  built-in for all supported versions.  Pull request #100 by Michael Grosser.
+* Dropped support for EoL ruby versions (< 2.4).  Future feature releases may
+  drop support for ruby versions that are at end-of-life or in security-only
+  maintenance mode with any release.  Pull request #113 by David Rodríguez
+
+New features:
+
+* Added Net::HTTP::Persistent#max_retries= to configure the number of retries
+  performed on a request for ruby versions that support it (2.5+).
+* URI-ness is determined through #respond_to? to allow compatibility with
+  Addressable::URI.  Pull request #67 by Ryan McKern.
+* Use require_relative to reduce patch burden for vendored versions.  Pull
+  Request #106 by David Rodríguez
+
+Bug fixes:
+
+* Stop wasting a connection when the keep-alive timeout is less than the idle
+  timeout.  Pull request #115 by Yap Sok Ann.
+* Improved use of URI#hostname for IPv6 connections.  Pull request #76 by
+  Tomas Koutsky.
+* Improved check for Process::RLIMIT_NOFILE support.  Pull request #109 by Vít
+  Ondruch.
+* Fix namespace in comments for escape/unescape wrappers.  Pull request #114
+  by David Rodríguez.
+* Fix History.txt timestamp for 3.0.0 release.  Pull request #107 by Joe Van
+  Dyk.
+* Fix link to PR #98 in 3.1.0 release notes.  Pull request #110 by Justin
+  Reid.
+
+Other:
+
+* Updated Net::HTTP::Persistent#reconnect documentation to indicate that all
+  connections are reset.  Issue #117 by Taisuke Miyazaki.
+
+=== 3.1.0 / 2019-07-24
 
 New features:
 * Support ruby 2.6 Net::HTTP#write_timeout=.  Pull request #99 by Víctor
@@ -23,7 +68,7 @@ Bug fixes:
   Kauppila.
 * Fix missing +name:+ argument in documentation.  Pull requests #85 by T.J.
   Schuck, #84 by James White.
-* Fix memory leak from connection pooling.  Pull request #97 by Aaron
+* Fix memory leak from connection pooling.  Pull request #98 by Aaron
   Patterson.
 * Update tests for minitest assert_equal deprecation.  Pull request #92 by
   Olle Jonsson.
@@ -35,7 +80,7 @@ Other:
 * Updated ruby versions in Travis CI.  Pull request #93 by Olle Jonsson.  Pull
   request #103 by Michael Grosser.
 
-=== 3.0 2016-10-05
+=== 3.0 / 2016-10-05
 
 Breaking changes:
 

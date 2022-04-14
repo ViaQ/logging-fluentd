@@ -26,9 +26,8 @@ module Elasticsearch
         # @option arguments [Number] :snapshots Number of samples of thread stacktrace (default: 10)
         # @option arguments [Number] :threads Specify the number of threads to provide information for (default: 3)
         # @option arguments [Boolean] :ignore_idle_threads Don't show threads that are in known-idle places, such as waiting on a socket select or pulling from an empty task queue (default: true)
-        # @option arguments [String] :type The type to sample (default: cpu)
-        #   (options: cpu,wait,block)
-
+        # @option arguments [String] :type The type to sample (default: cpu) (options: cpu, wait, block, mem)
+        # @option arguments [String] :sort The sort order for 'cpu' type (default: total) (options: cpu, total)
         # @option arguments [Time] :timeout Explicit operation timeout
         # @option arguments [Hash] :headers Custom HTTP headers
         #
@@ -37,7 +36,7 @@ module Elasticsearch
         # Deprecated since version 7.0.0
         #
         #
-        # @see https://www.elastic.co/guide/en/elasticsearch/reference/7.8/cluster-nodes-hot-threads.html
+        # @see https://www.elastic.co/guide/en/elasticsearch/reference/7.17/cluster-nodes-hot-threads.html
         #
         def hot_threads(arguments = {})
           headers = arguments.delete(:headers) || {}
@@ -51,7 +50,7 @@ module Elasticsearch
                      "_cluster/nodes/#{Utils.__listify(_node_id)}/hot_threads"
                    else
                      "_cluster/nodes/hot_threads"
-      end
+                   end
           params = Utils.__validate_and_extract_params arguments, ParamsRegistry.get(__method__)
 
           body = nil
@@ -67,9 +66,10 @@ module Elasticsearch
           :threads,
           :ignore_idle_threads,
           :type,
+          :sort,
           :timeout
         ].freeze)
-end
       end
+    end
   end
 end

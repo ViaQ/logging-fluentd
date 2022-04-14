@@ -1,12 +1,12 @@
 FROM registry.access.redhat.com/ubi8/ruby-27
 
-ENV FLUENTD_VERSION=1.14.5 \
+ENV FLUENTD_VERSION=1.14.6 \
     WORKDIR=/tmp/fluentd/lib
 
 USER 0
 
 ENV GEM_HOME=/tmp/vendor
-RUN gem install rake:13.0.6 bundler:2.2.33 --no-ri --no-doc
+RUN gem install rake:13.0.6
 WORKDIR ${WORKDIR}
 COPY run-unit-tests.sh /tmp/
 ENTRYPOINT /tmp/run-unit-tests.sh

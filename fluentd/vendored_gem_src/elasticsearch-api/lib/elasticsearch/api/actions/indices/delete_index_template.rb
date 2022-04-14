@@ -26,7 +26,7 @@ module Elasticsearch
         # @option arguments [Time] :master_timeout Specify timeout for connection to master
         # @option arguments [Hash] :headers Custom HTTP headers
         #
-        # @see https://www.elastic.co/guide/en/elasticsearch/reference/7.8/indices-templates.html
+        # @see https://www.elastic.co/guide/en/elasticsearch/reference/7.17/indices-templates.html
         #
         def delete_index_template(arguments = {})
           raise ArgumentError, "Required argument 'name' missing" unless arguments[:name]
@@ -42,7 +42,11 @@ module Elasticsearch
           params = Utils.__validate_and_extract_params arguments, ParamsRegistry.get(__method__)
 
           body = nil
-          perform_request(method, path, params, body, headers).body
+          if Array(arguments[:ignore]).include?(404)
+            Utils.__rescue_from_not_found { perform_request(method, path, params, body, headers).body }
+          else
+            perform_request(method, path, params, body, headers).body
+          end
         end
 
         # Register this action with its valid params when the module is loaded.
@@ -52,7 +56,7 @@ module Elasticsearch
           :timeout,
           :master_timeout
         ].freeze)
-end
       end
+    end
   end
 end

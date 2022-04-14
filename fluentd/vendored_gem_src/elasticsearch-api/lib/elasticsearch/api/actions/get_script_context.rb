@@ -22,7 +22,7 @@ module Elasticsearch
       #
       # @option arguments [Hash] :headers Custom HTTP headers
       #
-      # @see https://www.elastic.co/guide/en/elasticsearch/painless/7.8/painless-contexts.html
+      # @see https://www.elastic.co/guide/en/elasticsearch/painless/7.17/painless-contexts.html
       #
       def get_script_context(arguments = {})
         headers = arguments.delete(:headers) || {}
@@ -37,5 +37,5 @@ module Elasticsearch
         perform_request(method, path, params, body, headers).body
       end
     end
-    end
+  end
 end

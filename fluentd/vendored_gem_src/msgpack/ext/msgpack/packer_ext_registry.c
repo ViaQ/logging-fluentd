@@ -43,12 +43,18 @@ void msgpack_packer_ext_registry_mark(msgpack_packer_ext_registry_t* pkrg)
 void msgpack_packer_ext_registry_dup(msgpack_packer_ext_registry_t* src,
         msgpack_packer_ext_registry_t* dst)
 {
-    dst->hash = RTEST(src->hash) ? rb_hash_dup(src->hash) : Qnil;
-    dst->cache = RTEST(src->cache) ? rb_hash_dup(src->cache): Qnil;
+    if(RTEST(src->hash) && !rb_obj_frozen_p(src->hash)) {
+        dst->hash = rb_hash_dup(src->hash);
+        dst->cache = RTEST(src->cache) ? rb_hash_dup(src->cache) : Qnil;
+    } else {
+        // If the type registry is frozen we can safely share it, and share the cache as well.
+        dst->hash = src->hash;
+        dst->cache = src->cache;
+    }
 }
 
 VALUE msgpack_packer_ext_registry_put(msgpack_packer_ext_registry_t* pkrg,
-        VALUE ext_module, int ext_type, VALUE proc, VALUE arg)
+        VALUE ext_module, int ext_type, int flags, VALUE proc, VALUE arg)
 {
     if (!RTEST(pkrg->hash)) {
         pkrg->hash = rb_hash_new();
@@ -58,5 +64,8 @@ VALUE msgpack_packer_ext_registry_put(msgpack_packer_ext_registry_t* pkrg,
         /* clear lookup cache not to miss added type */
         rb_hash_clear(pkrg->cache);
     }
-    return rb_hash_aset(pkrg->hash, ext_module, rb_ary_new3(3, INT2FIX(ext_type), proc, arg));
+
+    // TODO: Ruby embeded array limit is 3, merging `proc` and `arg` would be good.
+    VALUE entry = rb_ary_new3(4, INT2FIX(ext_type), proc, arg, INT2FIX(flags));
+    return rb_hash_aset(pkrg->hash, ext_module, entry);
 }
