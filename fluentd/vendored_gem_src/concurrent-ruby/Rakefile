@@ -2,15 +2,6 @@ require_relative 'lib/concurrent-ruby/concurrent/version'
 require_relative 'lib/concurrent-ruby-edge/concurrent/edge/version'
 require_relative 'lib/concurrent-ruby/concurrent/utility/engine'
 
-if Concurrent.ruby_version :<, 2, 0, 0
-  # @!visibility private
-  module Kernel
-    def __dir__
-      File.dirname __FILE__
-    end
-  end
-end
-
 core_gemspec = Gem::Specification.load File.join(__dir__, 'concurrent-ruby.gemspec')
 ext_gemspec  = Gem::Specification.load File.join(__dir__, 'concurrent-ruby-ext.gemspec')
 edge_gemspec = Gem::Specification.load File.join(__dir__, 'concurrent-ruby-edge.gemspec')
@@ -24,7 +15,7 @@ Rake::JavaExtensionTask.new('concurrent_ruby', core_gemspec) do |ext|
   ext.lib_dir = 'lib/concurrent-ruby/concurrent'
 end
 
-unless Concurrent.on_jruby?
+unless Concurrent.on_jruby? || Concurrent.on_truffleruby?
   require 'rake/extensiontask'
 
   Rake::ExtensionTask.new('concurrent_ruby_ext', ext_gemspec) do |ext|
@@ -77,8 +68,7 @@ begin
       options      = %w[ --color
                     --backtrace
                     --order defined
-                    --format documentation
-                    --tag ~notravis ]
+                    --format documentation ]
       t.rspec_opts = [*options].join(' ')
     end
 

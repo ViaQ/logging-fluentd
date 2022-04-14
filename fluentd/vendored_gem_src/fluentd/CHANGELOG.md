@@ -1,4 +1,40 @@
-# v1.14.5
+# v1.14
+
+## Release v1.14.6 - 2022/03/31
+
+### Enhancement
+
+* Enable server plugins to specify socket-option `SO_LINGER`
+  https://github.com/fluent/fluentd/pull/3644
+* Add `--umask` command line parameter
+  https://github.com/fluent/fluentd/pull/3671
+  https://github.com/fluent/fluentd/pull/3679
+
+### Bug fixes
+
+* Fix metric name typo
+  https://github.com/fluent/fluentd/pull/3630
+  https://github.com/fluent/fluentd/pull/3673
+* Apply modifications in pipeline to the records being passed to `@ERROR` label
+  https://github.com/fluent/fluentd/pull/3631
+* Fix wrong calculation of retry interval
+  https://github.com/fluent/fluentd/pull/3640
+  https://github.com/fluent/fluentd/pull/3649
+  https://github.com/fluent/fluentd/pull/3685
+  https://github.com/fluent/fluentd/pull/3686
+* Support IPv6 address for `rpc_endpoint` in `system` config
+  https://github.com/fluent/fluentd/pull/3641
+
+### Misc
+
+* CI: Support Ruby 3.1 except Windows
+  https://github.com/fluent/fluentd/pull/3619
+* Switch to GitHub Discussions
+  https://github.com/fluent/fluentd/pull/3654
+* Fix CHANGELOG.md heading styles
+  https://github.com/fluent/fluentd/pull/3648
+* Declare `null_value_pattern` as `regexp`
+  https://github.com/fluent/fluentd/pull/3650
 
 ## Release v1.14.5 - 2022/02/09
 
@@ -22,8 +58,6 @@
 * Fix "ArgumentError: unknown keyword: :logger" on Windows with Ruby 3.1
   https://github.com/fluent/fluentd/pull/3592
 
-# v1.14.4
-
 ## Release v1.14.4 - 2022/01/06
 
 ### Enhancement
@@ -40,8 +74,6 @@
 * test: Fix unstable test cases
   https://github.com/fluent/fluentd/pull/3574
   https://github.com/fluent/fluentd/pull/3577
-
-# v1.14.3
 
 ## Release v1.14.3 - 2021/11/26
 
@@ -71,8 +103,6 @@
   newer version is required to implement additional `fluent-ctl` commands.
   https://github.com/fluent/fluentd/pull/3556
 
-# v1.14.2
-
 ## Release v1.14.2 - 2021/10/29
 
 IMPORTANT: This release contain the fix for CVE-2021-41186 -
@@ -84,6 +114,7 @@ We recommend to upgrade Fluentd to v1.14.2 or use patched version of
 ### Enhancement
 
 * fluent-cat: Add `--event-time` option to send specified event time for testing.
+  https://github.com/fluent/fluentd/pull/3528
 
 ### Bug fix
 
@@ -91,8 +122,6 @@ We recommend to upgrade Fluentd to v1.14.2 or use patched version of
   https://github.com/fluent/fluentd/pull/3524
 * Fixed ReDoS vulnerability in parser_apache2.
   This vulnerability is caused by a certain pattern of a broken apache log.
-
-# v1.14.1
 
 ## Release v1.14.1 - 2021/09/29
 
@@ -122,8 +151,6 @@ We recommend to upgrade Fluentd to v1.14.2 or use patched version of
   Then, inappropriate labels in log are also fixed. (retry_time -> retry_times,
   next_retry_seconds -> next_retry_time)
   https://github.com/fluent/fluentd/pull/3518
-
-# v1.14.0
 
 ## Release v1.14.0 - 2021/08/30
 
@@ -167,7 +194,7 @@ We recommend to upgrade Fluentd to v1.14.2 or use patched version of
   https://github.com/fluent/fluentd/pull/3479
   https://github.com/fluent/fluentd/pull/3484
 
-# v1.13.3
+# v1.13
 
 ## Release v1.13.3 - 2021/07/27
 
@@ -188,10 +215,6 @@ We recommend to upgrade Fluentd to v1.14.2 or use patched version of
 
 * Remove needless spaces in a sample config file
   https://github.com/fluent/fluentd/pull/3456
-
-### Enhancement
-
-# v1.13.2
 
 ## Release v1.13.2 - 2021/07/12
 
@@ -228,8 +251,6 @@ We recommend to upgrade Fluentd to v1.14.2 or use patched version of
   by security scanning tools.
   https://github.com/fluent/fluentd/pull/3450
 
-# v1.13.1
-
 ## Release v1.13.1 - 2021/06/25
 
 ### Bug fix
@@ -253,8 +274,6 @@ We recommend to upgrade Fluentd to v1.14.2 or use patched version of
   https://github.com/fluent/fluentd/pull/3398
 * CI: Dropped to run CI for Ruby 2.5
   https://github.com/fluent/fluentd/pull/3412
-
-# v1.13
 
 ## Release v1.13.0 - 2021/05/29
 
@@ -303,6 +322,7 @@ We recommend to upgrade Fluentd to v1.14.2 or use patched version of
 ### Bug fix
 
 * in_tail: Fix a bug that refresh_watcher fails to handle file rotations
+  https://github.com/fluent/fluentd/pull/3393
 
 ## Release v1.12.3 - 2021/04/23
 

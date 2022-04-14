@@ -283,6 +283,168 @@ describe MessagePack::Factory do
         it { is_expected.to eq "unpacked module" }
       end
     end
+
+    describe "registering an ext type for Integer" do
+      let(:factory) { described_class.new }
+      let(:bigint) { 10**150 }
+
+      it 'does not work by default without passing `oversized_integer_extension: true`' do
+        factory.register_type(0x01, Integer, packer: :to_s, unpacker: method(:Integer))
+
+        expect do
+          factory.dump(bigint)
+        end.to raise_error RangeError
+      end
+
+      it 'raises ArgumentError if the type is not Integer' do
+        expect do
+          factory.register_type(0x01, MyType, packer: :to_s, unpacker: method(:Integer), oversized_integer_extension: true)
+        end.to raise_error(ArgumentError)
+      end
+
+      it 'invokes the packer if registered with `oversized_integer_extension: true`' do
+        factory.register_type(0x01, Integer, packer: :to_s, unpacker: method(:Integer), oversized_integer_extension: true)
+
+        expect(factory.load(factory.dump(bigint))).to be == bigint
+      end
+
+      it 'does not use the oversized_integer_extension packer for integers fitting in native types' do
+        factory.register_type(
+          0x01,
+          Integer,
+          packer: ->(int) { raise NotImplementedError },
+          unpacker: ->(payload) { raise NotImplementedError },
+          oversized_integer_extension: true
+        )
+
+        expect(factory.dump(42)).to eq(MessagePack.dump(42))
+      end
+    end
+
+    describe "registering ext type with recursive serialization" do
+      before do
+        stub_const("Point", Struct.new(:x, :y, :z))
+      end
+
+      it 'can receive the packer as argument (proc)' do
+        factory = MessagePack::Factory.new
+        factory.register_type(0x00, Symbol)
+        factory.register_type(
+          0x01,
+          Point,
+          packer: ->(point, packer) do
+            packer.write(point.to_h)
+            nil
+          end,
+          unpacker: ->(unpacker) do
+            attrs = unpacker.read
+            Point.new(attrs.fetch(:x), attrs.fetch(:y), attrs.fetch(:z))
+          end,
+          recursive: true,
+        )
+
+        point = Point.new(1, 2, 3)
+        payload = factory.dump(point)
+        expect(factory.load(payload)).to be == point
+      end
+
+      it 'can receive the packer as argument (Method)' do
+        mod = Module.new
+        mod.define_singleton_method(:packer) do |point, packer|
+          packer.write(point.to_h)
+          nil
+        end
+
+        mod.define_singleton_method(:unpacker) do |unpacker|
+          attrs = unpacker.read
+          Point.new(attrs.fetch(:x), attrs.fetch(:y), attrs.fetch(:z))
+        end
+
+        factory = MessagePack::Factory.new
+        factory.register_type(0x00, Symbol)
+        factory.register_type(
+          0x01,
+          Point,
+          packer: mod.method(:packer),
+          unpacker: mod.method(:unpacker),
+          recursive: true,
+        )
+
+        point = Point.new(1, 2, 3)
+        payload = factory.dump(point)
+        expect(factory.load(payload)).to be == point
+      end
+
+      it 'respect message pack format' do
+        factory = MessagePack::Factory.new
+        factory.register_type(0x00, Symbol)
+        factory.register_type(
+          0x01,
+          Point,
+          packer: ->(point, packer) do
+            packer.write(point.to_a)
+            nil
+          end,
+          unpacker: ->(unpacker) do
+            attrs = unpacker.read
+            Point.new(*attrs)
+          end,
+          recursive: true,
+        )
+
+        point = Point.new(1, 2, 3)
+        expect(factory.dump(point)).to be == "\xD6\x01".b + MessagePack.dump([1, 2, 3])
+      end
+
+      it 'sets the correct length' do
+        factory = MessagePack::Factory.new
+        factory.register_type(0x00, Symbol)
+        factory.register_type(
+          0x01,
+          Point,
+          packer: ->(point, packer) do
+            packer.write(point.to_h)
+            nil
+          end,
+          unpacker: ->(unpacker) do
+            attrs = unpacker.read
+            Point.new(attrs.fetch(:x), attrs.fetch(:y), attrs.fetch(:z))
+          end,
+          recursive: true,
+        )
+
+        point = Point.new(1, 2, 3)
+        payload = factory.dump([1, point, 3])
+
+        obj = MessagePack::Factory.new.load(payload, allow_unknown_ext: true)
+        expect(obj).to be == [
+          1,
+          MessagePack::ExtensionValue.new(1, factory.dump(x: 1, y: 2, z: 3)),
+          3,
+        ]
+      end
+
+      it 'can be nested' do
+        factory = MessagePack::Factory.new
+        factory.register_type(
+          0x02,
+          Set,
+          packer: ->(set, packer) do
+            packer.write(set.to_a)
+            nil
+          end,
+          unpacker: ->(unpacker) do
+            unpacker.read.to_set
+          end,
+          recursive: true,
+        )
+
+        expected = Set[1, Set[2, Set[3]]]
+        payload = factory.dump(expected)
+        expect(payload).to be == "\xC7\v\x02\x92\x01\xC7\x06\x02\x92\x02\xD5\x02\x91\x03".b
+        expect(factory.load(factory.dump(expected))).to be == expected
+      end
+    end
   end
 
   describe 'the special treatment of symbols with ext type' do
@@ -435,6 +597,58 @@ describe MessagePack::Factory do
 
       dm2 = DummyTimeStamp1.new(t.to_i, t.usec)
       expect(MessagePack.unpack(MessagePack.pack(dm2))).to eq(dm2)
+    end
+  end
+
+  describe '#pool' do
+    let(:factory) { described_class.new }
+
+    it 'responds to serializers interface' do
+      pool = factory.pool(1)
+      expect(pool.load(pool.dump(42))).to be == 42
+    end
+
+    it 'types can be registered before the pool is created' do
+      factory.register_type(0x00, Symbol)
+      pool = factory.pool(1)
+      expect(pool.load(pool.dump(:foo))).to be == :foo
+    end
+
+    it 'types cannot be registered after the pool is created' do
+      pool = factory.pool(1)
+      factory.register_type(0x20, ::MyType)
+
+      expect do
+        pool.dump(MyType.new(1, 2))
+      end.to raise_error NoMethodError
+
+      payload = factory.dump(MyType.new(1, 2))
+      expect do
+        pool.load(payload)
+      end.to raise_error MessagePack::UnknownExtTypeError
+    end
+
+    it 'support symbolize_keys: true' do
+      pool = factory.pool(1, symbolize_keys: true)
+      expect(pool.load(pool.dump('foo' => 1))).to be == { foo: 1 }
+    end
+
+    it 'support freeze: true' do
+      pool = factory.pool(1, freeze: true)
+      expect(pool.load(pool.dump('foo'))).to be_frozen
+    end
+
+    it 'is thread safe' do
+      pool = factory.pool(1)
+
+      threads = 10.times.map do
+        Thread.new do
+          1_000.times do |i|
+            expect(pool.load(pool.dump(i))).to be == i
+          end
+        end
+      end
+      threads.each(&:join)
     end
   end
 end

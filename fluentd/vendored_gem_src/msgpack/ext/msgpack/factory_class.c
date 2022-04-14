@@ -31,6 +31,7 @@ typedef struct msgpack_factory_t msgpack_factory_t;
 struct msgpack_factory_t {
     msgpack_packer_ext_registry_t pkrg;
     msgpack_unpacker_ext_registry_t *ukrg;
+    bool has_bigint_ext_type;
     bool has_symbol_ext_type;
     bool optimized_symbol_ext_type;
     int symbol_ext_type;
@@ -87,6 +88,41 @@ static VALUE Factory_initialize(int argc, VALUE* argv, VALUE self)
     return Qnil;
 }
 
+static VALUE Factory_dup(VALUE self)
+{
+    VALUE clone = Factory_alloc(rb_obj_class(self));
+
+    FACTORY(self, fc);
+    FACTORY(clone, cloned_fc);
+
+    cloned_fc->has_symbol_ext_type = fc->has_symbol_ext_type;
+    cloned_fc->pkrg = fc->pkrg;
+    msgpack_unpacker_ext_registry_borrow(fc->ukrg, &cloned_fc->ukrg);
+    msgpack_packer_ext_registry_dup(&fc->pkrg, &cloned_fc->pkrg);
+
+    return clone;
+}
+
+static VALUE Factory_freeze(VALUE self) {
+    if(!rb_obj_frozen_p(self)) {
+        FACTORY(self, fc);
+
+        if (RTEST(fc->pkrg.hash)) {
+            rb_hash_freeze(fc->pkrg.hash);
+            if (!RTEST(fc->pkrg.cache)) {
+                // If the factory is frozen, we can safely share the packer cache between
+                // all packers. So we eagerly create it now so it's available when #packer
+                // is called.
+                fc->pkrg.cache = rb_hash_new();
+            }
+        }
+
+        rb_obj_freeze(self);
+    }
+
+    return self;
+}
+
 VALUE MessagePack_Factory_packer(int argc, VALUE* argv, VALUE self)
 {
     FACTORY(self, fc);
@@ -99,6 +135,7 @@ VALUE MessagePack_Factory_packer(int argc, VALUE* argv, VALUE self)
 
     msgpack_packer_ext_registry_destroy(&pk->ext_registry);
     msgpack_packer_ext_registry_dup(&fc->pkrg, &pk->ext_registry);
+    pk->has_bigint_ext_type = fc->has_bigint_ext_type;
     pk->has_symbol_ext_type = fc->has_symbol_ext_type;
 
     return packer;
@@ -145,6 +182,7 @@ static VALUE Factory_register_type(int argc, VALUE* argv, VALUE self)
     FACTORY(self, fc);
 
     int ext_type;
+    int flags = 0;
     VALUE ext_module;
     VALUE options = Qnil;
     VALUE packer_arg, unpacker_arg;
@@ -171,6 +209,10 @@ static VALUE Factory_register_type(int argc, VALUE* argv, VALUE self)
         break;
     default:
         rb_raise(rb_eArgError, "wrong number of arguments (%d for 2..3)", argc);
+    }
+
+    if (options != Qnil) {
+        Check_Type(options, T_HASH);
     }
 
     ext_type = NUM2INT(argv[0]);
@@ -200,16 +242,29 @@ static VALUE Factory_register_type(int argc, VALUE* argv, VALUE self)
         }
     }
 
-    msgpack_packer_ext_registry_put(&fc->pkrg, ext_module, ext_type, packer_proc, packer_arg);
-
-    if (ext_module == rb_cSymbol) {
+    if(ext_module == rb_cSymbol) {
         fc->has_symbol_ext_type = true;
-        if(RB_TEST(options) && RB_TEST(rb_hash_aref(options, ID2SYM(rb_intern("optimized_symbols_parsing"))))) {
+        if(RTEST(options) && RTEST(rb_hash_aref(options, ID2SYM(rb_intern("optimized_symbols_parsing"))))) {
             fc->optimized_symbol_ext_type = true;
         }
     }
 
-    msgpack_unpacker_ext_registry_put(&fc->ukrg, ext_module, ext_type, unpacker_proc, unpacker_arg);
+    if(RTEST(options)) {
+        if(RTEST(rb_hash_aref(options, ID2SYM(rb_intern("oversized_integer_extension"))))) {
+            if(ext_module == rb_cInteger) {
+                fc->has_bigint_ext_type = true;
+            } else {
+                rb_raise(rb_eArgError, "oversized_integer_extension: true is only for Integer class");
+            }
+        }
+
+        if(RTEST(rb_hash_aref(options, ID2SYM(rb_intern("recursive"))))) {
+            flags |= MSGPACK_EXT_RECURSIVE;
+        }
+    }
+
+    msgpack_packer_ext_registry_put(&fc->pkrg, ext_module, ext_type, flags, packer_proc, packer_arg);
+    msgpack_unpacker_ext_registry_put(&fc->ukrg, ext_module, ext_type, flags, unpacker_proc, unpacker_arg);
 
     return Qnil;
 }
@@ -221,6 +276,8 @@ void MessagePack_Factory_module_init(VALUE mMessagePack)
     rb_define_alloc_func(cMessagePack_Factory, Factory_alloc);
 
     rb_define_method(cMessagePack_Factory, "initialize", Factory_initialize, -1);
+    rb_define_method(cMessagePack_Factory, "dup", Factory_dup, 0);
+    rb_define_method(cMessagePack_Factory, "freeze", Factory_freeze, 0);
 
     rb_define_method(cMessagePack_Factory, "packer", MessagePack_Factory_packer, -1);
     rb_define_method(cMessagePack_Factory, "unpacker", MessagePack_Factory_unpacker, -1);

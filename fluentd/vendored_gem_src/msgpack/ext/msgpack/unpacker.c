@@ -52,6 +52,16 @@ void msgpack_unpacker_static_destroy()
 
 #define HEAD_BYTE_REQUIRED 0xc1
 
+static inline msgpack_unpacker_stack_t* _msgpack_unpacker_new_stack(void) {
+#ifdef UNPACKER_STACK_RMEM
+    return msgpack_rmem_alloc(&s_stack_rmem);
+    /*memset(uk->stack, 0, MSGPACK_UNPACKER_STACK_CAPACITY);*/
+#else
+    /*uk->stack = calloc(MSGPACK_UNPACKER_STACK_CAPACITY, sizeof(msgpack_unpacker_stack_t));*/
+    return xmalloc(MSGPACK_UNPACKER_STACK_CAPACITY * sizeof(msgpack_unpacker_stack_t));
+#endif
+}
+
 msgpack_unpacker_t* _msgpack_unpacker_new(void)
 {
     msgpack_unpacker_t* uk = ZALLOC_N(msgpack_unpacker_t, 1);
@@ -63,26 +73,23 @@ msgpack_unpacker_t* _msgpack_unpacker_new(void)
     uk->last_object = Qnil;
     uk->reading_raw = Qnil;
 
-#ifdef UNPACKER_STACK_RMEM
-    uk->stack = msgpack_rmem_alloc(&s_stack_rmem);
-    /*memset(uk->stack, 0, MSGPACK_UNPACKER_STACK_CAPACITY);*/
-#else
-    /*uk->stack = calloc(MSGPACK_UNPACKER_STACK_CAPACITY, sizeof(msgpack_unpacker_stack_t));*/
-    uk->stack = xmalloc(MSGPACK_UNPACKER_STACK_CAPACITY * sizeof(msgpack_unpacker_stack_t));
-#endif
+    uk->stack = _msgpack_unpacker_new_stack();
     uk->stack_capacity = MSGPACK_UNPACKER_STACK_CAPACITY;
 
     return uk;
 }
 
+static inline void _msgpack_unpacker_free_stack(msgpack_unpacker_stack_t* stack) {
+    #ifdef UNPACKER_STACK_RMEM
+        msgpack_rmem_free(&s_stack_rmem, stack);
+    #else
+        xfree(stack);
+    #endif
+}
+
 void _msgpack_unpacker_destroy(msgpack_unpacker_t* uk)
 {
-#ifdef UNPACKER_STACK_RMEM
-    msgpack_rmem_free(&s_stack_rmem, uk->stack);
-#else
-    xfree(uk->stack);
-#endif
-
+    _msgpack_unpacker_free_stack(uk->stack);
     msgpack_buffer_destroy(UNPACKER_BUFFER_(uk));
 }
 
@@ -166,14 +173,17 @@ static inline int object_complete_ext(msgpack_unpacker_t* uk, int ext_type, VALU
         return object_complete_symbol(uk, rb_str_intern(str));
     }
 
-    VALUE proc = msgpack_unpacker_ext_registry_lookup(uk->ext_registry, ext_type);
+    int ext_flags;
+    VALUE proc = msgpack_unpacker_ext_registry_lookup(uk->ext_registry, ext_type, &ext_flags);
+
     if(proc != Qnil) {
-        VALUE obj = rb_funcall(proc, s_call, 1, str);
+        VALUE obj;
+        obj = rb_funcall(proc, s_call, 1, str == Qnil ? rb_str_buf_new(0) : str);
         return object_complete(uk, obj);
     }
 
     if(uk->allow_unknown_ext) {
-        VALUE obj = MessagePack_ExtensionValue_new(ext_type, str);
+        VALUE obj = MessagePack_ExtensionValue_new(ext_type, str == Qnil ? rb_str_buf_new(0) : str);
         return object_complete(uk, obj);
     }
 
@@ -283,6 +293,38 @@ static inline int read_raw_body_begin(msgpack_unpacker_t* uk, int raw_type)
 {
     /* assuming uk->reading_raw == Qnil */
 
+    int ext_flags;
+    VALUE proc;
+
+    if(!(raw_type == RAW_TYPE_STRING || raw_type == RAW_TYPE_BINARY)) {
+        proc = msgpack_unpacker_ext_registry_lookup(uk->ext_registry, raw_type, &ext_flags);
+        if(proc != Qnil && ext_flags & MSGPACK_EXT_RECURSIVE) {
+            VALUE obj;
+            uk->last_object = Qnil;
+            reset_head_byte(uk);
+            size_t ext_size = uk->reading_raw_remaining;
+            uk->reading_raw_remaining = 0;
+
+            msgpack_unpacker_stack_t* stack = uk->stack;
+            size_t stack_depth = uk->stack_depth;
+            size_t stack_capacity = uk->stack_capacity;
+
+            uk->stack = _msgpack_unpacker_new_stack();
+            uk->stack_depth = 0;
+            uk->stack_capacity = MSGPACK_UNPACKER_STACK_CAPACITY;
+
+            obj = rb_funcall(proc, s_call, 1, uk->buffer.owner);
+
+            _msgpack_unpacker_free_stack(uk->stack);
+            uk->stack = stack;
+            uk->stack_depth = stack_depth;
+            uk->stack_capacity = stack_capacity;
+
+            msgpack_buffer_skip(UNPACKER_BUFFER_(uk), ext_size);
+            return object_complete(uk, obj);
+        }
+    }
+
     /* try optimized read */
     size_t length = uk->reading_raw_remaining;
     if(length <= msgpack_buffer_top_readable_size(UNPACKER_BUFFER_(uk))) {
@@ -371,7 +413,7 @@ static int read_primitive(msgpack_unpacker_t* uk)
                 uint8_t length = cb->u8;
                 int ext_type = (signed char) cb->buffer[1];
                 if(length == 0) {
-                    return object_complete_ext(uk, ext_type, rb_str_buf_new(0));
+                    return object_complete_ext(uk, ext_type, Qnil);
                 }
                 uk->reading_raw_remaining = length;
                 return read_raw_body_begin(uk, ext_type);
@@ -383,7 +425,7 @@ static int read_primitive(msgpack_unpacker_t* uk)
                 uint16_t length = _msgpack_be16(cb->u16);
                 int ext_type = (signed char) cb->buffer[2];
                 if(length == 0) {
-                    return object_complete_ext(uk, ext_type, rb_str_buf_new(0));
+                    return object_complete_ext(uk, ext_type, Qnil);
                 }
                 uk->reading_raw_remaining = length;
                 return read_raw_body_begin(uk, ext_type);
@@ -395,7 +437,7 @@ static int read_primitive(msgpack_unpacker_t* uk)
                 uint32_t length = _msgpack_be32(cb->u32);
                 int ext_type = (signed char) cb->buffer[4];
                 if(length == 0) {
-                    return object_complete_ext(uk, ext_type, rb_str_buf_new(0));
+                    return object_complete_ext(uk, ext_type, Qnil);
                 }
                 uk->reading_raw_remaining = length;
                 return read_raw_body_begin(uk, ext_type);

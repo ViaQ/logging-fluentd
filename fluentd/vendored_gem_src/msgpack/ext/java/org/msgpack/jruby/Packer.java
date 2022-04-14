@@ -32,17 +32,19 @@ public class Packer extends RubyObject {
   private Buffer buffer;
   private Encoder encoder;
   private boolean hasSymbolExtType;
+  private boolean hasBigintExtType;
   private Encoding binaryEncoding;
 
-  public Packer(Ruby runtime, RubyClass type, ExtensionRegistry registry, boolean hasSymbolExtType) {
+  public Packer(Ruby runtime, RubyClass type, ExtensionRegistry registry, boolean hasSymbolExtType, boolean hasBigintExtType) {
     super(runtime, type);
     this.registry = registry;
     this.hasSymbolExtType = hasSymbolExtType;
+    this.hasBigintExtType = hasBigintExtType;
   }
 
   static class PackerAllocator implements ObjectAllocator {
     public IRubyObject allocate(Ruby runtime, RubyClass type) {
-      return new Packer(runtime, type, null, false);
+      return new Packer(runtime, type, null, false, false);
     }
   }
 
@@ -50,25 +52,33 @@ public class Packer extends RubyObject {
   public IRubyObject initialize(ThreadContext ctx, IRubyObject[] args) {
     boolean compatibilityMode = false;
     Ruby runtime = ctx.runtime;
-    if (args.length > 0 && args[args.length - 1] instanceof RubyHash) {
-      RubyHash options = (RubyHash) args[args.length - 1];
-      IRubyObject mode = options.fastARef(runtime.newSymbol("compatibility_mode"));
-      compatibilityMode = (mode != null) && mode.isTrue();
+    if (args.length > 0) {
+      RubyHash options = null;
+      if (args[args.length - 1] instanceof RubyHash) {
+        options = (RubyHash) args[args.length - 1];
+      } else if (args.length > 1 && args[args.length - 2] instanceof RubyHash) {
+        options = (RubyHash) args[args.length - 2];
+      }
+
+      if (options != null) {
+        IRubyObject mode = options.fastARef(runtime.newSymbol("compatibility_mode"));
+        compatibilityMode = (mode != null) && mode.isTrue();
+      }
     }
     if (registry == null) {
         // registry is null when allocate -> initialize
         // registry is already initialized (and somthing might be registered) when newPacker from Factory
         this.registry = new ExtensionRegistry();
     }
-    this.encoder = new Encoder(runtime, compatibilityMode, registry, hasSymbolExtType);
+    this.encoder = new Encoder(runtime, this, compatibilityMode, registry, hasSymbolExtType, hasBigintExtType);
     this.buffer = new Buffer(runtime, runtime.getModule("MessagePack").getClass("Buffer"));
     this.buffer.initialize(ctx, args);
     this.binaryEncoding = runtime.getEncodingService().getAscii8bitEncoding();
     return this;
   }
 
-  public static Packer newPacker(ThreadContext ctx, ExtensionRegistry extRegistry, boolean hasSymbolExtType, IRubyObject[] args) {
-    Packer packer = new Packer(ctx.runtime, ctx.runtime.getModule("MessagePack").getClass("Packer"), extRegistry, hasSymbolExtType);
+  public static Packer newPacker(ThreadContext ctx, ExtensionRegistry extRegistry, boolean hasSymbolExtType, boolean hasBigintExtType, IRubyObject[] args) {
+    Packer packer = new Packer(ctx.runtime, ctx.runtime.getModule("MessagePack").getClass("Packer"), extRegistry, hasSymbolExtType, hasBigintExtType);
     packer.initialize(ctx, args);
     return packer;
   }
@@ -114,7 +124,7 @@ public class Packer extends RubyObject {
     }
     RubyModule extModule = (RubyModule) mod;
 
-    registry.put(extModule, (int) typeId, proc, arg, null, null);
+    registry.put(extModule, (int) typeId, false, proc, arg, null, null);
 
     if (extModule == runtime.getSymbol()) {
       encoder.hasSymbolExtType = true;
@@ -257,7 +267,7 @@ public class Packer extends RubyObject {
     return buffer.size(ctx);
   }
 
-  @JRubyMethod(name = "clear")
+  @JRubyMethod(name = "clear", alias = { "reset" })
   public IRubyObject clear(ThreadContext ctx) {
     return buffer.clear(ctx);
   }

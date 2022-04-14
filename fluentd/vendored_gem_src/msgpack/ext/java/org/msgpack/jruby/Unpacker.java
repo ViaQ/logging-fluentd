@@ -56,30 +56,48 @@ public class Unpacker extends RubyObject {
 
   @JRubyMethod(name = "initialize", optional = 2, visibility = PRIVATE)
   public IRubyObject initialize(ThreadContext ctx, IRubyObject[] args) {
+    Ruby runtime = ctx.runtime;
+
     symbolizeKeys = false;
     allowUnknownExt = false;
     freeze = false;
-    if (args.length > 0) {
-      Ruby runtime = ctx.runtime;
-      if (args[args.length - 1] instanceof RubyHash) {
-        RubyHash options = (RubyHash) args[args.length - 1];
-        IRubyObject sk = options.fastARef(runtime.newSymbol("symbolize_keys"));
-        if (sk != null) {
-          symbolizeKeys = sk.isTrue();
-        }
-        IRubyObject f = options.fastARef(runtime.newSymbol("freeze"));
-        if (f != null) {
-          freeze = f.isTrue();
-        }
-        IRubyObject au = options.fastARef(runtime.newSymbol("allow_unknown_ext"));
-        if (au != null) {
-          allowUnknownExt = au.isTrue();
-        }
-      }
-      if (args[0] != runtime.getNil() && !(args[0] instanceof RubyHash)) {
-        setStream(ctx, args[0]);
-      }
+
+    IRubyObject io = null;
+    RubyHash options = null;
+
+    if (args.length >= 1) {
+      io = args[0];
     }
+
+    if (args.length >= 2 && args[1] != runtime.getNil()) {
+      options = (RubyHash)args[1];
+    }
+
+    if (options == null && io != null && io instanceof RubyHash) {
+      options = (RubyHash)io;
+      io = null;
+    }
+
+    if (options != null) {
+      IRubyObject sk = options.fastARef(runtime.newSymbol("symbolize_keys"));
+      if (sk != null) {
+        symbolizeKeys = sk.isTrue();
+      }
+      IRubyObject f = options.fastARef(runtime.newSymbol("freeze"));
+      if (f != null) {
+        freeze = f.isTrue();
+      }
+      IRubyObject au = options.fastARef(runtime.newSymbol("allow_unknown_ext"));
+      if (au != null) {
+        allowUnknownExt = au.isTrue();
+      }
+
+    }
+
+    if (io != null && io != runtime.getNil()) {
+      setStream(ctx, io);
+    }
+
     return this;
   }
 
@@ -139,7 +157,7 @@ public class Unpacker extends RubyObject {
       throw runtime.newRangeError(String.format("integer %d too big to convert to `signed char'", typeId));
     }
 
-    registry.put(extModule, (int) typeId, null, null, proc, arg);
+    registry.put(extModule, (int) typeId, false, null, null, proc, arg);
     return runtime.getNil();
   }
 
@@ -157,7 +175,7 @@ public class Unpacker extends RubyObject {
     if (limit == -1) {
       limit = byteList.length() - offset;
     }
-    Decoder decoder = new Decoder(ctx.runtime, registry, byteList.unsafeBytes(), byteList.begin() + offset, limit, symbolizeKeys, freeze, allowUnknownExt);
+    Decoder decoder = new Decoder(ctx.runtime, this, byteList.unsafeBytes(), byteList.begin() + offset, limit, symbolizeKeys, freeze, allowUnknownExt);
     try {
       data = null;
       data = decoder.next();
@@ -187,7 +205,7 @@ public class Unpacker extends RubyObject {
   public IRubyObject feed(ThreadContext ctx, IRubyObject data) {
     ByteList byteList = data.asString().getByteList();
     if (decoder == null) {
-      decoder = new Decoder(ctx.runtime, registry, byteList.unsafeBytes(), byteList.begin(), byteList.length(), symbolizeKeys, freeze, allowUnknownExt);
+      decoder = new Decoder(ctx.runtime, this, byteList.unsafeBytes(), byteList.begin(), byteList.length(), symbolizeKeys, freeze, allowUnknownExt);
     } else {
       decoder.feed(byteList.unsafeBytes(), byteList.begin(), byteList.length());
     }
@@ -325,7 +343,11 @@ public class Unpacker extends RubyObject {
     ByteList byteList = str.getByteList();
     this.stream = stream;
     this.decoder = null;
-    this.decoder = new Decoder(ctx.runtime, registry, byteList.unsafeBytes(), byteList.begin(), byteList.length(), symbolizeKeys, freeze, allowUnknownExt);
+    this.decoder = new Decoder(ctx.runtime, this, byteList.unsafeBytes(), byteList.begin(), byteList.length(), symbolizeKeys, freeze, allowUnknownExt);
     return getStream(ctx);
+  }
+
+  public ExtensionRegistry.ExtensionEntry lookupExtensionByTypeId(int typeId) {
+    return registry.lookupExtensionByTypeId(typeId);
   }
 }
