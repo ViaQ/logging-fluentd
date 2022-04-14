@@ -295,7 +295,7 @@ DEPENDENCIES
   fluent-plugin-rewrite-tag-filter
   fluent-plugin-splunk-hec
   fluent-plugin-systemd
-  fluentd (= 1.14.5)!
+  fluentd!
   kubeclient (= 4.9.3)
   oj
   rake

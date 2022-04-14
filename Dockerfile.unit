@@ -1,4 +1,4 @@
-FROM registry.ci.openshift.org/ocp/builder:ubi8.ruby.25
+FROM registry.access.redhat.com/ubi8/ruby-27
 
 ENV FLUENTD_VERSION=1.14.5 \
     WORKDIR=/tmp/fluentd/lib
