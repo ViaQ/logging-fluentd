@@ -12,8 +12,8 @@ RUN mkdir -p ${upstream_code} \
         -C ${upstream_code}
 ## EXCLUDE END ##
 
-#@follow_tag(registry.redhat.io/ubi8/ruby-25:latest)
-FROM registry.redhat.io/ubi8/ruby-25:1-164
+#@follow_tag(registry.redhat.io/ubi8/ruby-27:latest)
+FROM registry.redhat.io/ubi8/ruby-27:1-62
 ## EXCLUDE BEGIN ##
 ARG upstream_code=upstream_code/fluentd
 ## EXCLUDE END ##
