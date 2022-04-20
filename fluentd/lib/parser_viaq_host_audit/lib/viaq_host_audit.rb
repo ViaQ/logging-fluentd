@@ -5,6 +5,9 @@ require 'time'
 module Fluent
   class ViaqHostAudit
 
+    @@type_re = /type=([^ ]+)/
+    @@msg_re = /msg=([^ ]+)/
+
     class ViaqHostAuditParserException < StandardError
     end
 
@@ -30,18 +33,23 @@ module Fluent
     # that fits the OAL format.
     def parse_audit_line(line)
       event = {}
-      parse_metadata(event, line.split)
+      parse_metadata(event, line)
       return normalize(event, line)
     end
 
     private
 
-    def parse_metadata(result, metadata)
+    def parse_metadata(result, line)
       # Parse audit record type
-      result[IN_TYPE] = metadata[0].split('=')[1]
-
+      if (audit_type = @@type_re.match(line))
+        result[IN_TYPE] = audit_type[1]
+      end
+      
       # Parse audit record ID
-      time_id = metadata[1].sub(/msg=audit\((?<g1>.*)\):/, '\k<g1>').split(':')
+
+      if (msg = @@msg_re.match(line))
+        time_id = msg[1].sub(/audit\((?<g1>.*)\):/, '\k<g1>').split(':')
+      end
       result[TIME] = time_id[0]
       result[RECORD_ID] = time_id[1]
     end
