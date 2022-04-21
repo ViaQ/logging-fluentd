@@ -145,6 +145,12 @@ class ViaqDataModelFilterTest < Test::Unit::TestCase
         d.emit_with_tag(tag, msg, @time)
       }.filtered.instance_variable_get(:@record_array)[0]
     end
+    test 'openshift data is added to the record' do
+      rec = emit_with_tag('tag', {'a'=>'b'})
+      assert_not_nil(rec['openshift'], 'Expect a hash added to root named "openshift"')
+      assert_not_nil(rec['openshift']['sequence'], 'Expect a key added to "openshift" named "sequence"')
+      assert_true(rec['openshift']['sequence'] > 0, 'Expect sequence number to be greater then zero')
+    end
     test 'see if undefined fields are kept at top level' do
       rec = emit_with_tag('tag', {'a'=>'b'})
       assert_equal('b', rec['a'])
