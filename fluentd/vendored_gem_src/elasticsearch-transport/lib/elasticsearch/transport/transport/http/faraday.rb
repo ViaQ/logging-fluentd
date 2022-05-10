@@ -19,7 +19,6 @@ module Elasticsearch
   module Transport
     module Transport
       module HTTP
-
         # The default transport implementation, using the [_Faraday_](https://rubygems.org/gems/faraday)
         # library for abstracting the HTTP client.
         #
@@ -33,13 +32,24 @@ module Elasticsearch
           # @return [Response]
           # @see    Transport::Base#perform_request
           #
-          def perform_request(method, path, params={}, body=nil, headers=nil, opts={})
+          def perform_request(method, path, params = {}, body = nil, headers = nil, opts = {})
             super do |connection, url|
-              headers = headers || connection.connection.headers
+              headers = if connection.connection.headers
+                          if !headers.nil?
+                            connection.connection.headers.merge(headers)
+                          else
+                            connection.connection.headers
+                          end
+                        else
+                          headers
+                        end
+
+              body = body ? __convert_to_json(body) : nil
+              body, headers = compress_request(body, headers)
 
               response = connection.connection.run_request(method.downcase.to_sym,
                                                            url,
-                                                           ( body ? __convert_to_json(body) : nil ),
+                                                           body,
                                                            headers)
 
               Response.new response.status, decompress_response(response.body), response.headers
@@ -53,7 +63,7 @@ module Elasticsearch
           def __build_connection(host, options={}, block=nil)
             client = ::Faraday.new(__full_url(host), options, &block)
             apply_headers(client, options)
-            Connections::Connection.new :host => host, :connection => client
+            Connections::Connection.new(host: host, connection: client)
           end
 
           # Returns an array of implementation specific connection errors.

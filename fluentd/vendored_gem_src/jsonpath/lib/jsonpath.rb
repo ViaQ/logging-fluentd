@@ -17,7 +17,8 @@ class JsonPath
     :default_path_leaf_to_null => false,
     :symbolize_keys => false,
     :use_symbols => false,
-    :allow_send => true
+    :allow_send => true,
+    :max_nesting => 100
   }
 
   attr_accessor :path
@@ -86,13 +87,46 @@ class JsonPath
     end
     a
   end
+  
+  def self.fetch_all_path(obj)
+    all_paths = ['$']
+    find_path(obj, '$', all_paths, obj.class == Array)
+    return all_paths
+  end
+
+  def self.find_path(obj, root_key, all_paths, is_array = false)
+    obj.each do |key, value|
+      table_params = { key: key, root_key: root_key}
+      is_loop = value.class == Array || value.class == Hash
+      if is_loop
+        path_exp = construct_path(table_params)
+        all_paths << path_exp
+        find_path(value, path_exp, all_paths, value.class == Array)
+      elsif is_array
+        table_params[:index] = obj.find_index(key)
+        path_exp = construct_path(table_params)
+        find_path(key, path_exp, all_paths, key.class == Array) if key.class == Hash || key.class == Array
+        all_paths << path_exp
+      else
+        all_paths << construct_path(table_params)
+      end
+    end
+  end
+
+  def self.construct_path(table_row)
+    if table_row[:index]
+      return table_row[:root_key] + '['+ table_row[:index].to_s + ']'
+    else
+      return table_row[:root_key] + '.'+ table_row[:key]
+    end
+  end
 
   def first(obj_or_str, *args)
     enum_on(obj_or_str).first(*args)
   end
 
   def enum_on(obj_or_str, mode = nil)
-    JsonPath::Enumerable.new(self, self.class.process_object(obj_or_str), mode,
+    JsonPath::Enumerable.new(self, self.class.process_object(obj_or_str, @opts), mode,
                              @opts)
   end
   alias [] enum_on
@@ -107,8 +141,8 @@ class JsonPath
 
   private
 
-  def self.process_object(obj_or_str)
-    obj_or_str.is_a?(String) ? MultiJson.decode(obj_or_str) : obj_or_str
+  def self.process_object(obj_or_str, opts = {})
+    obj_or_str.is_a?(String) ? MultiJson.decode(obj_or_str, max_nesting: opts[:max_nesting]) : obj_or_str
   end
 
   def deep_clone

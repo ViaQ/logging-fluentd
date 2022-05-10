@@ -81,6 +81,10 @@ op.on('--group GROUP', "change group") {|s|
   opts[:chgroup] = s
 }
 
+op.on('--umask UMASK', "change umask") {|s|
+  opts[:chumask] = s
+}
+
 op.on('-o', '--log PATH', "log file path") {|s|
   opts[:log_path] = s
 }

@@ -14,6 +14,10 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+if ENV['COVERAGE'] && ENV['CI'].nil?
+  require 'simplecov'
+  SimpleCov.start { add_filter %r{^/test|spec/} }
+end
 
 if defined?(JRUBY_VERSION)
   require 'pry-nav'
@@ -21,6 +25,10 @@ else
   require 'pry-byebug'
 end
 require 'ansi'
+require 'yaml'
+require 'active_support/isolated_execution_state' unless RUBY_VERSION < '2.7.0'
+require 'jbuilder'
+require 'jsonify'
 require 'elasticsearch'
 require 'elasticsearch-api'
 require 'elasticsearch-transport'
@@ -42,7 +50,6 @@ DEFAULT_CLIENT = Elasticsearch::Client.new(host: ELASTICSEARCH_URL,
 
 module HelperModule
   def self.included(context)
-
     context.let(:client_double) do
       Class.new { include Elasticsearch::API }.new.tap do |client|
         expect(client).to receive(:perform_request).with(*expected_args).and_return(response_double)
@@ -64,7 +71,7 @@ end
 RSpec.configure do |config|
   config.include(HelperModule)
   config.formatter = 'documentation'
-  config.color = true
+  config.color_mode = :on
   config.add_formatter('RspecJunitFormatter', 'tmp/elasticsearch-api-junit.xml')
 end
 

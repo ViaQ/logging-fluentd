@@ -21,13 +21,13 @@ module Elasticsearch
       module Actions
         # Returns an index template.
         #
-        # @option arguments [List] :name The comma separated names of the index templates
+        # @option arguments [String] :name A pattern that returned template names must match
         # @option arguments [Boolean] :flat_settings Return settings in flat format (default: false)
         # @option arguments [Time] :master_timeout Explicit operation timeout for connection to master node
         # @option arguments [Boolean] :local Return local information, do not retrieve the state from master node (default: false)
         # @option arguments [Hash] :headers Custom HTTP headers
         #
-        # @see https://www.elastic.co/guide/en/elasticsearch/reference/7.8/indices-templates.html
+        # @see https://www.elastic.co/guide/en/elasticsearch/reference/7.17/indices-templates.html
         #
         def get_index_template(arguments = {})
           headers = arguments.delete(:headers) || {}
@@ -41,7 +41,7 @@ module Elasticsearch
                      "_index_template/#{Utils.__listify(_name)}"
                    else
                      "_index_template"
-      end
+                   end
           params = Utils.__validate_and_extract_params arguments, ParamsRegistry.get(__method__)
 
           body = nil
@@ -56,7 +56,7 @@ module Elasticsearch
           :master_timeout,
           :local
         ].freeze)
-end
       end
+    end
   end
 end

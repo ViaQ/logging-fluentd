@@ -1,8 +1,6 @@
 # Concurrent Ruby
 
 [![Gem Version](https://badge.fury.io/rb/concurrent-ruby.svg)](http://badge.fury.io/rb/concurrent-ruby)
-[![Build Status](https://travis-ci.org/ruby-concurrency/concurrent-ruby.svg?branch=master)](https://travis-ci.org/ruby-concurrency/concurrent-ruby)
-[![Build status](https://ci.appveyor.com/api/projects/status/iq8aboyuu3etad4w?svg=true)](https://ci.appveyor.com/project/rubyconcurrency/concurrent-ruby)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](http://opensource.org/licenses/MIT)
 [![Gitter chat](https://img.shields.io/badge/IRC%20(gitter)-devs%20%26%20users-brightgreen.svg)](https://gitter.im/ruby-concurrency/concurrent-ruby)
 
@@ -38,6 +36,8 @@ The design goals of this gem are:
 [contributions](https://github.com/ruby-concurrency/concurrent-ruby/graphs/contributors) and we 
 appreciate your help. Would you like to contribute? Great! Have a look at 
 [issues with `looking-for-contributor` label](https://github.com/ruby-concurrency/concurrent-ruby/issues?q=is%3Aissue+is%3Aopen+label%3Alooking-for-contributor).** And if you pick something up let us know on the issue.
+
+You can also get started by triaging issues which may include reproducing bug reports or asking for vital information, such as version numbers or reproduction instructions. If you would like to start triaging issues, one easy way to get started is to [subscribe to concurrent-ruby on CodeTriage](https://www.codetriage.com/ruby-concurrency/concurrent-ruby). [![Open Source Helpers](https://www.codetriage.com/ruby-concurrency/concurrent-ruby/badges/users.svg)](https://www.codetriage.com/ruby-concurrency/concurrent-ruby)
 
 ## Thread Safety
 
@@ -259,15 +259,11 @@ be obeyed though. Features developed in `concurrent-ruby-edge` are expected to m
 
 ## Supported Ruby versions
 
-* MRI 2.0 and above
-* JRuby 9000
-* TruffleRuby are supported.
-* Any Ruby interpreter that is compliant with Ruby 2.0 or newer.
+* MRI 2.2 and above
+* Latest JRuby 9000
+* Latest TruffleRuby
 
-Actually we still support mri 1.9.3 and jruby 1.7.27 but we are looking at ways how to drop the support.
-Java 8 is preferred for JRuby but every Java version on which JRuby 9000 runs is supported.
-
-The legacy support for Rubinius is kept but it is no longer maintained, if you would like to help 
+The legacy support for Rubinius is kept for the moment but it is no longer maintained and is liable to be removed. If you would like to help 
 please respond to [#739](https://github.com/ruby-concurrency/concurrent-ruby/issues/739).
 
 ## Usage
@@ -364,7 +360,7 @@ best practice is to depend on `concurrent-ruby` and let users to decide if they 
 
 ### Publishing the Gem
 
-* Update`version.rb`
+* Update `version.rb`
 * Update the CHANGELOG
 * Update the Yard documentation
     - Add the new version to `docs-source/signpost.md`. Needs to be done only if there are visible changes in the
@@ -378,22 +374,22 @@ best practice is to depend on `concurrent-ruby` and let users to decide if they 
 
 ## Maintainers
 
-*   [Petr Chalupa](https://github.com/pitr-ch) — Lead maintainer, point-of-contact.
-*   [Chris Seaton](https://github.com/chrisseaton) —
-    If Petr is not available Chris can help or poke Petr to pay attention where it is needed.
+* [Chris Seaton](https://github.com/chrisseaton) — Lead maintainer, point-of-contact.
+* [Benoit Daloze](https://github.com/eregon) — If Chris is not available Benoit can help.
 
 ### Special Thanks to
 
-*   [Jerry D'Antonio](https://github.com/jdantonio) for creating the gem
-*   [Brian Durand](https://github.com/bdurand) for the `ref` gem
-*   [Charles Oliver Nutter](https://github.com/headius) for the `atomic` and `thread_safe` gems
-*   [thedarkone](https://github.com/thedarkone) for the `thread_safe` gem
+* [Jerry D'Antonio](https://github.com/jdantonio) for creating the gem
+* [Brian Durand](https://github.com/bdurand) for the `ref` gem
+* [Charles Oliver Nutter](https://github.com/headius) for the `atomic` and `thread_safe` gems
+* [thedarkone](https://github.com/thedarkone) for the `thread_safe` gem
 
 to the past maintainers
 
-*   [Michele Della Torre](https://github.com/mighe)
-*   [Paweł Obrok](https://github.com/obrok)
-*   [Lucas Allan](https://github.com/lucasallan)
+* [Petr Chalupa](https://github.com/pitr-ch)
+* [Michele Della Torre](https://github.com/mighe)
+* [Paweł Obrok](https://github.com/obrok)
+* [Lucas Allan](https://github.com/lucasallan)
 
 and to [Ruby Association](https://www.ruby.or.jp/en/) for sponsoring a project 
 ["Enhancing Ruby’s concurrency tooling"](https://www.ruby.or.jp/en/news/20181106) in 2018. 

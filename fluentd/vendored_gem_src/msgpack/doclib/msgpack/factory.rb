@@ -31,7 +31,7 @@ module MessagePack
     #
     # See Packer#initialize for supported options.
     #
-    def dump(obj, options={})
+    def dump(obj, options=nil)
     end
     alias pack dump
 
@@ -57,7 +57,7 @@ module MessagePack
     #
     # See Unpacker#initialize for supported options.
     #
-    def load(data, options={})
+    def load(data, options=nil)
     end
     alias unpack load
 
@@ -76,6 +76,7 @@ module MessagePack
     # * *:packer* specify symbol or proc object for packer
     # * *:unpacker* specify symbol or proc object for unpacker
     # * *:optimized_symbols_parsing* specify true to use the optimized symbols parsing (not supported on JRuby now)
+    # * *recursive* specify true to receive the packer or unpacker as argument to generate the extension body manually.
     #
     def register_type(type, klass, options={})
     end
@@ -97,6 +98,48 @@ module MessagePack
     # @return true or false
     #
     def type_registered?(klass_or_type, selector=:both)
+    end
+
+    #
+    # Creates a MessagePack::PooledFactory instance of the given size.
+    #
+    # PooledFactory keeps Packer and Unpacker instance in a pool for improved performance.
+    # Note that the size defines how many instances are kept in cache, not the maximum of instances
+    # that can be created. If the pool limit is reached, a new instance is created anyway.
+    #
+    # @param size [Fixnum] specify how many Packer and Unpacker to keep in cache (default 1)
+    # @param options [Hash] Combined options for Packer and Unpacker. See Packer#initialize and Unpacker#initialize
+    #                       for supported options.
+    def pool(size=1, **options)
+    end
+
+    class Pool
+      #
+      # Deserializes an object from the string or io and returns it.
+      #
+      # If there're not enough data to deserialize one object, this method raises EOFError.
+      # If data format is invalid, this method raises MessagePack::MalformedFormatError.
+      # If the object nests too deeply, this method raises MessagePack::StackError.
+      #
+      # @param data [String]
+      # @return [Object] deserialized object
+      #
+      # See Unpacker#initialize for supported options.
+      #
+      def load(data)
+      end
+
+      #
+      # Serialize the passed value
+      #
+      # If it could not serialize the object, it raises
+      # NoMethodError: undefined method `to_msgpack' for #<the_object>.
+      #
+      # @param obj [Object] object to serialize
+      # @return [String] serialized object
+      #
+      def dump(object)
+      end
     end
   end
 end

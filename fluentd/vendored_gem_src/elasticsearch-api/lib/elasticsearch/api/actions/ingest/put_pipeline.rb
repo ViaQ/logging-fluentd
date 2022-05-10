@@ -22,12 +22,13 @@ module Elasticsearch
         # Creates or updates a pipeline.
         #
         # @option arguments [String] :id Pipeline ID
+        # @option arguments [Integer] :if_version Required version for optimistic concurrency control for pipeline updates
         # @option arguments [Time] :master_timeout Explicit operation timeout for connection to master node
         # @option arguments [Time] :timeout Explicit operation timeout
         # @option arguments [Hash] :headers Custom HTTP headers
         # @option arguments [Hash] :body The ingest definition (*Required*)
         #
-        # @see https://www.elastic.co/guide/en/elasticsearch/reference/7.8/put-pipeline-api.html
+        # @see https://www.elastic.co/guide/en/elasticsearch/reference/7.17/put-pipeline-api.html
         #
         def put_pipeline(arguments = {})
           raise ArgumentError, "Required argument 'body' missing" unless arguments[:body]
@@ -51,10 +52,11 @@ module Elasticsearch
         #
         # @since 6.2.0
         ParamsRegistry.register(:put_pipeline, [
+          :if_version,
           :master_timeout,
           :timeout
         ].freeze)
-end
       end
+    end
   end
 end

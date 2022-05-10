@@ -26,12 +26,12 @@ Gem::Specification.new do |s|
   s.authors       = ['Karel Minarik']
   s.email         = ['karel.minarik@elasticsearch.org']
   s.summary       = 'Ruby API for Elasticsearch.'
-  s.homepage      = 'https://www.elastic.co/guide/en/elasticsearch/client/ruby-api/7.x/index.html'
+  s.homepage      = 'https://www.elastic.co/guide/en/elasticsearch/client/ruby-api/7.16/index.html'
   s.license       = 'Apache-2.0'
   s.metadata = {
-    'homepage_uri' => 'https://www.elastic.co/guide/en/elasticsearch/client/ruby-api/7.x/index.html',
-    'changelog_uri' => 'https://github.com/elastic/elasticsearch-ruby/blob/7.x/CHANGELOG.md',
-    'source_code_uri' => 'https://github.com/elastic/elasticsearch-ruby/tree/7.x/elasticsearch-api',
+    'homepage_uri' => 'https://www.elastic.co/guide/en/elasticsearch/client/ruby-api/7.16/index.html',
+    'changelog_uri' => 'https://github.com/elastic/elasticsearch-ruby/blob/7.16/CHANGELOG.md',
+    'source_code_uri' => 'https://github.com/elastic/elasticsearch-ruby/tree/7.16/elasticsearch-api',
     'bug_tracker_uri' => 'https://github.com/elastic/elasticsearch-ruby/issues'
   }
   s.files         = `git ls-files`.split($/)
@@ -49,26 +49,32 @@ Gem::Specification.new do |s|
   s.add_development_dependency 'ansi'
   s.add_development_dependency 'bundler'
   s.add_development_dependency 'elasticsearch'
-  s.add_development_dependency 'elasticsearch-extensions'
   s.add_development_dependency 'elasticsearch-transport'
+  s.add_development_dependency 'elasticsearch-xpack'
   s.add_development_dependency 'minitest'
   s.add_development_dependency 'minitest-reporters'
   s.add_development_dependency 'mocha'
   s.add_development_dependency 'pry'
-  s.add_development_dependency 'rake', '~> 11.1'
+  s.add_development_dependency 'rake', '~> 13'
   s.add_development_dependency 'shoulda-context'
   s.add_development_dependency 'yard'
 
   # Gems for testing integrations
   s.add_development_dependency 'jsonify'
   s.add_development_dependency 'hashie'
+  # Temporary support for Ruby 2.6, since it's EOL March 2022:
+  if RUBY_VERSION < '2.7.0'
+    s.add_development_dependency 'jbuilder', '< 7.0.0'
+  else
+    s.add_development_dependency 'activesupport'
+    s.add_development_dependency 'jbuilder'
+  end
 
   s.add_development_dependency 'cane'
   s.add_development_dependency 'escape_utils' unless defined? JRUBY_VERSION
-  s.add_development_dependency 'jbuilder'
+
   s.add_development_dependency 'require-prof' unless defined?(JRUBY_VERSION) || defined?(Rubinius)
-  s.add_development_dependency 'simplecov', '~> 0.17', '< 0.18'
-  s.add_development_dependency 'simplecov-rcov'
+  s.add_development_dependency 'simplecov'
   s.add_development_dependency 'test-unit', '~> 2'
   s.add_development_dependency 'ruby-prof' unless defined?(JRUBY_VERSION) || defined?(Rubinius)
 

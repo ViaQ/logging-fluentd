@@ -334,7 +334,7 @@ module Protocol
 					@stream.flush unless body.ready?
 				end
 				
-				if trailer
+				if trailer&.any?
 					@stream.write("0\r\n")
 					write_headers(trailer)
 					@stream.write("\r\n")
@@ -366,10 +366,19 @@ module Protocol
 			end
 			
 			def write_body(version, body, head = false, trailer = nil)
+				# HTTP/1.0 cannot in any case handle trailers.
+				if version == HTTP10 # or te: trailers was not present (strictly speaking not required.)
+					trailer = nil
+				end
+				
+				# While writing the body, we don't know if trailers will be added. We must choose a different body format depending on whether there is the chance of trailers, even if trailer.any? is currently false.
+				#
+				# Below you notice `and trailer.nil?`. I tried this but content-length is more important than trailers.
+				
 				if body.nil?
 					write_connection_header(version)
 					write_empty_body(body)
-				elsif length = body.length and trailer.nil?
+				elsif length = body.length # and trailer.nil?
 					write_connection_header(version)
 					write_fixed_length_body(body, length, head)
 				elsif body.empty?

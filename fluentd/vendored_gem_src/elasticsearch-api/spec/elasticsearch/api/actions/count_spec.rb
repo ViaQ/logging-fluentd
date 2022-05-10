@@ -18,7 +18,6 @@
 require 'spec_helper'
 
 describe 'client#count' do
-
   let(:expected_args) do
     [
       'GET',
@@ -34,7 +33,6 @@ describe 'client#count' do
   end
 
   context 'when an index and type are specified' do
-
     let(:expected_args) do
       [
         'GET',
@@ -51,7 +49,6 @@ describe 'client#count' do
   end
 
   context 'when there is a query provided' do
-
     let(:expected_args) do
       [
         'POST',

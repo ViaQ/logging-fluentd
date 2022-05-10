@@ -18,7 +18,6 @@
 module Elasticsearch
   module Transport
     module Transport
-
       # @abstract Module with common functionality for transport implementations.
       #
       module Base
@@ -47,13 +46,14 @@ module Elasticsearch
         #
         # @see Client#initialize
         #
-        def initialize(arguments={}, &block)
+        def initialize(arguments = {}, &block)
           @state_mutex = Mutex.new
 
           @hosts       = arguments[:hosts]   || []
           @options     = arguments[:options] || {}
           @options[:http] ||= {}
           @options[:retry_on_status] ||= []
+          @options[:delay_on_retry]  ||= 0
 
           @block       = block
           @compression = !!@options[:compression]
@@ -223,7 +223,7 @@ module Elasticsearch
         # @api private
         #
         def __convert_to_json(o=nil, options={})
-          o = o.is_a?(String) ? o : serializer.dump(o, options)
+          o.is_a?(String) ? o : serializer.dump(o, options)
         end
 
         # Returns a full URL based on information from host
@@ -234,9 +234,9 @@ module Elasticsearch
         def __full_url(host)
           url  = "#{host[:protocol]}://"
           url += "#{CGI.escape(host[:user])}:#{CGI.escape(host[:password])}@" if host[:user]
-          url += "#{host[:host]}"
+          url += host[:host]
           url += ":#{host[:port]}" if host[:port]
-          url += "#{host[:path]}" if host[:path]
+          url += host[:path] if host[:path]
           url
         end
 
@@ -258,11 +258,13 @@ module Elasticsearch
         # @raise  [ServerError]   If request failed on server
         # @raise  [Error]         If no connection is available
         #
-        def perform_request(method, path, params={}, body=nil, headers=nil, opts={}, &block)
-          raise NoMethodError, "Implement this method in your transport class" unless block_given?
+        def perform_request(method, path, params = {}, body = nil, headers = nil, opts = {}, &block)
+          raise NoMethodError, 'Implement this method in your transport class' unless block_given?
+
           start = Time.now
           tries = 0
           reload_on_failure = opts.fetch(:reload_on_failure, @options[:reload_on_failure])
+          delay_on_retry = opts.fetch(:delay_on_retry, @options[:delay_on_retry])
 
           max_retries = if opts.key?(:retry_on_failure)
             opts[:retry_on_failure] === true ? DEFAULT_MAX_RETRIES : opts[:retry_on_failure]
@@ -271,21 +273,19 @@ module Elasticsearch
           end
 
           params = params.clone
-
           ignore = Array(params.delete(:ignore)).compact.map { |s| s.to_i }
 
           begin
+            sleep(delay_on_retry / 1000.0) if tries > 0
             tries     += 1
-            connection = get_connection or raise Error.new("Cannot get new connection from pool.")
+            connection = get_connection or raise Error.new('Cannot get new connection from pool.')
 
             if connection.connection.respond_to?(:params) && connection.connection.params.respond_to?(:to_hash)
               params = connection.connection.params.merge(params.to_hash)
             end
 
-            url        = connection.full_url(path, params)
-
-            response   = block.call(connection, url)
-
+            url      = connection.full_url(path, params)
+            response = block.call(connection, url)
             connection.healthy! if connection.failures > 0
 
             # Raise an exception so we can catch it for `retry_on_status`
@@ -308,7 +308,6 @@ module Elasticsearch
             log_error "[#{e.class}] #{e.message} #{connection.host.inspect}"
 
             connection.dead!
-
             if reload_on_failure and tries < connections.all.size
               log_warn "[#{e.class}] Reloading connections (attempt #{tries} of #{connections.all.size})"
               reload_connections! and retry
@@ -335,14 +334,10 @@ module Elasticsearch
           duration = Time.now - start
 
           if response.status.to_i >= 300
-            __log_response    method, path, params, body, url, response, nil, 'N/A', duration
-            __trace  method, path, params, connection.connection.headers, body, url, response, nil, 'N/A', duration if tracer
-
+            __log_response(method, path, params, body, url, response, nil, 'N/A', duration)
+            __trace(method, path, params, connection_headers(connection), body, url, response, nil, 'N/A', duration) if tracer
             # Log the failure only when `ignore` doesn't match the response status
-            unless ignore.include?(response.status.to_i)
-              log_fatal "[#{response.status}] #{response.body}"
-            end
-
+            log_fatal "[#{response.status}] #{response.body}" unless ignore.include?(response.status.to_i)
             __raise_transport_error response unless ignore.include?(response.status.to_i)
           end
 
@@ -353,10 +348,8 @@ module Elasticsearch
             __log_response   method, path, params, body, url, response, json, took, duration
           end
 
-          __trace  method, path, params, connection.connection.headers, body, url, response, nil, 'N/A', duration if tracer
-
-          warnings(response.headers['warning']) if response.headers&.[]('warning')
-
+          __trace(method, path, params, connection_headers(connection), body, url, response, nil, 'N/A', duration) if tracer
+          log_warn(response.headers['warning']) if response.headers&.[]('warning')
           Response.new response.status, json || response.body, response.headers
         ensure
           @last_request_at = Time.now
@@ -375,17 +368,38 @@ module Elasticsearch
 
         USER_AGENT_STR = 'User-Agent'.freeze
         USER_AGENT_REGEX = /user\-?\_?agent/
+        ACCEPT_ENCODING = 'Accept-Encoding'.freeze
+        CONTENT_ENCODING = 'Content-Encoding'.freeze
         CONTENT_TYPE_STR = 'Content-Type'.freeze
         CONTENT_TYPE_REGEX = /content\-?\_?type/
         DEFAULT_CONTENT_TYPE = 'application/json'.freeze
         GZIP = 'gzip'.freeze
-        ACCEPT_ENCODING = 'Accept-Encoding'.freeze
         GZIP_FIRST_TWO_BYTES = '1f8b'.freeze
         HEX_STRING_DIRECTIVE = 'H*'.freeze
         RUBY_ENCODING = '1.9'.respond_to?(:force_encoding)
 
+        def compress_request(body, headers)
+          if body
+            headers ||= {}
+
+            if gzipped?(body)
+              headers[CONTENT_ENCODING] = GZIP
+            elsif use_compression?
+              headers[CONTENT_ENCODING] = GZIP
+              gzip = Zlib::GzipWriter.new(StringIO.new)
+              gzip << body
+              body = gzip.close.string
+            else
+              headers.delete(CONTENT_ENCODING)
+            end
+          elsif headers
+            headers.delete(CONTENT_ENCODING)
+          end
+
+          [body, headers]
+        end
+
         def decompress_response(body)
-          return body unless use_compression?
           return body unless gzipped?(body)
 
           io = StringIO.new(body)
@@ -398,6 +412,8 @@ module Elasticsearch
         end
 
         def gzipped?(body)
+          return unless body && !body.empty?
+
           body[0..1].unpack(HEX_STRING_DIRECTIVE)[0] == GZIP_FIRST_TWO_BYTES
         end
 
@@ -414,7 +430,7 @@ module Elasticsearch
         end
 
         def find_value(hash, regex)
-          key_value = hash.find { |k,v| k.to_s.downcase =~ regex }
+          key_value = hash.find { |k, _| k.to_s.downcase =~ regex }
           if key_value
             hash.delete(key_value[0])
             key_value[1]
@@ -431,8 +447,12 @@ module Elasticsearch
           end
         end
 
-        def warnings(warning)
-          warn("warning: #{warning}")
+        def connection_headers(connection)
+          if defined?(Elasticsearch::Transport::Transport::HTTP::Manticore) && self.class == Elasticsearch::Transport::Transport::HTTP::Manticore
+            @request_options[:headers]
+          else
+            connection.connection.headers
+          end
         end
       end
     end
