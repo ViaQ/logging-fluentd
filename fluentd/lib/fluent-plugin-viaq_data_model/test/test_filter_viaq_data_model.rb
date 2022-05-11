@@ -52,6 +52,16 @@ class ViaqDataModelFilterTest < Test::Unit::TestCase
       assert_equal('time', d.instance.src_time_name)
       assert_equal('@timestamp', d.instance.dest_time_name)
     end
+    test 'when enabled' do 
+      d = create_driver('
+        enable_flatten_labels true
+        flatten_exclusions foo,bar,xyz
+      ')
+      assert_equal(
+        ['foo','bar','xyz'],
+        d.instance.flatten_exclusions
+      )
+    end
     test 'check levels' do 
       d = create_driver('
         <level>
@@ -159,6 +169,22 @@ class ViaqDataModelFilterTest < Test::Unit::TestCase
       assert_not_nil(rec['openshift'], 'Expect a hash added to root named "openshift"')
       assert_not_nil(rec['openshift']['sequence'], 'Expect a key added to "openshift" named "sequence"')
       assert_true(rec['openshift']['sequence'] > 0, 'Expect sequence number to be greater then zero')
+    end
+    sub_test_case ' flattening labels' do
+      test 'when enabled' do
+        rec = emit_with_tag('tag', 
+          {"kubernetes" => { "labels" => { "foo" => "bar", "abc" => "123"}}},
+          'enable_flatten_labels true'
+        )
+        assert_equal({ "flat_labels" => ["foo=bar", "abc=123"]}, rec['kubernetes'])
+      end
+      test 'when not enabled' do
+        rec = emit_with_tag('tag', 
+          {"kubernetes" => { "labels" => { "foo" => "bar", "abc" => "123"}}},
+          'enable_flatten_labels false'
+        )
+        assert_equal({ "labels" => { "foo" => "bar", "abc" => "123"}}, rec['kubernetes'])
+      end
     end
     test 'see if undefined fields are kept at top level' do
       rec = emit_with_tag('tag', {'a'=>'b'})
