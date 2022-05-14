@@ -33,6 +33,10 @@ static VALUE eUnexpectedTypeError;
 static VALUE eUnknownExtTypeError;
 static VALUE mTypeError;  // obsoleted. only for backward compatibility. See #86.
 
+static VALUE sym_symbolize_keys;
+static VALUE sym_freeze;
+static VALUE sym_allow_unknown_ext;
+
 #define UNPACKER(from, name) \
     msgpack_unpacker_t *name = NULL; \
     Data_Get_Struct(from, msgpack_unpacker_t, name); \
@@ -83,7 +87,7 @@ VALUE MessagePack_Unpacker_initialize(int argc, VALUE* argv, VALUE self)
     } else if(argc == 2) {
         io = argv[0];
         options = argv[1];
-        if(rb_type(options) != T_HASH) {
+        if(options != Qnil && rb_type(options) != T_HASH) {
             rb_raise(rb_eArgError, "expected Hash but found %s.", rb_obj_classname(options));
         }
 
@@ -100,13 +104,13 @@ VALUE MessagePack_Unpacker_initialize(int argc, VALUE* argv, VALUE self)
     if(options != Qnil) {
         VALUE v;
 
-        v = rb_hash_aref(options, ID2SYM(rb_intern("symbolize_keys")));
+        v = rb_hash_aref(options, sym_symbolize_keys);
         msgpack_unpacker_set_symbolized_keys(uk, RTEST(v));
 
-        v = rb_hash_aref(options, ID2SYM(rb_intern("freeze")));
+        v = rb_hash_aref(options, sym_freeze);
         msgpack_unpacker_set_freeze(uk, RTEST(v));
 
-        v = rb_hash_aref(options, ID2SYM(rb_intern("allow_unknown_ext")));
+        v = rb_hash_aref(options, sym_allow_unknown_ext);
         msgpack_unpacker_set_allow_unknown_ext(uk, RTEST(v));
     }
 
@@ -143,6 +147,7 @@ NORETURN(static void raise_unpacker_error(int r))
     case PRIMITIVE_UNEXPECTED_TYPE:
         rb_raise(eUnexpectedTypeError, "unexpected type");
     case PRIMITIVE_UNEXPECTED_EXT_TYPE:
+    // rb_bug("unexpected extension type");
         rb_raise(eUnknownExtTypeError, "unexpected extension type");
     default:
         rb_raise(eUnpackError, "logically unknown error %d", r);
@@ -361,7 +366,7 @@ static VALUE Unpacker_register_type(int argc, VALUE* argv, VALUE self)
         rb_raise(rb_eRangeError, "integer %d too big to convert to `signed char'", ext_type);
     }
 
-    msgpack_unpacker_ext_registry_put(&uk->ext_registry, ext_module, ext_type, proc, arg);
+    msgpack_unpacker_ext_registry_put(&uk->ext_registry, ext_module, ext_type, 0, proc, arg);
 
     return Qnil;
 }
@@ -410,6 +415,10 @@ void MessagePack_Unpacker_module_init(VALUE mMessagePack)
     rb_include_module(eUnexpectedTypeError, mTypeError);
 
     eUnknownExtTypeError = rb_define_class_under(mMessagePack, "UnknownExtTypeError", eUnpackError);
+
+    sym_symbolize_keys = ID2SYM(rb_intern("symbolize_keys"));
+    sym_freeze = ID2SYM(rb_intern("freeze"));
+    sym_allow_unknown_ext = ID2SYM(rb_intern("allow_unknown_ext"));
 
     rb_define_alloc_func(cMessagePack_Unpacker, MessagePack_Unpacker_alloc);
 

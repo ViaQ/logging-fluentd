@@ -12,17 +12,17 @@ RUN mkdir -p ${upstream_code} \
         -C ${upstream_code}
 ## EXCLUDE END ##
 
-#@follow_tag(registry.redhat.io/ubi8/ruby-25:latest)
-FROM registry.redhat.io/ubi8/ruby-25:1-164
+#@follow_tag(registry.redhat.io/ubi8/ruby-27:latest)
+FROM registry.redhat.io/ubi8/ruby-27:1-62
 ## EXCLUDE BEGIN ##
 ARG upstream_code=upstream_code/fluentd
 ## EXCLUDE END ##
-ENV BUILD_VERSION=1.14.5
+ENV BUILD_VERSION=1.14.6
 ENV SOURCE_GIT_COMMIT=${CI_ORIGIN_AGGREGATED_LOGGING_UPSTREAM_COMMIT:-}
 ENV SOURCE_GIT_URL=${CI_ORIGIN_AGGREGATED_LOGGING_UPSTREAM_URL:-}
 
 ARG DATA_VERSION_VALUE=1.6.0
-ARG FLUENTD_VERSION_VALUE=1.14.5
+ARG FLUENTD_VERSION_VALUE=1.14.6
 ARG CONTAINER_VALUE=oci
 
 ENV DATA_VERSION=$DATA_VERSION_VALUE \

@@ -19,7 +19,6 @@ module Elasticsearch
   module Transport
     module Transport
       module Connections
-
         # Wraps the connection information and logic.
         #
         # The Connection instance wraps the host information (hostname, port, attributes, etc),
@@ -34,6 +33,7 @@ module Elasticsearch
           DEFAULT_RESURRECT_TIMEOUT = 60
 
           attr_reader :host, :connection, :options, :failures, :dead_since
+          attr_accessor :verified
 
           # @option arguments [Hash]   :host       Host information (example: `{host: 'localhost', port: 9200}`)
           # @option arguments [Object] :connection The transport-specific physical connection or "session"
@@ -43,6 +43,7 @@ module Elasticsearch
             @host       = arguments[:host].is_a?(Hash) ? Redacted.new(arguments[:host]) : arguments[:host]
             @connection = arguments[:connection]
             @options    = arguments[:options] || {}
+            @verified   = false
             @state_mutex = Mutex.new
 
             @options[:resurrect_timeout] ||= DEFAULT_RESURRECT_TIMEOUT
@@ -54,12 +55,14 @@ module Elasticsearch
           #
           # @return [String]
           #
-          def full_url(path, params={})
+          def full_url(path, params = {})
             url  = "#{host[:protocol]}://"
             url += "#{CGI.escape(host[:user])}:#{CGI.escape(host[:password])}@" if host[:user]
             url += "#{host[:host]}:#{host[:port]}"
             url += "#{host[:path]}" if host[:path]
-            url += "/#{full_path(path, params)}"
+            full_path = full_path(path, params)
+            url += '/' unless full_path.match?(/^\//)
+            url += full_path
           end
 
           # Returns the complete endpoint path with serialized parameters.
@@ -135,14 +138,15 @@ module Elasticsearch
             }
           end
 
-          # Equality operator based on connection protocol, host and port
+          # Equality operator based on connection protocol, host, port and attributes
           #
           # @return [Boolean]
           #
           def ==(other)
             self.host[:protocol] == other.host[:protocol] && \
             self.host[:host] == other.host[:host] && \
-            self.host[:port].to_i == other.host[:port].to_i
+            self.host[:port].to_i == other.host[:port].to_i && \
+            self.host[:attributes] == other.host[:attributes]
           end
 
           # @return [String]
@@ -151,7 +155,6 @@ module Elasticsearch
             "<#{self.class.name} host: #{host} (#{dead? ? 'dead since ' + dead_since.to_s : 'alive'})>"
           end
         end
-
       end
     end
   end

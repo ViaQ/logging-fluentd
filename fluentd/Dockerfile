@@ -1,13 +1,13 @@
 ### This is a generated file from Dockerfile.in ###
 
-#@follow_tag(registry.redhat.io/ubi8/ruby-25:latest)
-FROM registry.access.redhat.com/ubi8/ruby-25
-ENV BUILD_VERSION=1.14.5
+#@follow_tag(registry.redhat.io/ubi8/ruby-27:latest)
+FROM registry.access.redhat.com/ubi8/ruby-27
+ENV BUILD_VERSION=1.14.6
 ENV SOURCE_GIT_COMMIT=${CI_ORIGIN_AGGREGATED_LOGGING_UPSTREAM_COMMIT:-}
 ENV SOURCE_GIT_URL=${CI_ORIGIN_AGGREGATED_LOGGING_UPSTREAM_URL:-}
 
 ARG DATA_VERSION_VALUE=1.6.0
-ARG FLUENTD_VERSION_VALUE=1.14.5
+ARG FLUENTD_VERSION_VALUE=1.14.6
 ARG CONTAINER_VALUE=oci
 
 ENV DATA_VERSION=$DATA_VERSION_VALUE \

@@ -108,11 +108,9 @@ module Protocol
 			
 			# Record the current headers, and prepare to receive trailer.
 			def trailer!(&block)
-				return nil unless self.include?(TRAILER)
-				
 				@tail ||= @fields.size
 				
-				return to_enum(:trailer!) unless block_given?
+				return to_enum(:trailer) unless block_given?
 				
 				if @tail
 					@fields.drop(@tail).each(&block)

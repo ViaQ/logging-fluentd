@@ -17,12 +17,15 @@
 
 require "#{File.expand_path(File.dirname('..'), '..')}/api-spec-testing/test_file"
 require "#{File.expand_path(File.dirname('..'), '..')}/api-spec-testing/rspec_matchers"
+require "#{File.expand_path(File.dirname('..'), '..')}/api-spec-testing/wipe_cluster"
 include Elasticsearch::RestAPIYAMLTests
 
 TRANSPORT_OPTIONS = {}
-PROJECT_PATH = File.join(File.dirname(__FILE__), '..', '..')
+PROJECT_PATH = File.join(File.dirname(__FILE__), '..')
+STACK_VERSION = ENV['STACK_VERSION']
+require 'elasticsearch/xpack'
 
-if hosts = ELASTICSEARCH_URL
+if (hosts = ELASTICSEARCH_URL)
   split_hosts = hosts.split(',').map do |host|
     /(http\:\/\/)?\S+/.match(host)
   end
@@ -33,75 +36,96 @@ else
   TEST_HOST, TEST_PORT = 'localhost', '9200'
 end
 
+test_suite = ENV['TEST_SUITE'] || 'free'
+password = ENV['ELASTIC_PASSWORD'] || 'changeme'
+user = ENV['ELASTIC_USER'] || 'elastic'
+
 if defined?(TEST_HOST) && defined?(TEST_PORT)
-  URL = "http://#{TEST_HOST}:#{TEST_PORT}"
+  URL = "http://#{TEST_HOST}:#{TEST_PORT}".freeze
 
-  ADMIN_CLIENT = Elasticsearch::Client.new(host: URL, transport_options: TRANSPORT_OPTIONS)
+  if STACK_VERSION.match?(/^8\./)
+    if ENV['TEST_SUITE'] == 'platinum'
+      raw_certificate = File.read(File.join(PROJECT_PATH, '../.ci/certs/testnode.crt'))
+      certificate = OpenSSL::X509::Certificate.new(raw_certificate)
+      raw_key = File.read(File.join(PROJECT_PATH, '../.ci/certs/testnode.key'))
+      key = OpenSSL::PKey::RSA.new(raw_key)
+      ca_file = File.expand_path(File.join(PROJECT_PATH, '/.ci/certs/ca.crt'))
+      host = "https://elastic:#{password}@#{uri.host}:#{uri.port}".freeze
+      transport_options = { ssl: { verify: false, client_cert: certificate, client_key: key, ca_file: ca_file } }
+    else
+      host = "http://elastic:#{password}@#{uri.host}:#{uri.port}".freeze
+      transport_options = {}
+    end
 
-  if ENV['QUIET'] == 'true'
-    DEFAULT_CLIENT = Elasticsearch::Client.new(host: URL, transport_options: TRANSPORT_OPTIONS)
+    ADMIN_CLIENT = Elasticsearch::Client.new(host: host, transport_options: transport_options)
+
+    DEFAULT_CLIENT = if ENV['QUIET'] == 'true'
+                       Elasticsearch::Client.new(host: host, transport_options: transport_options)
+                     else
+                       Elasticsearch::Client.new(
+                         host: host,
+                         tracer: Logger.new($stdout),
+                         transport_options: transport_options
+                       )
+                     end
+
+    if ENV['QUIET'] == 'true'
+      DEFAULT_CLIENT = Elasticsearch::Client.new(
+        host: URL,
+        transport_options: TRANSPORT_OPTIONS,
+        user: user,
+        password: password
+      )
+    else
+      DEFAULT_CLIENT = Elasticsearch::Client.new(
+        host: URL,
+        transport_options: TRANSPORT_OPTIONS,
+        user: user,
+        password: password,
+        tracer: Logger.new($stdout)
+      )
+    end
   else
-    DEFAULT_CLIENT = Elasticsearch::Client.new(host: URL,
-                                               transport_options: TRANSPORT_OPTIONS,
-                                               tracer: Logger.new($stdout))
+    ADMIN_CLIENT = Elasticsearch::Client.new(host: URL, transport_options: TRANSPORT_OPTIONS)
+
+    if ENV['QUIET'] == 'true'
+      DEFAULT_CLIENT = Elasticsearch::Client.new(host: URL, transport_options: TRANSPORT_OPTIONS)
+    else
+      DEFAULT_CLIENT = Elasticsearch::Client.new(host: URL,
+                                                 transport_options: TRANSPORT_OPTIONS,
+                                                 tracer: Logger.new($stdout))
+    end
   end
 end
 
-
-YAML_FILES_DIRECTORY = "#{File.expand_path(File.dirname('..'), '..')}" +
-    "/tmp/elasticsearch/rest-api-spec/src/main/resources/rest-api-spec/test"
+YAML_FILES_DIRECTORY = "#{PROJECT_PATH}/../tmp/rest-api-spec/#{STACK_VERSION.match?(/^8\./) ? 'compatTest' : 'test'}/free"
 
 SINGLE_TEST = if ENV['SINGLE_TEST'] && !ENV['SINGLE_TEST'].empty?
-                ["#{File.expand_path(File.dirname('..'), '..')}" +
-                     "/tmp/elasticsearch/rest-api-spec/src/main/resources/rest-api-spec/test/#{ENV['SINGLE_TEST']}"]
+                test_target = ENV['SINGLE_TEST']
+
+                if test_target.match?(/\.yml$/)
+                  ["#{PROJECT_PATH}/../tmp/rest-api-spec/test/free/#{test_target}"]
+                else
+                  Dir.glob(
+                    ["#{PROJECT_PATH}/../tmp/rest-api-spec/test/free/#{test_target}/*.yml"]
+                  )
+                end
               end
 
-skipped_tests = []
-
-# Response from Elasticsearch is just a String, so it's not possible to compare using headers.
-skipped_tests << { file:        'cat.aliases/20_headers.yml',
-                   description: 'Simple alias with yaml body through Accept header' }
-
-# Check version skip logic
-skipped_tests << { file:        'create/15_without_id.yml',
-                   description: 'Create without ID' }
-
-# No error is raised
-skipped_tests << { file:        'create/15_without_id_with_types.yml',
-                   description: 'Create without ID' }
-
-# Error message doesn't match
-skipped_tests << { file:        'tasks.get/10_basic.yml',
-                   description: 'get task test' }
-
-# No error is raised
-skipped_tests << { file:        'cat.allocation/10_basic.yml',
-                   description: '*' }
-
-# Figure out how to match response when there is an error
-skipped_tests << { file:        'delete/70_mix_typeless_typeful.yml',
-                   description: '*' }
-
-# Figure out how to match response when there is an error
-skipped_tests << { file:        'cat.templates/10_basic.yml',
-                   description: '*' }
-
-# node_selector is not supported yet
-skipped_tests << { file: 'cat.aliases/10_basic.yml',
-                   description: '*' }
-
-# Responses are there but not equal (eg.: yellow status)
-skipped_tests << { file: 'cluster.health/10_basic.yml',
-                   description: 'cluster health with closed index (pre 7.2.0)' }
-
-# Regular expression not catching exact match:
-skipped_tests << { file: 'cat.indices/10_basic.yml',
-                   description: 'Test cat indices output for closed index (pre 7.2.0)' }
-
-SKIPPED_TESTS = skipped_tests
+# Skipped tests
+file = File.expand_path("#{__dir__}/skipped_tests.yml")
+skipped_tests = YAML.load_file(file)
 
 # The directory of rest api YAML files.
-REST_API_YAML_FILES = SINGLE_TEST || Dir.glob("#{YAML_FILES_DIRECTORY}/**/*.yml")
+REST_API_YAML_FILES = if ENV['RUN_SKIPPED_TESTS'] # only run the skipped tests if true
+                        SKIPPED_TESTS = []
+                        skipped_tests.map { |test| "#{YAML_FILES_DIRECTORY}/#{test[:file]}" }
+                      else
+                        # If not, define the skipped tests constant and try the single test or all
+                        # the tests
+                        SKIPPED_TESTS = skipped_tests
+                        SINGLE_TEST || Dir.glob("#{YAML_FILES_DIRECTORY}/**/*.yml")
+                      end
 
 # The features to skip
-REST_API_YAML_SKIP_FEATURES = ['warnings'].freeze
+REST_API_YAML_SKIP_FEATURES = ['warnings', 'node_selector'].freeze
