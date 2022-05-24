@@ -17,17 +17,24 @@
 #
 module ViaqDataModel
 
-    module FlattenLabels
+    module Labels
 
         # flatten_labels makes kubernetes.labels into a key=value array
-        # and adds the result to the key 'flat_labels' key removing all
-        # but the exclusions from the original set
-        def flatten_labels(record, exclusions = [])
+        # and adds the result to the key 'flat_labels'
+        def flatten_labels(record)
             return record if record.nil? || record.dig('kubernetes','labels').nil?
             kube = record['kubernetes']
             kube['flat_labels'] = kube['labels'].map do |k,v| 
-                "#{k}=#{v}" unless exclusions.include?(k)
+                "#{k}=#{v}"
             end.compact
+            record
+        end
+
+        # prune_labels removes kubernetes.labels from the record
+        # unless there are exclusions where all other labels will be pruned
+        def prune_labels(record, exclusions = [])
+            return record if record.nil? || record.dig('kubernetes','labels').nil?
+            kube = record['kubernetes']
             kube['labels'].delete_if do |k,v|
                 !exclusions.include?(k)
             end
@@ -36,4 +43,5 @@ module ViaqDataModel
         end
 
     end
+
 end

@@ -24,8 +24,8 @@ require 'fluent/log'
 require 'fluent/match'
 
 require_relative 'filter_viaq_data_model_systemd'
-require_relative 'viaq_data_model_flatten_labels'
 require_relative 'viaq_data_model_elasticsearch_index_name'
+require_relative 'viaq_data_model_labels'
 require_relative 'viaq_data_model_log_level_normalizer'
 require_relative 'viaq_data_model_openshift'
 
@@ -57,7 +57,7 @@ module Fluent
   class ViaqDataModelFilter < Filter
     include ViaqDataModelFilterSystemd
     include ViaqDataModel::ElasticsearchIndexName
-    include ViaqDataModel::FlattenLabels
+    include ViaqDataModel::Labels
     include ViaqDataModel::LogLevelNormalizer
     include ViaqDataModel::OpenShift
 
@@ -82,11 +82,14 @@ module Fluent
       val.split(',')
     end
 
-    desc 'Enable functionality to flatten kubernetes.labels and remove them from the set except for exclusions'
+    desc 'Enable functionality to flatten kubernetes.labels'
     config_param :enable_flatten_labels, :bool, default: false
+    
+    desc 'Enable functionality to prune kubernetes.labels and remove the set except for exclusions'
+    config_param :enable_prune_labels, :bool, default: false
 
-    desc 'Comma delimited list of labels to exclude from flattening'
-    config_param :flatten_exclusions, default: [] do |val|
+    desc 'Comma delimited list of labels to exclude from pruning'
+    config_param :prune_labels_exclusions, default: [] do |val|
       val.split(',')
     end
 
@@ -455,7 +458,9 @@ module Fluent
         end
       end
 
-      flatten_labels(record, @flatten_exclusions) if @enable_flatten_labels
+      flatten_labels(record) if @enable_flatten_labels
+      prune_labels(record, @prune_labels_exclusions) if @enable_prune_labels
+
       if !@elasticsearch_index_names.empty?
         add_elasticsearch_index_name_field(tag, time, record)
       elsif ENV['CDM_DEBUG']
