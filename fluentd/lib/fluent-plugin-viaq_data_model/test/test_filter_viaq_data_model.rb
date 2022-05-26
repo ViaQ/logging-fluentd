@@ -52,14 +52,14 @@ class ViaqDataModelFilterTest < Test::Unit::TestCase
       assert_equal('time', d.instance.src_time_name)
       assert_equal('@timestamp', d.instance.dest_time_name)
     end
-    test 'when enabled' do 
+    test 'when enable_prune_labels is enabled' do 
       d = create_driver('
-        enable_flatten_labels true
-        flatten_exclusions foo,bar,xyz
+        enable_prune_labels true
+        prune_labels_exclusions foo,bar,xyz
       ')
       assert_equal(
         ['foo','bar','xyz'],
-        d.instance.flatten_exclusions
+        d.instance.prune_labels_exclusions
       )
     end
     test 'check levels' do 
@@ -176,12 +176,28 @@ class ViaqDataModelFilterTest < Test::Unit::TestCase
           {"kubernetes" => { "labels" => { "foo" => "bar", "abc" => "123"}}},
           'enable_flatten_labels true'
         )
-        assert_equal({ "flat_labels" => ["foo=bar", "abc=123"]}, rec['kubernetes'])
+        assert_equal({ "flat_labels" => ["foo=bar", "abc=123"], "labels" => { "foo" => "bar", "abc" => "123"}}, rec['kubernetes'])
       end
       test 'when not enabled' do
         rec = emit_with_tag('tag', 
           {"kubernetes" => { "labels" => { "foo" => "bar", "abc" => "123"}}},
           'enable_flatten_labels false'
+        )
+        assert_equal({ "labels" => { "foo" => "bar", "abc" => "123"}}, rec['kubernetes'])
+      end
+    end
+    sub_test_case 'pruning labels' do
+      test 'when enabled' do
+        rec = emit_with_tag('tag', 
+          {"kubernetes" => { "labels" => { "foo" => "bar", "abc" => "123"}}},
+          'enable_prune_labels true'
+        )
+        assert_equal({}, rec['kubernetes'])
+      end
+      test 'when not enabled' do
+        rec = emit_with_tag('tag', 
+          {"kubernetes" => { "labels" => { "foo" => "bar", "abc" => "123"}}},
+          'enable_prune_labels false'
         )
         assert_equal({ "labels" => { "foo" => "bar", "abc" => "123"}}, rec['kubernetes'])
       end

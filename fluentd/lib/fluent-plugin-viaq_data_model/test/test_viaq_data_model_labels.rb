@@ -20,15 +20,11 @@
 require 'fluent/test'
 require 'test/unit/rr'
 
-require 'fluent/plugin/viaq_data_model_flatten_labels'
+require 'fluent/plugin/viaq_data_model_labels'
 
 
 class ViaqDataModelFilterTest < Test::Unit::TestCase
-    include ViaqDataModel::FlattenLabels
-
-    setup do
-        @openshift_sequence = 1
-    end
+    include ViaqDataModel::Labels
 
     sub_test_case '#flatten_labels' do
 
@@ -39,14 +35,34 @@ class ViaqDataModelFilterTest < Test::Unit::TestCase
 
         test "should convert the label set into an array of key=value" do
             record = {"kubernetes" => { "labels" => { "foo" => "bar", "abc" => "123"}}}
-            exp = {"kubernetes" => { "flat_labels" => ["foo=bar", "abc=123"]}}
+            exp = {
+                "kubernetes" => { 
+                    "labels" => { "foo" => "bar", "abc" => "123"}, 
+                    "flat_labels" => ["foo=bar", "abc=123"]
+                }
+            }
             assert_equal(exp, flatten_labels(record))
         end
 
-        test "should exclude the exclusions from flattening and remove the flattened" do
+
+    end
+
+    sub_test_case '#prune_labels' do
+
+        test 'should return the record if it is missing labels' do
+            record = {"foo" => "bar"}
+            assert_equal({"foo" => "bar"}, prune_labels(record))
+        end
+
+        test "should remove the exclusions from the kubernetes.labels" do
             record = {"kubernetes" => { "labels" => { "foo" => "bar", "abc" => "123"}}}
-            exp = {"kubernetes" => { "labels" => {"abc" => "123"}, "flat_labels" => ["foo=bar"]}}
-            assert_equal(exp, flatten_labels(record, ['abc']))
+            exp = {"kubernetes" => { "labels" => {"abc" => "123"}}}
+            assert_equal(exp, prune_labels(record, ['abc']))
+        end
+        test "should remove the kubernetes.labels when empty" do
+            record = {"kubernetes" => { "labels" => { "foo" => "bar", "abc" => "123"}}}
+            exp = {"kubernetes" => { }}
+            assert_equal(exp, prune_labels(record))
         end
     end
 end
