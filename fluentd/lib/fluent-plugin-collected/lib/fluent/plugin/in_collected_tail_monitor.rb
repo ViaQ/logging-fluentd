@@ -120,7 +120,6 @@ module Fluent::Plugin
         @base_labels.merge(
         plugin_id: plugin_info["plugin_id"],
         type: plugin_info["type"],
-        path: path,
         namespace: namespace,
         podname: podname[0],
         containername: containername,
@@ -129,7 +128,6 @@ module Fluent::Plugin
         @base_labels.merge(
         plugin_id: plugin_info["plugin_id"],
         type: plugin_info["type"],
-        path: path,
         namespace: "notfound",
         podname: "notfound",
         containername: "notfound",
