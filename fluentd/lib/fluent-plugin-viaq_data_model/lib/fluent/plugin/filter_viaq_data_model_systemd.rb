@@ -104,6 +104,13 @@ module ViaqDataModelFilterSystemd
         break
       end
     end
+    if record['time'].nil? # e.g. already has @timestamp
+      timeobj = Time.at(time)
+      if timeobj > Time.now
+        timeobj = Time.new((timeobj.year - 1), timeobj.month, timeobj.day, timeobj.hour, timeobj.min, timeobj.sec, timeobj.utc_offset)
+      end
+      record['time'] = timeobj.utc.to_datetime.rfc3339(6)
+    end
     case fmtr.type
     when :sys_journal
       record['message'] = record['MESSAGE']
