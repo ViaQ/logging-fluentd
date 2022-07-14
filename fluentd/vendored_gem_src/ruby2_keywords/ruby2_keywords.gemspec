@@ -15,7 +15,7 @@ Gem::Specification.new do |s|
   s.licenses = ["Ruby".freeze, "BSD-2-Clause".freeze]
   s.rdoc_options = ["--main".freeze, "README.md".freeze]
   s.required_ruby_version = Gem::Requirement.new(">= 2.0.0".freeze)
-  s.rubygems_version = "3.0.9".freeze
+  s.rubygems_version = "3.1.4".freeze
   s.summary = "Shim library for Module#ruby2_keywords".freeze
 end
 

@@ -14,27 +14,20 @@ Gem::Specification.new do |s|
   s.extra_rdoc_files = ["README.markdown".freeze]
   s.files = ["README.markdown".freeze, "init.rb".freeze, "install.rb".freeze, "lib/locale/en.yml".freeze, "lib/validate_email.rb".freeze]
   s.homepage = "http://github.com/perfectline/validates_email/tree/master".freeze
-  s.rubygems_version = "3.0.9".freeze
+  s.rubygems_version = "3.1.4".freeze
   s.summary = "Library for validating email addresses in Rails 3 models.".freeze
 
   if s.respond_to? :specification_version then
     s.specification_version = 3
+  end
 
-    if Gem::Version.new(Gem::VERSION) >= Gem::Version.new('1.2.0') then
-      s.add_development_dependency(%q<rspec>.freeze, [">= 0"])
-      s.add_development_dependency(%q<diff-lcs>.freeze, [">= 1.1.2"])
-      s.add_development_dependency(%q<active_record>.freeze, [">= 3.0.0"])
-      s.add_development_dependency(%q<sqlite3-ruby>.freeze, [">= 0"])
-      s.add_runtime_dependency(%q<mail>.freeze, [">= 2.2.5"])
-      s.add_runtime_dependency(%q<activemodel>.freeze, [">= 3.0"])
-    else
-      s.add_dependency(%q<rspec>.freeze, [">= 0"])
-      s.add_dependency(%q<diff-lcs>.freeze, [">= 1.1.2"])
-      s.add_dependency(%q<active_record>.freeze, [">= 3.0.0"])
-      s.add_dependency(%q<sqlite3-ruby>.freeze, [">= 0"])
-      s.add_dependency(%q<mail>.freeze, [">= 2.2.5"])
-      s.add_dependency(%q<activemodel>.freeze, [">= 3.0"])
-    end
+  if s.respond_to? :add_runtime_dependency then
+    s.add_development_dependency(%q<rspec>.freeze, [">= 0"])
+    s.add_development_dependency(%q<diff-lcs>.freeze, [">= 1.1.2"])
+    s.add_development_dependency(%q<active_record>.freeze, [">= 3.0.0"])
+    s.add_development_dependency(%q<sqlite3-ruby>.freeze, [">= 0"])
+    s.add_runtime_dependency(%q<mail>.freeze, [">= 2.2.5"])
+    s.add_runtime_dependency(%q<activemodel>.freeze, [">= 3.0"])
   else
     s.add_dependency(%q<rspec>.freeze, [">= 0"])
     s.add_dependency(%q<diff-lcs>.freeze, [">= 1.1.2"])
