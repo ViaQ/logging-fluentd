@@ -85,6 +85,12 @@ module Fluent
     desc 'Enable functionality to flatten kubernetes.labels'
     config_param :enable_flatten_labels, :bool, default: false
     
+    desc 'Enable functionality to add openshift normalizations'
+    config_param :enable_openshift_model, :bool, default: true
+
+    desc 'Enable functionality to prune empty fields from record'
+    config_param :enable_prune_empty_fields, :bool, default: true
+
     desc 'Enable functionality to prune kubernetes.labels and remove the set except for exclusions'
     config_param :enable_prune_labels, :bool, default: false
 
@@ -262,11 +268,8 @@ module Fluent
         @formatter_cache = {}
         @formatter_cache_nomatch = {}
       end
-      begin
-        @docker_hostname = File.open('/etc/docker-hostname') { |f| f.readline }.rstrip
-      rescue
-        @docker_hostname = ENV['NODE_NAME'] || nil
-      end
+
+      @node_name = ENV['NODE_NAME'] || nil
       @ipaddr4 = ENV['IPADDR4'] || '127.0.0.1'
       @ipaddr6 = nil
 
@@ -277,6 +280,22 @@ module Fluent
       @pipeline_version = (ENV['FLUENTD_VERSION'] || 'unknown fluentd version') + ' ' + (ENV['DATA_VERSION'] || 'unknown data version')
       
       configure_elasticsearch_index_names
+
+      @chain = []
+
+      @chain <<  lambda {|tag,time,record| check_for_match_and_format(tag, time, record)} if @formatters.length > 0
+      @chain <<  lambda {|tag,time,record| add_pipeline_metadata(tag, time, record)} if @enable_openshift_model
+      if @undefined_to_string || @use_undefined || @undefined_dot_replace_char || (@undefined_max_num_fields > NUM_FIELDS_UNLIMITED)
+        @chain <<  lambda {|tag,time,record| handle_undefined_fields(tag, time, record)} 
+      end
+      @chain <<  lambda {|tag,time,record| add_openshift_data(record)} if @enable_openshift_model
+      @chain <<  lambda {|tag,time,record| prune_empty_fields(record)} if @enable_prune_empty_fields
+      @chain <<  lambda {|tag,time,record| rename_time_field(record)} if (@rename_time || @rename_time_if_missing)
+      @chain <<  lambda {|tag,time,record| flatten_labels(record)} if @enable_flatten_labels
+      @chain <<  lambda {|tag,time,record| prune_labels(record, @prune_labels_exclusions)} if @enable_prune_labels
+      @chain <<  lambda {|tag,time,record| add_elasticsearch_index_name_field(tag, time, record)}  unless @elasticsearch_index_names.empty?
+
+      log.info "Configured #{@chain.length} handlers for viaq_data_model"
 
     end
 
@@ -316,37 +335,27 @@ module Fluent
         end
         record['time'] = timeobj.utc.to_datetime.rfc3339(6)
       end
-      if record['host'].eql?('localhost') && @docker_hostname
-        record['hostname'] = @docker_hostname
+      if record['host'].eql?('localhost') && @node_name
+        record['hostname'] = @node_name
       else
         record['hostname'] = record['host']
       end
     end
 
     def process_k8s_json_file_fields(tag, time, record, fmtr = nil)
-      record['message'] = record['message'] || record['log']
+      # TODO remove this line once parser changes merge. assume 'message' is the default
+      record['message'] = record['log'] if record['message'].nil?
       normalize_level!(record)
-      if record.key?('kubernetes') && record['kubernetes'].respond_to?(:fetch) && \
-         (k8shost = record['kubernetes'].fetch('host', nil))
+      if record.key?('kubernetes') && record['kubernetes'].respond_to?(:key?) && \
+         (k8shost = record['kubernetes']['host'])
         record['hostname'] = k8shost
-      elsif @docker_hostname
-        record['hostname'] = @docker_hostname
-      end
-      if record[@dest_time_name].nil? # e.g. already has @timestamp
-        unless record['time'].nil?
-          # convert from string - parses a wide variety of formats
-          rectime = Time.parse(record['time'])
-        else
-          # convert from time_t
-          rectime = Time.at(time)
-        end
-        record['time'] = rectime.utc.to_datetime.rfc3339(6)
+      elsif @node_name
+        record['hostname'] = @node_name
       end
       transform_eventrouter(tag, record, fmtr)
     end
 
     def check_for_match_and_format(tag, time, record)
-      return unless @formatters
       return if @formatter_cache_nomatch[tag]
       fmtr = @formatter_cache[tag]
       unless fmtr
@@ -359,10 +368,6 @@ module Fluent
         end
       end
       fmtr.fmtr_func.call(tag, time, record, fmtr)
-
-      if record[@dest_time_name].nil? && record['time'].nil?
-        record['time'] = Time.at(time).utc.to_datetime.rfc3339(6)
-      end
 
       if fmtr.fmtr_remove_keys
         fmtr.fmtr_remove_keys.each{|k| record.delete(k)}
@@ -396,60 +401,43 @@ module Fluent
           ((record['pipeline_metadata'] ||= {})[@pipeline_type.to_s] ||= {})['original_raw_message'] = record['message']
         end
         record['message'] = record["kubernetes"]["event"].delete("message")
-        record['time'] = record["kubernetes"]["event"]["metadata"].delete("creationTimestamp") 
+        record[@dest_time_name] = record["kubernetes"]["event"]["metadata"].delete("creationTimestamp") 
       end
     end
 
     def handle_undefined_fields(tag, time, record)
-      if @undefined_to_string || @use_undefined || @undefined_dot_replace_char || (@undefined_max_num_fields > NUM_FIELDS_UNLIMITED)
-        # undefined contains all of the fields not in keep_fields
-        undefined_keys = record.keys - @keep_fields.keys
-        return if undefined_keys.empty?
-        if @undefined_max_num_fields > NUM_FIELDS_UNLIMITED && undefined_keys.length > @undefined_max_num_fields
-          undefined = {}
-          undefined_keys.each{|k|undefined[k] = record.delete(k)}
-          record[@undefined_name] = JSON.dump(undefined)
+      # undefined contains all of the fields not in keep_fields
+      undefined_keys = record.keys - @keep_fields.keys
+      return if undefined_keys.empty?
+      if @undefined_max_num_fields > NUM_FIELDS_UNLIMITED && undefined_keys.length > @undefined_max_num_fields
+        undefined = {}
+        undefined_keys.each{|k|undefined[k] = record.delete(k)}
+        record[@undefined_name] = JSON.dump(undefined)
+      else
+        if @use_undefined
+          record[@undefined_name] = {}
+          modify_hsh = record[@undefined_name]
         else
+          modify_hsh = record
+        end
+        undefined_keys.each do |k|
+          origk = k
           if @use_undefined
-            record[@undefined_name] = {}
-            modify_hsh = record[@undefined_name]
-          else
-            modify_hsh = record
+            modify_hsh[k] = record.delete(k)
           end
-          undefined_keys.each do |k|
-            origk = k
-            if @use_undefined
-              modify_hsh[k] = record.delete(k)
-            end
-            if @undefined_dot_replace_char && k.index('.')
-              newk = k.gsub('.', @undefined_dot_replace_char)
-              modify_hsh[newk] = modify_hsh.delete(k)
-              k = newk
-            end
-            if @undefined_to_string && !modify_hsh[k].is_a?(String)
-              modify_hsh[k] = JSON.dump(modify_hsh[k])
-            end
+          if @undefined_dot_replace_char && k.index('.')
+            newk = k.gsub('.', @undefined_dot_replace_char)
+            modify_hsh[newk] = modify_hsh.delete(k)
+            k = newk
+          end
+          if @undefined_to_string && !modify_hsh[k].is_a?(String)
+            modify_hsh[k] = JSON.dump(modify_hsh[k])
           end
         end
       end
     end
 
-    def filter(tag, time, record)
-      if ENV['CDM_DEBUG']
-        unless tag == ENV['CDM_DEBUG_IGNORE_TAG']
-          log.error("input #{time} #{tag} #{record}")
-        end
-      end
-
-      check_for_match_and_format(tag, time, record)
-      add_pipeline_metadata(tag, time, record)
-      handle_undefined_fields(tag, time, record)
-      add_openshift_data(record)
-      # remove the field from record if it is not in the list of fields to keep and
-      # it is empty
-      record.delete_if{|k,v| !@keep_empty_fields_hash.key?(k) && (v.nil? || isempty(delempty(v)) || isempty(v))}
-      # probably shouldn't remove everything . . .
-      log.warn("Empty record! tag [#{tag}] time [#{time}]") if record.empty?
+    def rename_time_field(record)
       # rename the time field
       if (@rename_time || @rename_time_if_missing) && record.key?(@src_time_name)
         val = record.delete(@src_time_name)
@@ -457,22 +445,22 @@ module Fluent
           record[@dest_time_name] = val
         end
       end
+    end
 
-      flatten_labels(record) if @enable_flatten_labels
-      prune_labels(record, @prune_labels_exclusions) if @enable_prune_labels
+    def prune_empty_fields(record)
+      # remove the field from record if it is not in the list of fields to keep and
+      # it is empty
+      record.delete_if{|k,v| !@keep_empty_fields_hash.key?(k) && (v.nil? || isempty(delempty(v)) || isempty(v))}
+      # probably shouldn't remove everything . . .
+      log.warn("Empty record! tag [#{tag}] time [#{time}]") if record.empty?
+    end
 
-      if !@elasticsearch_index_names.empty?
-        add_elasticsearch_index_name_field(tag, time, record)
-      elsif ENV['CDM_DEBUG']
-        unless tag == ENV['CDM_DEBUG_IGNORE_TAG']
-          log.error("not adding elasticsearch index name or prefix")
-        end
+    def filter(tag, time, record)
+
+      @chain.each do |l|
+        l.call(tag,time,record)
       end
-      if ENV['CDM_DEBUG']
-        unless tag == ENV['CDM_DEBUG_IGNORE_TAG']
-          log.error("output #{time} #{tag} #{record}")
-        end
-      end
+
       record
     end
   end
