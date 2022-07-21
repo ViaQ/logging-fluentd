@@ -16,17 +16,15 @@ Gem::Specification.new do |s|
   s.homepage = "https://github.com/lostisland/faraday-multipart".freeze
   s.licenses = ["MIT".freeze]
   s.required_ruby_version = Gem::Requirement.new([">= 2.4".freeze, "< 4".freeze])
-  s.rubygems_version = "3.0.9".freeze
+  s.rubygems_version = "3.1.4".freeze
   s.summary = "Perform multipart-post requests using Faraday.".freeze
 
   if s.respond_to? :specification_version then
     s.specification_version = 4
+  end
 
-    if Gem::Version.new(Gem::VERSION) >= Gem::Version.new('1.2.0') then
-      s.add_runtime_dependency(%q<multipart-post>.freeze, [">= 1.2", "< 3"])
-    else
-      s.add_dependency(%q<multipart-post>.freeze, [">= 1.2", "< 3"])
-    end
+  if s.respond_to? :add_runtime_dependency then
+    s.add_runtime_dependency(%q<multipart-post>.freeze, [">= 1.2", "< 3"])
   else
     s.add_dependency(%q<multipart-post>.freeze, [">= 1.2", "< 3"])
   end

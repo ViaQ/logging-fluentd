@@ -16,33 +16,23 @@ Gem::Specification.new do |s|
   s.homepage = "https://github.com/lostisland/faraday-net_http_persistent".freeze
   s.licenses = ["MIT".freeze]
   s.required_ruby_version = Gem::Requirement.new(">= 2.4.0".freeze)
-  s.rubygems_version = "3.0.9".freeze
+  s.rubygems_version = "3.1.4".freeze
   s.summary = "Faraday adapter for NetHttpPersistent".freeze
 
   if s.respond_to? :specification_version then
     s.specification_version = 4
+  end
 
-    if Gem::Version.new(Gem::VERSION) >= Gem::Version.new('1.2.0') then
-      s.add_development_dependency(%q<net-http-persistent>.freeze, [">= 3.1"])
-      s.add_development_dependency(%q<bundler>.freeze, ["~> 2.0"])
-      s.add_development_dependency(%q<faraday>.freeze, ["~> 1.0"])
-      s.add_development_dependency(%q<rake>.freeze, ["~> 13.0"])
-      s.add_development_dependency(%q<rspec>.freeze, ["~> 3.0"])
-      s.add_development_dependency(%q<simplecov>.freeze, ["~> 0.19.0"])
-      s.add_development_dependency(%q<standardrb>.freeze, ["~> 1.0"])
-      s.add_development_dependency(%q<multipart-parser>.freeze, ["~> 0.1.1"])
-      s.add_development_dependency(%q<webmock>.freeze, ["~> 3.4"])
-    else
-      s.add_dependency(%q<net-http-persistent>.freeze, [">= 3.1"])
-      s.add_dependency(%q<bundler>.freeze, ["~> 2.0"])
-      s.add_dependency(%q<faraday>.freeze, ["~> 1.0"])
-      s.add_dependency(%q<rake>.freeze, ["~> 13.0"])
-      s.add_dependency(%q<rspec>.freeze, ["~> 3.0"])
-      s.add_dependency(%q<simplecov>.freeze, ["~> 0.19.0"])
-      s.add_dependency(%q<standardrb>.freeze, ["~> 1.0"])
-      s.add_dependency(%q<multipart-parser>.freeze, ["~> 0.1.1"])
-      s.add_dependency(%q<webmock>.freeze, ["~> 3.4"])
-    end
+  if s.respond_to? :add_runtime_dependency then
+    s.add_development_dependency(%q<net-http-persistent>.freeze, [">= 3.1"])
+    s.add_development_dependency(%q<bundler>.freeze, ["~> 2.0"])
+    s.add_development_dependency(%q<faraday>.freeze, ["~> 1.0"])
+    s.add_development_dependency(%q<rake>.freeze, ["~> 13.0"])
+    s.add_development_dependency(%q<rspec>.freeze, ["~> 3.0"])
+    s.add_development_dependency(%q<simplecov>.freeze, ["~> 0.19.0"])
+    s.add_development_dependency(%q<standardrb>.freeze, ["~> 1.0"])
+    s.add_development_dependency(%q<multipart-parser>.freeze, ["~> 0.1.1"])
+    s.add_development_dependency(%q<webmock>.freeze, ["~> 3.4"])
   else
     s.add_dependency(%q<net-http-persistent>.freeze, [">= 3.1"])
     s.add_dependency(%q<bundler>.freeze, ["~> 2.0"])

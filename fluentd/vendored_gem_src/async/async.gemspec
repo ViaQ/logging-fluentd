@@ -13,33 +13,23 @@ Gem::Specification.new do |s|
   s.homepage = "https://github.com/socketry/async".freeze
   s.licenses = ["MIT".freeze]
   s.required_ruby_version = Gem::Requirement.new(">= 2.5.0".freeze)
-  s.rubygems_version = "3.0.9".freeze
+  s.rubygems_version = "3.1.4".freeze
   s.summary = "A concurrency framework for Ruby.".freeze
 
   if s.respond_to? :specification_version then
     s.specification_version = 4
+  end
 
-    if Gem::Version.new(Gem::VERSION) >= Gem::Version.new('1.2.0') then
-      s.add_runtime_dependency(%q<console>.freeze, ["~> 1.10"])
-      s.add_runtime_dependency(%q<nio4r>.freeze, ["~> 2.3"])
-      s.add_runtime_dependency(%q<timers>.freeze, ["~> 4.1"])
-      s.add_development_dependency(%q<async-rspec>.freeze, ["~> 1.1"])
-      s.add_development_dependency(%q<bake>.freeze, [">= 0"])
-      s.add_development_dependency(%q<benchmark-ips>.freeze, [">= 0"])
-      s.add_development_dependency(%q<bundler>.freeze, [">= 0"])
-      s.add_development_dependency(%q<covered>.freeze, ["~> 0.10"])
-      s.add_development_dependency(%q<rspec>.freeze, ["~> 3.6"])
-    else
-      s.add_dependency(%q<console>.freeze, ["~> 1.10"])
-      s.add_dependency(%q<nio4r>.freeze, ["~> 2.3"])
-      s.add_dependency(%q<timers>.freeze, ["~> 4.1"])
-      s.add_dependency(%q<async-rspec>.freeze, ["~> 1.1"])
-      s.add_dependency(%q<bake>.freeze, [">= 0"])
-      s.add_dependency(%q<benchmark-ips>.freeze, [">= 0"])
-      s.add_dependency(%q<bundler>.freeze, [">= 0"])
-      s.add_dependency(%q<covered>.freeze, ["~> 0.10"])
-      s.add_dependency(%q<rspec>.freeze, ["~> 3.6"])
-    end
+  if s.respond_to? :add_runtime_dependency then
+    s.add_runtime_dependency(%q<console>.freeze, ["~> 1.10"])
+    s.add_runtime_dependency(%q<nio4r>.freeze, ["~> 2.3"])
+    s.add_runtime_dependency(%q<timers>.freeze, ["~> 4.1"])
+    s.add_development_dependency(%q<async-rspec>.freeze, ["~> 1.1"])
+    s.add_development_dependency(%q<bake>.freeze, [">= 0"])
+    s.add_development_dependency(%q<benchmark-ips>.freeze, [">= 0"])
+    s.add_development_dependency(%q<bundler>.freeze, [">= 0"])
+    s.add_development_dependency(%q<covered>.freeze, ["~> 0.10"])
+    s.add_development_dependency(%q<rspec>.freeze, ["~> 3.6"])
   else
     s.add_dependency(%q<console>.freeze, ["~> 1.10"])
     s.add_dependency(%q<nio4r>.freeze, ["~> 2.3"])

@@ -16,27 +16,20 @@ Gem::Specification.new do |s|
   s.homepage = "https://github.com/mikel/mail".freeze
   s.licenses = ["MIT".freeze]
   s.rdoc_options = ["--exclude".freeze, "lib/mail/values/unicode_tables.dat".freeze]
-  s.rubygems_version = "3.0.9".freeze
+  s.rubygems_version = "3.1.4".freeze
   s.summary = "Mail provides a nice Ruby DSL for making, sending and reading emails.".freeze
 
   if s.respond_to? :specification_version then
     s.specification_version = 4
+  end
 
-    if Gem::Version.new(Gem::VERSION) >= Gem::Version.new('1.2.0') then
-      s.add_runtime_dependency(%q<mini_mime>.freeze, [">= 0.1.1"])
-      s.add_development_dependency(%q<bundler>.freeze, [">= 1.0.3"])
-      s.add_development_dependency(%q<rake>.freeze, ["> 0.8.7"])
-      s.add_development_dependency(%q<rspec>.freeze, ["~> 3.0"])
-      s.add_development_dependency(%q<rdoc>.freeze, [">= 0"])
-      s.add_development_dependency(%q<rufo>.freeze, [">= 0"])
-    else
-      s.add_dependency(%q<mini_mime>.freeze, [">= 0.1.1"])
-      s.add_dependency(%q<bundler>.freeze, [">= 1.0.3"])
-      s.add_dependency(%q<rake>.freeze, ["> 0.8.7"])
-      s.add_dependency(%q<rspec>.freeze, ["~> 3.0"])
-      s.add_dependency(%q<rdoc>.freeze, [">= 0"])
-      s.add_dependency(%q<rufo>.freeze, [">= 0"])
-    end
+  if s.respond_to? :add_runtime_dependency then
+    s.add_runtime_dependency(%q<mini_mime>.freeze, [">= 0.1.1"])
+    s.add_development_dependency(%q<bundler>.freeze, [">= 1.0.3"])
+    s.add_development_dependency(%q<rake>.freeze, ["> 0.8.7"])
+    s.add_development_dependency(%q<rspec>.freeze, ["~> 3.0"])
+    s.add_development_dependency(%q<rdoc>.freeze, [">= 0"])
+    s.add_development_dependency(%q<rufo>.freeze, [">= 0"])
   else
     s.add_dependency(%q<mini_mime>.freeze, [">= 0.1.1"])
     s.add_dependency(%q<bundler>.freeze, [">= 1.0.3"])

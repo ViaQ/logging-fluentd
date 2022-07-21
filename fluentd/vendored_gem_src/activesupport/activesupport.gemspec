@@ -17,25 +17,19 @@ Gem::Specification.new do |s|
   s.licenses = ["MIT".freeze]
   s.rdoc_options = ["--encoding".freeze, "UTF-8".freeze]
   s.required_ruby_version = Gem::Requirement.new(">= 2.5.0".freeze)
-  s.rubygems_version = "3.0.9".freeze
+  s.rubygems_version = "3.1.4".freeze
   s.summary = "A toolkit of support libraries and Ruby core extensions extracted from the Rails framework.".freeze
 
   if s.respond_to? :specification_version then
     s.specification_version = 4
+  end
 
-    if Gem::Version.new(Gem::VERSION) >= Gem::Version.new('1.2.0') then
-      s.add_runtime_dependency(%q<i18n>.freeze, [">= 1.6", "< 2"])
-      s.add_runtime_dependency(%q<tzinfo>.freeze, ["~> 2.0"])
-      s.add_runtime_dependency(%q<concurrent-ruby>.freeze, ["~> 1.0", ">= 1.0.2"])
-      s.add_runtime_dependency(%q<zeitwerk>.freeze, ["~> 2.3"])
-      s.add_runtime_dependency(%q<minitest>.freeze, [">= 5.1"])
-    else
-      s.add_dependency(%q<i18n>.freeze, [">= 1.6", "< 2"])
-      s.add_dependency(%q<tzinfo>.freeze, ["~> 2.0"])
-      s.add_dependency(%q<concurrent-ruby>.freeze, ["~> 1.0", ">= 1.0.2"])
-      s.add_dependency(%q<zeitwerk>.freeze, ["~> 2.3"])
-      s.add_dependency(%q<minitest>.freeze, [">= 5.1"])
-    end
+  if s.respond_to? :add_runtime_dependency then
+    s.add_runtime_dependency(%q<i18n>.freeze, [">= 1.6", "< 2"])
+    s.add_runtime_dependency(%q<tzinfo>.freeze, ["~> 2.0"])
+    s.add_runtime_dependency(%q<concurrent-ruby>.freeze, ["~> 1.0", ">= 1.0.2"])
+    s.add_runtime_dependency(%q<zeitwerk>.freeze, ["~> 2.3"])
+    s.add_runtime_dependency(%q<minitest>.freeze, [">= 5.1"])
   else
     s.add_dependency(%q<i18n>.freeze, [">= 1.6", "< 2"])
     s.add_dependency(%q<tzinfo>.freeze, ["~> 2.0"])
