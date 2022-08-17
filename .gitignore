@@ -17,3 +17,4 @@ venv
 *.swo
 *.swp
 fluentd/1.*
+**/*.gem

@@ -91,6 +91,10 @@ GEM
       ffi (>= 1.0.0)
       rake
     fiber-local (1.0.0)
+    filter_elasticsearch_genid_ext (0.0.2)
+      fluentd (~> 1.14.5)
+    filter_parse_json_field (0.0.2)
+      fluentd (~> 1.14.5)
     fluent-config-regexp-type (1.0.0)
       fluentd (> 1.0.0, < 2)
     fluent-mixin-config-placeholders (0.4.0)
@@ -143,6 +147,8 @@ GEM
     fluent-plugin-systemd (1.0.5)
       fluentd (>= 0.14.11, < 2)
       systemd-journal (~> 1.4.2)
+    fluent-plugin-viaq_data_model (0.0.23)
+      fluentd (>= 1.14.0)
     fluentd (1.14.6)
       bundler
       cool.io (>= 1.4.5, < 2.0.0)
@@ -191,7 +197,7 @@ GEM
     mime-types-data (3.2022.0105)
     mini_mime (1.1.2)
     minitest (5.15.0)
-    msgpack (1.5.1)
+    msgpack (1.5.4)
     multi_json (1.15.0)
     multipart-post (2.1.1)
     net-http-persistent (4.0.1)
@@ -209,6 +215,8 @@ GEM
       validate_email
       validate_url
       webfinger (>= 1.0.1)
+    parser_viaq_host_audit (0.0.2)
+      fluentd (~> 1.14.5)
     prometheus-client (4.0.0)
     protocol-hpack (1.4.2)
     protocol-http (0.22.6)
@@ -235,7 +243,7 @@ GEM
     ruby-kafka (1.4.0)
       digest-crc
     ruby2_keywords (0.0.5)
-    serverengine (2.2.5)
+    serverengine (2.3.0)
       sigdump (~> 0.2.2)
     sigdump (0.2.4)
     strptime (0.2.5)
@@ -250,9 +258,9 @@ GEM
     traces (0.4.1)
     typhoeus (1.4.0)
       ethon (>= 0.9.0)
-    tzinfo (2.0.4)
+    tzinfo (2.0.5)
       concurrent-ruby (~> 1.0)
-    tzinfo-data (1.2022.1)
+    tzinfo-data (1.2022.3)
       tzinfo (>= 1.0.0)
     unf (0.1.4)
       unf_ext
@@ -268,7 +276,7 @@ GEM
       activesupport
       httpclient (>= 2.4)
     webrick (1.7.0)
-    yajl-ruby (1.4.1)
+    yajl-ruby (1.4.3)
     zeitwerk (2.5.4)
 
 PLATFORMS
@@ -280,6 +288,8 @@ DEPENDENCIES
   bigdecimal
   elasticsearch (< 8.0)
   ffi
+  filter_elasticsearch_genid_ext
+  filter_parse_json_field
   fluent-plugin-cloudwatch-logs (= 0.14.2)
   fluent-plugin-concat
   fluent-plugin-detect-exceptions (= 0.0.14)
@@ -295,9 +305,11 @@ DEPENDENCIES
   fluent-plugin-rewrite-tag-filter
   fluent-plugin-splunk-hec
   fluent-plugin-systemd
+  fluent-plugin-viaq_data_model (= 0.0.23)
   fluentd (= 1.14.6)!
   kubeclient
   oj
+  parser_viaq_host_audit
   rake
   typhoeus
   uuidtools

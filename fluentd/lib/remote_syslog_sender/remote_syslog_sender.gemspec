@@ -8,7 +8,7 @@ Gem::Specification.new do |s|
   s.email    = 'kakyoin.hierophant@gmail.com'
   s.homepage = 'https://github.com/reproio/remote_syslog_logger'
 
-  s.files         = `git ls-files -z`.split("\x0")
+  s.files         = Dir['lib/**/*']
   s.test_files    = s.files.grep(%r{^(test|spec|features)/})
   s.executables   = s.files.grep(%r{^bin/}) { |f| File.basename(f) }
   s.require_paths = %w[lib]

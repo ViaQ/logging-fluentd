@@ -1,9 +1,9 @@
 REGISTRY?=127.0.0.1/openshift-logging
 FLUENTD_VERSION=$$(grep BUILD_VERSION fluentd/Dockerfile.in| cut -d "=" -f2)
 FLUENTD_IMAGE?=$(REGISTRY)/logging-fluentd:$(FLUENTD_VERSION)
-CONTAINER_ENGINE?=docker
-CONTAINER_BUILDER?=imagebuilder
-BUILD_ARGS?=
+CONTAINER_ENGINE?=podman
+CONTAINER_BUILDER?=podman
+BUILD_ARGS?=build
 
 image:
 	$(CONTAINER_BUILDER) $(BUILD_ARGS) --build-arg FLUENTD_VERSION_VALUE=$(FLUENTD_VERSION) -f fluentd/Dockerfile -t $(FLUENTD_IMAGE) fluentd
@@ -30,6 +30,7 @@ update-vendor:
 
 install-gems:
 	FLUENTD_VERSION=$(FLUENTD_VERSION); \
+	for d in $$(ls fluentd/lib); do pushd fluentd/lib/$$d; rm *.gem; gem build *.gemspec; gem install -N *.gem; popd; done && \
 	gem install bundler:$$(grep -r -C 1 'BUNDLED WITH' fluentd/Gemfile.lock | grep -o '[0-9\.]*') && \
 	pushd fluentd && bundler install && popd
 .PHONY: install-gems
