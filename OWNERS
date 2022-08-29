@@ -11,11 +11,6 @@ filters:
       - vimalk78
       - syedriko
       - vparfonov
-      - eranra
-      - pmoogi-redhat
-      - Pranjal-Gupta2
-      - ajaygupta978
-      - shwetaap
       - cahartma
   "Dockerfile(?:\\.in)?$":
     labels:
