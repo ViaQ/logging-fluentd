@@ -15,6 +15,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+require 'json'
+
 module ViaqDataModel
 # https://github.com/ViaQ/elasticsearch-templates/blob/master/namespaces/_default_.yml#L63
     NORMAL_LEVELS = {
@@ -62,7 +64,6 @@ module ViaqDataModel
         # normalize_level! attempts to convert all level values into a common format
         # on the output side.  It optionally takes a block for further processing as needed
         def normalize_level!(record, priority=nil)
-            
             level = record['level']
             # if the record already has a level field, and it looks like one of our well
             # known values, convert it to the canonical normalized form - otherwise,
@@ -82,10 +83,24 @@ module ViaqDataModel
             record['level'] = retlevel || 'unknown'
         end
 
-        # extract_level_from_message evaluates a message against a regex expression
-        # that returns the first named group.  The named group is assumed to be
-        # prefixed with the pattern: 'l[0-9]_' or nil if unmatched
+        # extract_level_from_message evaluates:
+        # - if it 'Hash'and has 'level' field and return if existed
+        # - if it JSON valid string, try to parse it and return 'level' if exist
+        # - a message  against a regex expression
+        #   that returns the first named group.  The named group is assumed to be
+        #   prefixed with the pattern: 'l[0-9]_' or nil if unmatched
         def extract_level_from_message(message, check)
+            if message.is_a?(Hash)
+                if message.key?('level')
+                    return message['level']
+                end
+            end    
+            if valid_json?(message)
+                parsed = JSON.parse(message)
+                if parsed.key?('level')
+                    return parsed['level']
+                end    
+            end   
             return nil unless check
             matches = check.match(message)
             if matches
@@ -94,6 +109,13 @@ module ViaqDataModel
                 end
             end
             return nil
+        end
+
+        def valid_json?(message)
+            hash = JSON.parse(message)
+            hash.is_a?(Hash)
+        rescue JSON::ParserError, TypeError
+            false
         end
 
     end

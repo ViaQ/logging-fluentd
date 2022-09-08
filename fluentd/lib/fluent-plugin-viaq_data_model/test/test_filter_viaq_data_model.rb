@@ -1076,6 +1076,61 @@ class ViaqDataModelFilterTest < Test::Unit::TestCase
       dellist = 'host,pid,ident'.split(',')
       dellist.each{|field| assert_nil(rec[field])}
     end
+
+    test 'process a k8s json-file record, JSON format of message field with level field' do
+      ENV['IPADDR4'] = '127.0.0.1'
+      ENV['IPADDR6'] = '::1'
+      ENV['FLUENTD_VERSION'] = 'fversion'
+      ENV['DATA_VERSION'] = 'dversion'
+      input = {'kubernetes'=>{'host'=>'k8shost'},'stream'=>'stderr','time'=>@timestamp_str,'message'=>{'message' => 'mymessage','level'=>'debug'}}
+      rec = emit_with_tag('kubernetes.var.log.containers.name.name_this_that_other_log', input, '
+        <formatter>
+          tag "kubernetes.var.log.containers**"
+          type k8s_json_file
+          remove_keys log,stream
+        </formatter>
+        pipeline_type normalizer
+      ')
+      assert_equal('k8shost', rec['hostname'])
+      assert_equal('debug', rec['level'])
+      assert_equal(@timestamp_str, rec['@timestamp'])
+      assert_equal('127.0.0.1', rec['pipeline_metadata']['normalizer']['ipaddr4'])
+      assert_equal('::1', rec['pipeline_metadata']['normalizer']['ipaddr6'])
+      assert_equal('fluent-plugin-systemd', rec['pipeline_metadata']['normalizer']['inputname'])
+      assert_equal('fluentd', rec['pipeline_metadata']['normalizer']['name'])
+      assert_equal('fversion dversion', rec['pipeline_metadata']['normalizer']['version'])
+      assert_equal(@timestamp_str, rec['pipeline_metadata']['normalizer']['received_at'])
+      dellist = 'host,pid,ident'.split(',')
+      dellist.each{|field| assert_nil(rec[field])}
+    end
+
+    test 'process a k8s json-file record, JSON format of message field without level field' do
+      ENV['IPADDR4'] = '127.0.0.1'
+      ENV['IPADDR6'] = '::1'
+      ENV['FLUENTD_VERSION'] = 'fversion'
+      ENV['DATA_VERSION'] = 'dversion'
+      input = {'kubernetes'=>{'host'=>'k8shost'},'stream'=>'stdout','time'=>@timestamp_str,'message'=>{'message' => 'mymessage','degree'=>'debug'}}
+      rec = emit_with_tag('kubernetes.var.log.containers.name.name_this_that_other_log', input, '
+        <formatter>
+          tag "kubernetes.var.log.containers**"
+          type k8s_json_file
+          remove_keys log,stream
+        </formatter>
+        pipeline_type normalizer
+      ')
+      assert_equal('k8shost', rec['hostname'])
+      assert_equal('unknown', rec['level'])
+      assert_equal(@timestamp_str, rec['@timestamp'])
+      assert_equal('127.0.0.1', rec['pipeline_metadata']['normalizer']['ipaddr4'])
+      assert_equal('::1', rec['pipeline_metadata']['normalizer']['ipaddr6'])
+      assert_equal('fluent-plugin-systemd', rec['pipeline_metadata']['normalizer']['inputname'])
+      assert_equal('fluentd', rec['pipeline_metadata']['normalizer']['name'])
+      assert_equal('fversion dversion', rec['pipeline_metadata']['normalizer']['version'])
+      assert_equal(@timestamp_str, rec['pipeline_metadata']['normalizer']['received_at'])
+      dellist = 'host,pid,ident'.split(',')
+      dellist.each{|field| assert_nil(rec[field])}
+    end
+
     # level field processing
     test 'see if existing level is preserved for journald log' do
       rec = emit_with_tag('journal.system', {'a'=>'b', 'level'=>'this is my level'}, '

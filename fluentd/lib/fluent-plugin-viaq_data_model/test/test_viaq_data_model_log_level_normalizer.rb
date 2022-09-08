@@ -19,6 +19,7 @@
 #require_relative '../helper'
 require 'fluent/test'
 require 'test/unit/rr'
+require 'json'
 
 require 'fluent/plugin/viaq_data_model_log_level_normalizer'
 
@@ -55,6 +56,21 @@ class ViaqDataModelFilterTest < Test::Unit::TestCase
 
     sub_test_case '#extract_level_from_message' do
         
+        sub_test_case 'should return level from JSON formated message' do
+
+            test 'when the checks are nil' do
+                assert_equal("info", extract_level_from_message("{\"level\":\"info\", \"message\":\"test\"}", nil))
+            end
+
+            test 'when there is not valid JSON' do
+                assert_nil(extract_level_from_message("{123}", checks))
+            end
+
+            test 'when there valid JSON but has no level' do
+                assert_nil(extract_level_from_message("{\"info\":\"info\", \"message\":\"test\"}", checks))
+            end
+        end
+
         sub_test_case 'should return nil' do
 
             test 'when the checks are nil' do
