@@ -24,6 +24,9 @@ module Fluent
       config_param :protocol, :enum, list: [:udp, :tcp], :default => :udp
       config_param :tls, :bool, :default => false
       config_param :ca_file, :string, :default => nil
+      config_param :client_cert, :string, :default => nil
+      config_param :client_cert_key, :string, :default => nil
+      config_param :client_cert_key_password, :string, :default => nil
       config_param :verify_mode, :integer, default: nil
       config_param :packet_size, :size, default: 1024
       config_param :timeout, :time, default: nil
@@ -195,6 +198,9 @@ module Fluent
             program: @program,
           }
           options[:ca_file] = @ca_file if @ca_file
+          options[:client_cert] = @client_cert if @client_cert
+          options[:client_cert_key] = @client_cert_key if @client_cert_key
+          options[:client_cert_key_password] = @client_cert_key_password if @client_cert_key_password
           options[:verify_mode] = @verify_mode if @verify_mode
           sender = RemoteSyslogSender::TcpSender.new(
             host,
