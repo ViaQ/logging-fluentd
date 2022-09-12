@@ -23,9 +23,13 @@ gem 'bigdecimal'
 
 #Below gem(and two of its dependencies) are moved to O_A_L/fluentd/lib, but its dependencies still exist in O_A_L/fluentd/vendored_gem_src/
 #gem 'fluent-plugin-remote_syslog', '1.0.0'
-
 gem 'ffi'
 gem 'uuidtools'
 gem 'rake'
 gem 'async'
 gem 'async-http'
+
+gem 'filter_parse_json_field'
+gem 'filter_elasticsearch_genid_ext'
+gem 'fluent-plugin-viaq_data_model', "0.0.23"
+gem 'parser_viaq_host_audit'

@@ -11,11 +11,7 @@ Gem::Specification.new do |spec|
   spec.description   = spec.description
   spec.homepage      = "https://github.com/dlackty/fluent-plugin-remote_syslog"
   spec.license       = "MIT"
-
-  spec.files         = `git ls-files -z`.split("\x0")
-  spec.test_files    = spec.files.grep(%r{^(test|spec|features)/})
-  spec.require_paths = ["lib"]
-
+  spec.files         = Dir['lib/**/*']
   spec.add_development_dependency "rake", "~> 10.0"
   spec.add_development_dependency "test-unit"
   spec.add_development_dependency "test-unit-rr"
