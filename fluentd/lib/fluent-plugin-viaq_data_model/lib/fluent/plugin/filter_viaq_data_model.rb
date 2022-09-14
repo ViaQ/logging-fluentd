@@ -129,6 +129,10 @@ module Fluent
 
     desc 'Name of destination timestamp field'
     config_param :dest_time_name, :string, default: '@timestamp'
+    
+    desc 'Take log level from structured and set them to the root level'
+    config_param :extract_structured_loglevel, :bool, default: false
+
 
     # <formatter>
     #   type sys_journal
@@ -294,6 +298,8 @@ module Fluent
       @chain <<  lambda {|tag,time,record| flatten_labels(record)} if @enable_flatten_labels
       @chain <<  lambda {|tag,time,record| prune_labels(record, @prune_labels_exclusions)} if @enable_prune_labels
       @chain <<  lambda {|tag,time,record| add_elasticsearch_index_name_field(tag, time, record)}  unless @elasticsearch_index_names.empty?
+      @chain <<  lambda {|tag,time,record| extract_structured_loglevel_field(record)} if @extract_structured_loglevel
+
 
       log.info "Configured #{@chain.length} handlers for viaq_data_model"
 
@@ -446,6 +452,11 @@ module Fluent
         end
       end
     end
+
+    def extract_structured_loglevel_field(record)
+      normalize_level!(record, nil, true) 
+    end
+    
 
     def prune_empty_fields(record)
       # remove the field from record if it is not in the list of fields to keep and
