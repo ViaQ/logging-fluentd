@@ -1,11 +1,8 @@
 #@follow_tag(registry.redhat.io/ubi8/ruby-27:latest)
 FROM registry.redhat.io/ubi8/ruby-27:1-73 AS builder
 
-## EXCLUDE BEGIN ##
-ARG upstream_code=upstream_code
-ENV REMOTE_SOURCE=${REMOTE_SOURCE}/app
-COPY ${REMOTE_SOURCE} upstream_code
-## EXCLUDE END ##
+ENV REMOTE_SOURCES=${REMOTE_SOURCES:-"."}
+ENV REMOTE_SOURCES_DIR=${REMOTE_SOURCES_DIR:-"."}
 
 USER 0
 RUN : 'removed yum-config-manager' \
@@ -17,10 +14,11 @@ RUN : 'removed yum-config-manager' \
  &&   yum clean all
 
 ## EXCLUDE BEGIN ##
-ENV upstream_code=upstream_code/fluentd
+ENV upstream_code=$REMOTE_SOURCES/fluentd/app/fluentd
 ## EXCLUDE END ##
+
 ENV upstream_code=${upstream_code:-"."} \
-    HOME=/opt/app-root/src
+    HOME=/opt/app-root/src 
 COPY ${upstream_code}/jemalloc/ /tmp/jemalloc/
 RUN pushd /tmp/jemalloc && \
         EXTRA_CFLAGS="$( rpm --eval '%{optflags}' )" ./autogen.sh && \
@@ -42,8 +40,9 @@ RUN cd ${HOME}/vendored_gem_src/ && ./install-gems.sh
 #@follow_tag(registry.redhat.io/ubi8/ruby-27:latest)
 FROM registry.redhat.io/ubi8/ruby-27:1-73 AS runtime
 
+ENV REMOTE_SOURCES=${REMOTE_SOURCES:-"."}
 ## EXCLUDE BEGIN ##
-ARG upstream_code=upstream_code/fluentd
+ARG upstream_code=$REMOTE_SOURCES/fluentd/app/fluentd
 ## EXCLUDE END ##
 ENV upstream_code=${upstream_code:-"."}
 
@@ -98,10 +97,10 @@ WORKDIR ${HOME}
 CMD ["sh", "run.sh"]
 
 LABEL \
-        License="Apache-2.0" \
         io.k8s.description="Fluentd container for collecting of container logs" \
         io.k8s.display-name="Fluentd" \
         io.openshift.tags="logging,collection,fluentd" \
+        License="Apache-2.0" \
         vendor="Red Hat" \
         name="openshift-logging/fluentd-rhel8" \
         com.redhat.component="logging-fluentd-container" \
