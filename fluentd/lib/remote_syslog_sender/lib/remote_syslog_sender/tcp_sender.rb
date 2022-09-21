@@ -8,17 +8,20 @@ module RemoteSyslogSender
 
     def initialize(remote_hostname, remote_port, options = {})
       super
-      @tls             = options[:tls]
-      @retry_limit     = options[:retry_limit] || 3
-      @retry_interval  = options[:retry_interval] || 0.5
-      @remote_hostname = remote_hostname
-      @remote_port     = remote_port
-      @ssl_method      = options[:ssl_method] || 'TLSv1_2'
-      @ca_file         = options[:ca_file]
-      @verify_mode     = options[:verify_mode]
-      @timeout         = options[:timeout] || 600
-      @timeout_exception   = !!options[:timeout_exception]
-      @exponential_backoff = !!options[:exponential_backoff]
+      @tls                      = options[:tls]
+      @retry_limit              = options[:retry_limit] || 3
+      @retry_interval           = options[:retry_interval] || 0.5
+      @remote_hostname          = remote_hostname
+      @remote_port              = remote_port
+      @ssl_method               = options[:ssl_method] || 'TLSv1_2'
+      @ca_file                  = options[:ca_file]
+      @client_cert              = options[:client_cert]
+      @client_cert_key          = options[:client_cert_key]
+      @client_cert_key_password = options[:client_cert_key_password]
+      @verify_mode              = options[:verify_mode]
+      @timeout                  = options[:timeout] || 600
+      @timeout_exception        = !!options[:timeout_exception]
+      @exponential_backoff      = !!options[:exponential_backoff]
 
       @mutex = Mutex.new
       @tcp_socket = nil
@@ -63,9 +66,15 @@ module RemoteSyslogSender
           end
           if @tls
             require 'openssl'
-            context = OpenSSL::SSL::SSLContext.new(@ssl_method)
-            context.ca_file = @ca_file if @ca_file
-            context.verify_mode = @verify_mode if @verify_mode
+            require 'remote_syslog_sender/ssl_context'
+            context = RemoteSyslogSender::SslContext.build(
+              ssl_method: @ssl_method,
+              ca_cert_file_path: @ca_file,
+              client_cert: @client_cert,
+              client_cert_key: @client_cert_key,
+              client_cert_key_password: @client_cert_key_password,
+              verify_mode: @verify_mode
+            )
 
             @socket = OpenSSL::SSL::SSLSocket.new(@tcp_socket, context)
             @socket.connect
