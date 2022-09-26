@@ -51,6 +51,33 @@ class ViaqDataModelFilterTest < Test::Unit::TestCase
                 assert_equal('warn', newrecord['level'])
             end
         end
+        
+        sub_test_case 'when take level from structured field' do
+
+            test "should add level field to the record" do
+                record = {"message" => "20210909T12:15:09 Warning Some Warning message", "structured" => { "level" => "info" }}
+                normalize_level!(record, nil, true)
+                assert_equal('info',record['level'])
+            end
+
+            test "should replace level from root with structured.level " do
+                record = {"level" => "error", "structured" => { "level" => "info" }}
+                normalize_level!(record, nil, true)
+                assert_equal('info',record['level'])
+            end
+
+            test "should keep log level as is if config" do
+                record = {"level" => "debug", "structured" => { "level" => "error" }}
+                normalize_level!(record, nil, false)
+                assert_equal('debug',record['level'])
+            end
+
+            test "should keep log level as if not structured.level field" do
+                record = {"level" => "info", "structured" => { "foo" => "error" }}
+                normalize_level!(record, nil, true)
+                assert_equal('info',record['level'])
+            end
+        end
     end
 
     sub_test_case '#extract_level_from_message' do
