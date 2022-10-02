@@ -31,5 +31,13 @@ module ViaqDataModel
             end
         end
 
+        # add_cluster_id adds the value of the env variable 'OPENSHIFT_CLUSTER_ID' to the openshift hash
+        def add_cluster_id(record)
+            record['openshift'] = {} if record['openshift'].nil?
+            if (cluster_id = ENV['OPENSHIFT_CLUSTER_ID']) and !cluster_id.nil?
+                record['openshift']['cluster_id'] = cluster_id
+            end
+        end
+
     end
 end
