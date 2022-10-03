@@ -3,7 +3,7 @@ lib = File.expand_path('../lib', __FILE__)
 $LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
 
 # can override for testing
-FLUENTD_VERSION = ENV['FLUENTD_VERSION'] || "1.14.5"
+FLUENTD_VERSION = ENV['FLUENTD_VERSION'] || "1.14.6" unless Object.const_defined?(:FLUENTD_VERSION)
 
 Gem::Specification.new do |gem|
   gem.name          = "parser_viaq_host_audit"

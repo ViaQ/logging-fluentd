@@ -50,6 +50,8 @@ module Fluent::Plugin
     config_param :client_key, :string, default: nil
     config_param :ca_file, :string, default: nil
     config_param :verify_ssl, :bool, default: true
+    config_param :open_timeout, :integer, default: 3
+    config_param :read_timeout, :integer, default: 10
 
     REGEX_VAR_LOG_PODS = '(var\.log\.pods)\.(?<namespace>[^_]+)_(?<pod_name>[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*)_(?<pod_uuid>[a-z0-9-]*)\.(?<container_name>.+)\..*\.log$'
     REGEX_VAR_LOG_CONTAINERS = '(var\.log\.containers)\.(?<pod_name>[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*)_(?<namespace>[^_]+)_(?<container_name>.+)-(?<docker_id>[a-z0-9]{64})\.log$'
@@ -299,6 +301,10 @@ module Fluent::Plugin
         @apiVersion,
         ssl_options: @ssl_options,
         auth_options: @auth_options,
+        timeouts: {
+          open: @open_timeout,
+          read: @read_timeout
+        },
         as: :parsed_symbolized
       )
     end
@@ -324,6 +330,11 @@ module Fluent::Plugin
 
         metadata['kubernetes'].merge!(pod_metadata) if pod_metadata
         metadata['kubernetes'].delete('containers')
+      end
+      metadata['kubernetes'].tap do |kube|
+        kube.each_pair do |k,v|
+          kube[k.dup] = v.dup
+        end
       end
       metadata.delete('docker') if metadata['docker'] && (metadata['docker']['container_id'].nil? || metadata['docker']['container_id'].empty?)
       metadata

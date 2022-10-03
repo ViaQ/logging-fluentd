@@ -34,6 +34,13 @@ static ID s_call;
 static msgpack_rmem_t s_stack_rmem;
 #endif
 
+#if !defined(HAVE_RB_HASH_NEW_CAPA)
+static inline VALUE rb_hash_new_capa(long capa)
+{
+  return rb_hash_new();
+}
+#endif
+
 void msgpack_unpacker_static_init()
 {
 #ifdef UNPACKER_STACK_RMEM
@@ -170,6 +177,9 @@ static inline int object_complete_symbol(msgpack_unpacker_t* uk, VALUE object)
 static inline int object_complete_ext(msgpack_unpacker_t* uk, int ext_type, VALUE str)
 {
     if (uk->optimized_symbol_ext_type && ext_type == uk->symbol_ext_type) {
+        if (RB_UNLIKELY(NIL_P(str))) { // empty extension is returned as Qnil
+            return object_complete_symbol(uk, ID2SYM(rb_intern3("", 0, rb_utf8_encoding())));
+        }
         return object_complete_symbol(uk, rb_str_intern(str));
     }
 
@@ -302,7 +312,6 @@ static inline int read_raw_body_begin(msgpack_unpacker_t* uk, int raw_type)
             VALUE obj;
             uk->last_object = Qnil;
             reset_head_byte(uk);
-            size_t ext_size = uk->reading_raw_remaining;
             uk->reading_raw_remaining = 0;
 
             msgpack_unpacker_stack_t* stack = uk->stack;
@@ -320,7 +329,6 @@ static inline int read_raw_body_begin(msgpack_unpacker_t* uk, int raw_type)
             uk->stack_depth = stack_depth;
             uk->stack_capacity = stack_capacity;
 
-            msgpack_buffer_skip(UNPACKER_BUFFER_(uk), ext_size);
             return object_complete(uk, obj);
         }
     }
@@ -373,9 +381,6 @@ static int read_primitive(msgpack_unpacker_t* uk)
 
     SWITCH_RANGE(b, 0xa0, 0xbf)  // FixRaw / fixstr
         int count = b & 0x1f;
-        if(count == 0) {
-            return object_complete(uk, rb_utf8_str_new_static("", 0));
-        }
         /* read_raw_body_begin sets uk->reading_raw */
         uk->reading_raw_remaining = count;
         return read_raw_body_begin(uk, RAW_TYPE_STRING);
@@ -392,7 +397,7 @@ static int read_primitive(msgpack_unpacker_t* uk)
         if(count == 0) {
             return object_complete(uk, rb_hash_new());
         }
-        return _msgpack_unpacker_stack_push(uk, STACK_TYPE_MAP_KEY, count*2, rb_hash_new());
+        return _msgpack_unpacker_stack_push(uk, STACK_TYPE_MAP_KEY, count*2, rb_hash_new_capa(count));
 
     SWITCH_RANGE(b, 0xc0, 0xdf)  // Variable
         switch(b) {
@@ -475,7 +480,7 @@ static int read_primitive(msgpack_unpacker_t* uk)
             {
                 READ_CAST_BLOCK_OR_RETURN_EOF(cb, uk, 4);
                 uint32_t u32 = _msgpack_be32(cb->u32);
-                return object_complete(uk, ULONG2NUM((unsigned long)u32));
+                return object_complete(uk, ULONG2NUM(u32)); // long at least 32 bits
             }
 
         case 0xcf:  // unsigned int 64
@@ -503,7 +508,7 @@ static int read_primitive(msgpack_unpacker_t* uk)
             {
                 READ_CAST_BLOCK_OR_RETURN_EOF(cb, uk, 4);
                 int32_t i32 = _msgpack_be32(cb->i32);
-                return object_complete(uk, LONG2NUM((long)i32));
+                return object_complete(uk, LONG2NUM(i32)); // long at least 32 bits
             }
 
         case 0xd3:  // signed int 64
@@ -558,9 +563,6 @@ static int read_primitive(msgpack_unpacker_t* uk)
             {
                 READ_CAST_BLOCK_OR_RETURN_EOF(cb, uk, 1);
                 uint8_t count = cb->u8;
-                if(count == 0) {
-                    return object_complete(uk, rb_utf8_str_new_static("", 0));
-                }
                 /* read_raw_body_begin sets uk->reading_raw */
                 uk->reading_raw_remaining = count;
                 return read_raw_body_begin(uk, RAW_TYPE_STRING);
@@ -570,9 +572,6 @@ static int read_primitive(msgpack_unpacker_t* uk)
             {
                 READ_CAST_BLOCK_OR_RETURN_EOF(cb, uk, 2);
                 uint16_t count = _msgpack_be16(cb->u16);
-                if(count == 0) {
-                    return object_complete(uk, rb_utf8_str_new_static("", 0));
-                }
                 /* read_raw_body_begin sets uk->reading_raw */
                 uk->reading_raw_remaining = count;
                 return read_raw_body_begin(uk, RAW_TYPE_STRING);
@@ -582,9 +581,6 @@ static int read_primitive(msgpack_unpacker_t* uk)
             {
                 READ_CAST_BLOCK_OR_RETURN_EOF(cb, uk, 4);
                 uint32_t count = _msgpack_be32(cb->u32);
-                if(count == 0) {
-                    return object_complete(uk, rb_utf8_str_new_static("", 0));
-                }
                 /* read_raw_body_begin sets uk->reading_raw */
                 uk->reading_raw_remaining = count;
                 return read_raw_body_begin(uk, RAW_TYPE_STRING);
@@ -594,9 +590,6 @@ static int read_primitive(msgpack_unpacker_t* uk)
             {
                 READ_CAST_BLOCK_OR_RETURN_EOF(cb, uk, 1);
                 uint8_t count = cb->u8;
-                if(count == 0) {
-                    return object_complete(uk, rb_str_new_static("", 0));
-                }
                 /* read_raw_body_begin sets uk->reading_raw */
                 uk->reading_raw_remaining = count;
                 return read_raw_body_begin(uk, RAW_TYPE_BINARY);
@@ -606,9 +599,6 @@ static int read_primitive(msgpack_unpacker_t* uk)
             {
                 READ_CAST_BLOCK_OR_RETURN_EOF(cb, uk, 2);
                 uint16_t count = _msgpack_be16(cb->u16);
-                if(count == 0) {
-                    return object_complete(uk, rb_str_new_static("", 0));
-                }
                 /* read_raw_body_begin sets uk->reading_raw */
                 uk->reading_raw_remaining = count;
                 return read_raw_body_begin(uk, RAW_TYPE_BINARY);
@@ -618,9 +608,6 @@ static int read_primitive(msgpack_unpacker_t* uk)
             {
                 READ_CAST_BLOCK_OR_RETURN_EOF(cb, uk, 4);
                 uint32_t count = _msgpack_be32(cb->u32);
-                if(count == 0) {
-                    return object_complete(uk, rb_str_new_static("", 0));
-                }
                 /* read_raw_body_begin sets uk->reading_raw */
                 uk->reading_raw_remaining = count;
                 return read_raw_body_begin(uk, RAW_TYPE_BINARY);
@@ -653,7 +640,7 @@ static int read_primitive(msgpack_unpacker_t* uk)
                 if(count == 0) {
                     return object_complete(uk, rb_hash_new());
                 }
-                return _msgpack_unpacker_stack_push(uk, STACK_TYPE_MAP_KEY, count*2, rb_hash_new());
+                return _msgpack_unpacker_stack_push(uk, STACK_TYPE_MAP_KEY, count*2, rb_hash_new_capa(count));
             }
 
         case 0xdf:  // map 32
@@ -663,7 +650,7 @@ static int read_primitive(msgpack_unpacker_t* uk)
                 if(count == 0) {
                     return object_complete(uk, rb_hash_new());
                 }
-                return _msgpack_unpacker_stack_push(uk, STACK_TYPE_MAP_KEY, count*2, rb_hash_new());
+                return _msgpack_unpacker_stack_push(uk, STACK_TYPE_MAP_KEY, count*2, rb_hash_new_capa(count));
             }
 
         default:

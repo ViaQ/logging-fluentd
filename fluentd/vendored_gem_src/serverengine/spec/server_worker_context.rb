@@ -1,6 +1,7 @@
 
 require 'thread'
 require 'yaml'
+require 'timecop'
 
 def reset_test_state
   FileUtils.mkdir_p 'tmp'
@@ -165,8 +166,9 @@ module TestWorker
 
   def run
     incr_test_state :worker_run
-    5.times do
-      # repeats 5 times because signal handlers
+    # This means this worker will automatically finish after 50 seconds.
+    10.times do
+      # repeats multiple times because signal handlers
       # interrupts wait
       @stop_flag.wait(5.0)
     end
@@ -252,16 +254,25 @@ end
 
 shared_context 'test server and worker' do
   before { reset_test_state }
+  after { Timecop.return }
+
+  unless self.const_defined?(:WAIT_RATIO)
+    if ServerEngine.windows?
+      WAIT_RATIO = 2
+    else
+      WAIT_RATIO = 1
+    end
+  end
 
   def wait_for_fork
-    sleep 1.5
+    sleep 1.5 * WAIT_RATIO
   end
 
   def wait_for_stop
-    sleep 0.8
+    sleep 0.8 * WAIT_RATIO
   end
 
   def wait_for_restart
-    sleep 1.5
+    sleep 1.5 * WAIT_RATIO
   end
 end
