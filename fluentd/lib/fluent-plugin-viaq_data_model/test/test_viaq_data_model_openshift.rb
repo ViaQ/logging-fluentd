@@ -30,33 +30,33 @@ class ViaqDataModelFilterTest < Test::Unit::TestCase
         @openshift_sequence = 1
     end
 
-    sub_test_case '#add_cluster_id' do
-
-        test 'should add the cluster id when then env variable is present' do
-            begin
-              ENV['OPENSHIFT_CLUSTER_ID'] = 'abc123'
-              openshift = {"foo" => "bar"}
-              record = {"openshift" => openshift}
-              add_cluster_id(record)
-              assert_equal({"cluster_id" => "abc123", "foo" => "bar"}, record['openshift'])
-
-              record = {}
-              add_cluster_id(record)
-              assert_equal({"cluster_id" => "abc123"}, record['openshift'])
-            ensure
-                ENV.delete('OPENSHIFT_CLUSTER_ID')
-            end
-        end
-
-        test 'should silently proceed when then env variable is not present' do
-            record = {"openshift" => {"foo" => "bar"}}
-            add_cluster_id(record)
-            assert_equal(record,{"openshift" => {"foo" => "bar"}})
-        end
-
-    end
-
     sub_test_case '#add_openshift_data' do
+
+        sub_test_case '#add_cluster_id' do
+
+            test 'should add the cluster id when then env variable is present' do
+                begin
+                  ENV['OPENSHIFT_CLUSTER_ID'] = 'abc123'
+                  openshift = {"foo" => "bar"}
+                  record = {"openshift" => openshift}
+                  add_openshift_data(record)
+                  assert_equal({"cluster_id" => "abc123", "foo" => "bar", "sequence"=>1}, record['openshift'])
+    
+                  record = {}
+                  add_openshift_data(record)
+                  assert_equal({"cluster_id" => "abc123", "sequence"=>2}, record['openshift'])
+                ensure
+                    ENV.delete('OPENSHIFT_CLUSTER_ID')
+                end
+            end
+    
+            test 'should silently proceed when then env variable is not present' do
+                record = {"openshift" => {"foo" => "bar"}}
+                add_openshift_data(record)
+                assert_equal(record,{"openshift" => {"foo" => "bar", "sequence"=>1}})
+            end
+    
+        end
 
         test 'should add the openshift hash if it does not exist' do
             assert_nothing_raised do
