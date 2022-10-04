@@ -1,7 +1,7 @@
 source "https://rubygems.org"
 gem 'fluentd', ENV['FLUENTD_VERSION'], :source=>"https://rubygems.org"
 gem 'elasticsearch', '< 8.0'
-gem 'fluent-plugin-kubernetes_metadata_filter', '3.0.1'
+gem 'fluent-plugin-kubernetes_metadata_filter', '3.1.2'
 gem 'fluent-plugin-cloudwatch-logs', "0.14.2"
 gem 'fluent-plugin-concat'
 gem 'fluent-plugin-detect-exceptions', "0.0.14"
@@ -29,7 +29,14 @@ gem 'rake'
 gem 'async'
 gem 'async-http'
 
-gem 'filter_parse_json_field'
-gem 'filter_elasticsearch_genid_ext'
-gem 'fluent-plugin-viaq_data_model', "0.0.23"
-gem 'parser_viaq_host_audit'
+path 'lib' do
+  gem 'filter_parse_json_field'
+  gem 'filter_elasticsearch_genid_ext'
+  gem 'fluent-plugin-viaq_data_model', "0.0.23"
+  gem 'fluent-plugin-collected'
+  gem 'fluent-plugin-remote_syslog' 
+  gem 'formatter-single-json-value'
+  gem 'parser_viaq_host_audit'
+  gem 'remote_syslog_sender'
+  gem 'syslog_protocol'
+end 

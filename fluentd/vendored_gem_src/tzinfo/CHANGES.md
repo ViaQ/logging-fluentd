@@ -1,8 +1,20 @@
 # Changes
 
+## Version 2.0.5 - 19-Jul-2022
+
+* Changed `DateTime` results to always use the proleptic Gregorian calendar.
+  This affects `DateTime` results prior to 1582-10-15 and any arithmetic
+  performed on the results that would produce a secondary result prior to
+  1582-10-15.
+* Added support for eager loading all the time zone and country data by calling
+  either `TZInfo::DataSource#eager_load!` or `TZInfo.eager_load!`. Compatible
+  with Ruby On Rails' `eager_load_namespaces`. #129.
+* Ignore the SECURITY file from Arch Linux's tzdata package. #134.
+
+
 ## Version 2.0.4 - 16-Dec-2020
 
-* Fixed an incorrect InvalidTimezoneIdentifier exception raised when loading a
+* Fixed an incorrect `InvalidTimezoneIdentifier` exception raised when loading a
   zoneinfo file that includes rules specifying an additional transition to the
   final defined offset (for example, Africa/Casablanca in version 2018e of the
   Time Zone Database). #123.
@@ -182,9 +194,18 @@
   `TZInfo::Country.get('US').zone_identifiers` should be used instead.
 
 
+## Version 1.2.10 - 19-Jul-2022
+
+* Fixed a relative path traversal bug that could cause arbitrary files to be
+  loaded with `require` when used with `RubyDataSource`. Please refer to
+  <https://github.com/tzinfo/tzinfo/security/advisories/GHSA-5cm2-9h8c-rvfx> for
+  details. CVE-2022-31163.
+* Ignore the SECURITY file from Arch Linux's tzdata package. #134.
+
+
 ## Version 1.2.9 - 16-Dec-2020
 
-* Fixed an incorrect InvalidTimezoneIdentifier exception raised when loading a
+* Fixed an incorrect `InvalidTimezoneIdentifier` exception raised when loading a
   zoneinfo file that includes rules specifying an additional transition to the
   final defined offset (for example, Africa/Casablanca in version 2018e of the
   Time Zone Database). #123.
@@ -340,10 +361,32 @@
   use other `TimezonePeriod` instance methods instead (issue #7655).
 
 
+## Version 0.3.61 (tzdata v2022a) - 19-Jul-2022
+
+* Fixed a relative path traversal bug that could cause arbitrary files to be
+  loaded with `require` from the Ruby load path. Please refer to
+  <https://github.com/tzinfo/tzinfo/security/advisories/GHSA-5cm2-9h8c-rvfx> for
+  details. CVE-2022-31163.
+* Updated to tzdata version 2022a
+  (<https://mm.icann.org/pipermail/tz-announce/2022-March/000070.html>).
+
+
+## Version 0.3.60 (tzdata v2021a) - 6-Feb-2021
+
+* Updated to tzdata version 2021a
+  (<https://mm.icann.org/pipermail/tz-announce/2021-January/000065.html>).
+
+
+## Version 0.3.59 (tzdata v2020e) - 24-Dec-2020
+
+* Updated to tzdata version 2020e
+  (<https://mm.icann.org/pipermail/tz-announce/2020-December/000063.html>).
+
+
 ## Version 0.3.58 (tzdata v2020d) - 8-Nov-2020
 
 * Updated to tzdata version 2020d
-  (https://mm.icann.org/pipermail/tz-announce/2020-October/000062.html).
+  (<https://mm.icann.org/pipermail/tz-announce/2020-October/000062.html>).
 
 
 ## Version 0.3.57 (tzdata v2020a) - 17-May-2020

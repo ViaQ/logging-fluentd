@@ -1,6 +1,6 @@
 # TZInfo - Ruby Time Zone Library
 
-[![RubyGems](https://img.shields.io/gem/v/tzinfo)](https://rubygems.org/gems/tzinfo) [![Travis CI Build](https://img.shields.io/travis/com/tzinfo/tzinfo?logo=travis)](https://travis-ci.com/github/tzinfo/tzinfo) [![AppVeyor Build](https://img.shields.io/appveyor/build/philr/tzinfo?logo=appveyor)](https://ci.appveyor.com/project/philr/tzinfo)
+[![RubyGems](https://img.shields.io/gem/v/tzinfo?logo=rubygems&label=Gem)](https://rubygems.org/gems/tzinfo) [![Tests](https://github.com/tzinfo/tzinfo/workflows/Tests/badge.svg?branch=master&event=push)](https://github.com/tzinfo/tzinfo/actions?query=workflow%3ATests+branch%3Amaster+event%3Apush)
 
 [TZInfo](https://tzinfo.github.io) is a Ruby library that provides access to
 time zone data and allows times to be converted using time zone rules.
@@ -36,7 +36,7 @@ documentation for further details.
 ## Installation
 
 The TZInfo gem can be installed by running `gem install tzinfo` or by adding
-to `gem 'tzinfo'` to your `Gemfile` and running `bundle install`.
+`gem 'tzinfo'` to your `Gemfile` and running `bundle install`.
 
 To use the Ruby modules as the data source, TZInfo::Data will also need to be
 installed by running `gem install tzinfo-data` or by adding `gem 'tzinfo-data'`
