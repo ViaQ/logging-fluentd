@@ -29,7 +29,6 @@ module ViaqDataModel
                 @openshift_sequence += 1
                 @openshift_sequence = 1 if @openshift_sequence > MAX_SEQUENCE
             end
-            add_cluster_id(record)
         end
 
         # add_cluster_id adds the value of the env variable 'OPENSHIFT_CLUSTER_ID' to the openshift hash
