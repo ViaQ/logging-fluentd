@@ -61,7 +61,7 @@ module ViaqDataModel
 
         # normalize_level! attempts to convert all level values into a common format
         # on the output side.  It optionally takes a block for further processing as needed
-        def normalize_level!(record, priority=nil, dig_structured=false)
+        def normalize_level!(record, priority=nil, dig_structured=true)
             
             level = record['level']
             # if the record already has a level field, and it looks like one of our well
