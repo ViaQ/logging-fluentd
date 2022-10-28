@@ -131,7 +131,7 @@ module Fluent
     config_param :dest_time_name, :string, default: '@timestamp'
     
     desc 'Take log level from structured and set them to the root level'
-    config_param :extract_structured_loglevel, :bool, default: false
+    config_param :extract_structured_loglevel, :bool, default: true
 
 
     # <formatter>
@@ -454,7 +454,7 @@ module Fluent
     end
 
     def extract_structured_loglevel_field(record)
-      normalize_level!(record, nil, true) 
+      extract_level_from_struct!(record) 
     end
     
 

@@ -61,14 +61,13 @@ module ViaqDataModel
 
         # normalize_level! attempts to convert all level values into a common format
         # on the output side.  It optionally takes a block for further processing as needed
-        def normalize_level!(record, priority=nil, dig_structured=true)
+        def normalize_level!(record, priority=nil)
             
             level = record['level']
             # if the record already has a level field, and it looks like one of our well
             # known values, convert it to the canonical normalized form - otherwise,
             # preserve the value in string format
             retlevel = nil
-            struct_level = nil
             if !level.nil?
                 unless (retlevel = NORMAL_LEVELS[level]) ||
                         (level.respond_to?(:downcase) && (retlevel = NORMAL_LEVELS[level.downcase]))
@@ -77,8 +76,6 @@ module ViaqDataModel
             elsif !priority.nil?
               retlevel = PRIORITY_LEVELS[priority]
             end
-            struct_level = record.dig('structured','level') if dig_structured
-            retlevel = struct_level if !struct_level.nil?  
             if record['message'] && retlevel.nil? 
                 retlevel = extract_level_from_message(record['message'], @level_matcher)
             end
@@ -97,6 +94,15 @@ module ViaqDataModel
                 end
             end
             return nil
+        end
+
+        # extract_level_from_struct extracting log level from structured field if exits 
+        # and checking is it match with log level from root field. 
+        # Replace log level from root field if not match
+        def extract_level_from_struct!(record)
+            struct_level = record.dig('structured','level')
+            level = record['level']
+            record['level'] = struct_level if !struct_level.nil? && struct_level != level
         end
 
     end

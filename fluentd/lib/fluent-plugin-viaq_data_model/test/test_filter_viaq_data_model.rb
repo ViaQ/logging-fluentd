@@ -316,6 +316,12 @@ class ViaqDataModelFilterTest < Test::Unit::TestCase
       assert_equal("info", rec['level'])
       assert_equal({ "level" => "info"}, rec['structured'])
     end
+    test 'when enabled extruct structured log level shoul keep root log level as is is structured is empty' do
+      rec = emit_with_tag('tag', {"level" => "warning"}, '
+        extract_structured_loglevel true
+      ')
+      assert_equal("warning", rec['level'])
+    end
     test 'when disabled extruct structured log level do nothing' do
       rec = emit_with_tag('tag', {"structured" => { "level" => "info"}}, '
         extract_structured_loglevel false
