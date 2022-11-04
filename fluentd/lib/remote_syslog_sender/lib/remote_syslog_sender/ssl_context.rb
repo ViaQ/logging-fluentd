@@ -61,7 +61,7 @@ module RemoteSyslogSender
         ssl_context.cert_store = store
       end
 
-      context.verify_mode = verify_mode if verify_mode
+      ssl_context.verify_mode = verify_mode if verify_mode
       # Verify certificate hostname if supported (ruby >= 2.4.0)
       ssl_context.verify_hostname = verify_hostname if ssl_context.respond_to?(:verify_hostname=)
 
