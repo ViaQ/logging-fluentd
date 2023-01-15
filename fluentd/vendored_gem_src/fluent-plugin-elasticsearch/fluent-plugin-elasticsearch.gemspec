@@ -3,7 +3,7 @@ $:.push File.expand_path('../lib', __FILE__)
 
 Gem::Specification.new do |s|
   s.name          = 'fluent-plugin-elasticsearch'
-  s.version       = '5.2.2'
+  s.version       = '5.2.4'
   s.authors       = ['diogo', 'pitr', 'Hiroshi Hatake']
   s.email         = ['pitr.vern@gmail.com', 'me@diogoterror.com', 'cosmo0920.wp@gmail.com']
   s.description   = %q{Elasticsearch output plugin for Fluent event collector}
@@ -23,6 +23,7 @@ Gem::Specification.new do |s|
   s.required_ruby_version = Gem::Requirement.new(">= 2.3".freeze)
 
   s.add_runtime_dependency 'fluentd', '>= 0.14.22'
+  s.add_runtime_dependency "faraday", "~> 1.10"
   s.add_runtime_dependency 'excon', '>= 0'
   s.add_runtime_dependency 'elasticsearch'
 

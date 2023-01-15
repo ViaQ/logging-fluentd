@@ -3,21 +3,11 @@
 #include "cache.h"
 #include "oj.h"
 #include "parser.h"
-
-typedef struct _delegate {
-    VALUE          handler;
-    VALUE *        keys;
-    VALUE *        tail;
-    size_t         klen;
-    struct _cache *str_cache;
-    uint8_t        cache_str;
-    bool           cache_keys;
-    bool           thread_safe;
-} * Delegate;
+#include "saj2.h"
 
 static VALUE get_key(ojParser p) {
-    Delegate       d   = (Delegate)p->ctx;
-    const char *   key = buf_str(&p->key);
+    Saj       d   = (Saj)p->ctx;
+    const char    *key = buf_str(&p->key);
     size_t         len = buf_len(&p->key);
     volatile VALUE rkey;
 
@@ -29,7 +19,7 @@ static VALUE get_key(ojParser p) {
     return rkey;
 }
 
-static void push_key(Delegate d, VALUE key) {
+static void push_key(Saj d, VALUE key) {
     if (d->klen <= (size_t)(d->tail - d->keys)) {
         size_t off = d->tail - d->keys;
 
@@ -45,31 +35,55 @@ static void noop(ojParser p) {
 }
 
 static void open_object(ojParser p) {
-    rb_funcall(((Delegate)p->ctx)->handler, oj_hash_start_id, 1, Qnil);
+    rb_funcall(((Saj)p->ctx)->handler, oj_hash_start_id, 1, Qnil);
+}
+
+static void open_object_loc(ojParser p) {
+    rb_funcall(((Saj)p->ctx)->handler, oj_hash_start_id, 3, Qnil, LONG2FIX(p->line), LONG2FIX(p->cur - p->col));
 }
 
 static void open_object_key(ojParser p) {
-    Delegate       d   = (Delegate)p->ctx;
+    Saj       d   = (Saj)p->ctx;
     volatile VALUE key = get_key(p);
 
     push_key(d, key);
     rb_funcall(d->handler, oj_hash_start_id, 1, key);
 }
 
+static void open_object_loc_key(ojParser p) {
+    Saj       d   = (Saj)p->ctx;
+    volatile VALUE key = get_key(p);
+
+    push_key(d, key);
+    rb_funcall(d->handler, oj_hash_start_id, 3, key, LONG2FIX(p->line), LONG2FIX(p->cur - p->col));
+}
+
 static void open_array(ojParser p) {
-    rb_funcall(((Delegate)p->ctx)->handler, oj_array_start_id, 1, Qnil);
+    rb_funcall(((Saj)p->ctx)->handler, oj_array_start_id, 1, Qnil);
+}
+
+static void open_array_loc(ojParser p) {
+    rb_funcall(((Saj)p->ctx)->handler, oj_array_start_id, 3, Qnil, LONG2FIX(p->line), LONG2FIX(p->cur - p->col));
 }
 
 static void open_array_key(ojParser p) {
-    Delegate       d   = (Delegate)p->ctx;
+    Saj       d   = (Saj)p->ctx;
     volatile VALUE key = get_key(p);
 
     push_key(d, key);
     rb_funcall(d->handler, oj_array_start_id, 1, key);
 }
 
+static void open_array_loc_key(ojParser p) {
+    Saj       d   = (Saj)p->ctx;
+    volatile VALUE key = get_key(p);
+
+    push_key(d, key);
+    rb_funcall(d->handler, oj_array_start_id, 3, key, LONG2FIX(p->line), LONG2FIX(p->cur - p->col));
+}
+
 static void close_object(ojParser p) {
-    Delegate d   = (Delegate)p->ctx;
+    Saj d   = (Saj)p->ctx;
     VALUE    key = Qnil;
 
     if (OBJECT_FUN == p->stack[p->depth]) {
@@ -82,8 +96,22 @@ static void close_object(ojParser p) {
     rb_funcall(d->handler, oj_hash_end_id, 1, key);
 }
 
+static void close_object_loc(ojParser p) {
+    Saj d   = (Saj)p->ctx;
+    VALUE    key = Qnil;
+
+    if (OBJECT_FUN == p->stack[p->depth]) {
+        d->tail--;
+        if (d->tail < d->keys) {
+            rb_raise(rb_eIndexError, "accessing key stack");
+        }
+        key = *d->tail;
+    }
+    rb_funcall(d->handler, oj_hash_end_id, 3, key, LONG2FIX(p->line), LONG2FIX(p->cur - p->col));
+}
+
 static void close_array(ojParser p) {
-    Delegate d   = (Delegate)p->ctx;
+    Saj d   = (Saj)p->ctx;
     VALUE    key = Qnil;
 
     if (OBJECT_FUN == p->stack[p->depth]) {
@@ -96,66 +124,200 @@ static void close_array(ojParser p) {
     rb_funcall(d->handler, oj_array_end_id, 1, key);
 }
 
+static void close_array_loc(ojParser p) {
+    Saj d   = (Saj)p->ctx;
+    VALUE    key = Qnil;
+
+    if (OBJECT_FUN == p->stack[p->depth]) {
+        d->tail--;
+        if (d->tail < d->keys) {
+            rb_raise(rb_eIndexError, "accessing key stack");
+        }
+        key = *d->tail;
+    }
+    rb_funcall(d->handler, oj_array_end_id, 3, key, LONG2FIX(p->line), LONG2FIX(p->cur - p->col));
+}
+
 static void add_null(ojParser p) {
-    rb_funcall(((Delegate)p->ctx)->handler, oj_add_value_id, 2, Qnil, Qnil);
+    rb_funcall(((Saj)p->ctx)->handler, oj_add_value_id, 2, Qnil, Qnil);
+}
+
+static void add_null_loc(ojParser p) {
+    rb_funcall(((Saj)p->ctx)->handler,
+               oj_add_value_id,
+               4,
+               Qnil,
+               Qnil,
+               LONG2FIX(p->line),
+               LONG2FIX(p->cur - p->col));
 }
 
 static void add_null_key(ojParser p) {
-    rb_funcall(((Delegate)p->ctx)->handler, oj_add_value_id, 2, Qnil, get_key(p));
+    rb_funcall(((Saj)p->ctx)->handler, oj_add_value_id, 2, Qnil, get_key(p));
+}
+
+static void add_null_key_loc(ojParser p) {
+    rb_funcall(((Saj)p->ctx)->handler,
+               oj_add_value_id,
+               4,
+               Qnil,
+               get_key(p),
+               LONG2FIX(p->line),
+               LONG2FIX(p->cur - p->col));
 }
 
 static void add_true(ojParser p) {
-    rb_funcall(((Delegate)p->ctx)->handler, oj_add_value_id, 2, Qtrue, Qnil);
+    rb_funcall(((Saj)p->ctx)->handler, oj_add_value_id, 2, Qtrue, Qnil);
+}
+
+static void add_true_loc(ojParser p) {
+    rb_funcall(((Saj)p->ctx)->handler,
+               oj_add_value_id,
+               4,
+               Qtrue,
+               Qnil,
+               LONG2FIX(p->line),
+               LONG2FIX(p->cur - p->col));
 }
 
 static void add_true_key(ojParser p) {
-    rb_funcall(((Delegate)p->ctx)->handler, oj_add_value_id, 2, Qtrue, get_key(p));
+    rb_funcall(((Saj)p->ctx)->handler, oj_add_value_id, 2, Qtrue, get_key(p));
+}
+
+static void add_true_key_loc(ojParser p) {
+    rb_funcall(((Saj)p->ctx)->handler,
+               oj_add_value_id,
+               4,
+               Qtrue,
+               get_key(p),
+               LONG2FIX(p->line),
+               LONG2FIX(p->cur - p->col));
 }
 
 static void add_false(ojParser p) {
-    rb_funcall(((Delegate)p->ctx)->handler, oj_add_value_id, 2, Qfalse, Qnil);
+    rb_funcall(((Saj)p->ctx)->handler, oj_add_value_id, 2, Qfalse, Qnil);
+}
+
+static void add_false_loc(ojParser p) {
+    rb_funcall(((Saj)p->ctx)->handler,
+               oj_add_value_id,
+               4,
+               Qfalse,
+               Qnil,
+               LONG2FIX(p->line),
+               LONG2FIX(p->cur - p->col));
 }
 
 static void add_false_key(ojParser p) {
-    rb_funcall(((Delegate)p->ctx)->handler, oj_add_value_id, 2, Qfalse, get_key(p));
+    rb_funcall(((Saj)p->ctx)->handler, oj_add_value_id, 2, Qfalse, get_key(p));
+}
+
+static void add_false_key_loc(ojParser p) {
+    rb_funcall(((Saj)p->ctx)->handler,
+               oj_add_value_id,
+               4,
+               Qfalse,
+               get_key(p),
+               LONG2FIX(p->line),
+               LONG2FIX(p->cur - p->col));
 }
 
 static void add_int(ojParser p) {
-    rb_funcall(((Delegate)p->ctx)->handler, oj_add_value_id, 2, LONG2NUM(p->num.fixnum), Qnil);
+    rb_funcall(((Saj)p->ctx)->handler, oj_add_value_id, 2, LONG2NUM(p->num.fixnum), Qnil);
+}
+
+static void add_int_loc(ojParser p) {
+    rb_funcall(((Saj)p->ctx)->handler,
+               oj_add_value_id,
+               4,
+               LONG2NUM(p->num.fixnum),
+               Qnil,
+               LONG2FIX(p->line),
+               LONG2FIX(p->cur - p->col));
 }
 
 static void add_int_key(ojParser p) {
-    rb_funcall(((Delegate)p->ctx)->handler, oj_add_value_id, 2, LONG2NUM(p->num.fixnum), get_key(p));
+    rb_funcall(((Saj)p->ctx)->handler, oj_add_value_id, 2, LONG2NUM(p->num.fixnum), get_key(p));
+}
+
+static void add_int_key_loc(ojParser p) {
+    rb_funcall(((Saj)p->ctx)->handler,
+               oj_add_value_id,
+               4,
+               LONG2NUM(p->num.fixnum),
+               get_key(p),
+               LONG2FIX(p->line),
+               LONG2FIX(p->cur - p->col));
 }
 
 static void add_float(ojParser p) {
-    rb_funcall(((Delegate)p->ctx)->handler, oj_add_value_id, 2, rb_float_new(p->num.dub), Qnil);
+    rb_funcall(((Saj)p->ctx)->handler, oj_add_value_id, 2, rb_float_new(p->num.dub), Qnil);
+}
+
+static void add_float_loc(ojParser p) {
+    rb_funcall(((Saj)p->ctx)->handler,
+               oj_add_value_id,
+               4,
+               rb_float_new(p->num.dub),
+               Qnil,
+               LONG2FIX(p->line),
+               LONG2FIX(p->cur - p->col));
 }
 
 static void add_float_key(ojParser p) {
-    rb_funcall(((Delegate)p->ctx)->handler, oj_add_value_id, 2, rb_float_new(p->num.dub), get_key(p));
+    rb_funcall(((Saj)p->ctx)->handler, oj_add_value_id, 2, rb_float_new(p->num.dub), get_key(p));
+}
+
+static void add_float_key_loc(ojParser p) {
+    rb_funcall(((Saj)p->ctx)->handler,
+               oj_add_value_id,
+               4,
+               rb_float_new(p->num.dub),
+               get_key(p),
+               LONG2FIX(p->line),
+               LONG2FIX(p->cur - p->col));
 }
 
 static void add_big(ojParser p) {
-    rb_funcall((VALUE)p->ctx,
+    rb_funcall(((Saj)p->ctx)->handler,
                oj_add_value_id,
                2,
                rb_funcall(rb_cObject, oj_bigdecimal_id, 1, rb_str_new(buf_str(&p->buf), buf_len(&p->buf))),
                Qnil);
 }
 
+static void add_big_loc(ojParser p) {
+    rb_funcall(((Saj)p->ctx)->handler,
+               oj_add_value_id,
+               4,
+               rb_funcall(rb_cObject, oj_bigdecimal_id, 1, rb_str_new(buf_str(&p->buf), buf_len(&p->buf))),
+               Qnil,
+               LONG2FIX(p->line),
+               LONG2FIX(p->cur - p->col));
+}
+
 static void add_big_key(ojParser p) {
-    rb_funcall((VALUE)p->ctx,
+    rb_funcall(((Saj)p->ctx)->handler,
                oj_add_value_id,
                2,
                rb_funcall(rb_cObject, oj_bigdecimal_id, 1, rb_str_new(buf_str(&p->buf), buf_len(&p->buf))),
                get_key(p));
 }
 
+static void add_big_key_loc(ojParser p) {
+    rb_funcall(((Saj)p->ctx)->handler,
+               oj_add_value_id,
+               4,
+               rb_funcall(rb_cObject, oj_bigdecimal_id, 1, rb_str_new(buf_str(&p->buf), buf_len(&p->buf))),
+               get_key(p),
+               LONG2FIX(p->line),
+               LONG2FIX(p->cur - p->col));
+}
+
 static void add_str(ojParser p) {
-    Delegate       d = (Delegate)p->ctx;
+    Saj       d = (Saj)p->ctx;
     volatile VALUE rstr;
-    const char *   str = buf_str(&p->buf);
+    const char    *str = buf_str(&p->buf);
     size_t         len = buf_len(&p->buf);
 
     if (d->cache_str < len) {
@@ -166,10 +328,24 @@ static void add_str(ojParser p) {
     rb_funcall(d->handler, oj_add_value_id, 2, rstr, Qnil);
 }
 
-static void add_str_key(ojParser p) {
-    Delegate       d = (Delegate)p->ctx;
+static void add_str_loc(ojParser p) {
+    Saj       d = (Saj)p->ctx;
     volatile VALUE rstr;
-    const char *   str = buf_str(&p->buf);
+    const char    *str = buf_str(&p->buf);
+    size_t         len = buf_len(&p->buf);
+
+    if (d->cache_str < len) {
+        rstr = cache_intern(d->str_cache, str, len);
+    } else {
+        rstr = rb_utf8_str_new(str, len);
+    }
+    rb_funcall(d->handler, oj_add_value_id, 4, rstr, Qnil, LONG2FIX(p->line), LONG2FIX(p->cur - p->col));
+}
+
+static void add_str_key(ojParser p) {
+    Saj       d = (Saj)p->ctx;
+    volatile VALUE rstr;
+    const char    *str = buf_str(&p->buf);
     size_t         len = buf_len(&p->buf);
 
     if (d->cache_str < len) {
@@ -178,6 +354,20 @@ static void add_str_key(ojParser p) {
         rstr = rb_utf8_str_new(str, len);
     }
     rb_funcall(d->handler, oj_add_value_id, 2, rstr, get_key(p));
+}
+
+static void add_str_key_loc(ojParser p) {
+    Saj       d = (Saj)p->ctx;
+    volatile VALUE rstr;
+    const char    *str = buf_str(&p->buf);
+    size_t         len = buf_len(&p->buf);
+
+    if (d->cache_str < len) {
+        rstr = cache_intern(d->str_cache, str, len);
+    } else {
+        rstr = rb_utf8_str_new(str, len);
+    }
+    rb_funcall(d->handler, oj_add_value_id, 4, rstr, get_key(p), LONG2FIX(p->line), LONG2FIX(p->cur - p->col));
 }
 
 static void reset(ojParser p) {
@@ -200,7 +390,7 @@ static void reset(ojParser p) {
 }
 
 static VALUE option(ojParser p, const char *key, VALUE value) {
-    Delegate d = (Delegate)p->ctx;
+    Saj d = (Saj)p->ctx;
 
     if (0 == strcmp(key, "handler")) {
         return d->handler;
@@ -210,53 +400,107 @@ static VALUE option(ojParser p, const char *key, VALUE value) {
         d->handler = value;
         reset(p);
         if (rb_respond_to(value, oj_hash_start_id)) {
-            p->funcs[TOP_FUN].open_object    = open_object;
-            p->funcs[ARRAY_FUN].open_object  = open_object;
-            p->funcs[OBJECT_FUN].open_object = open_object_key;
+            if (1 == rb_obj_method_arity(value, oj_hash_start_id)) {
+                p->funcs[TOP_FUN].open_object    = open_object;
+                p->funcs[ARRAY_FUN].open_object  = open_object;
+                p->funcs[OBJECT_FUN].open_object = open_object_key;
+            } else {
+                p->funcs[TOP_FUN].open_object    = open_object_loc;
+                p->funcs[ARRAY_FUN].open_object  = open_object_loc;
+                p->funcs[OBJECT_FUN].open_object = open_object_loc_key;
+            }
         }
         if (rb_respond_to(value, oj_array_start_id)) {
-            p->funcs[TOP_FUN].open_array    = open_array;
-            p->funcs[ARRAY_FUN].open_array  = open_array;
-            p->funcs[OBJECT_FUN].open_array = open_array_key;
+            if (1 == rb_obj_method_arity(value, oj_array_start_id)) {
+                p->funcs[TOP_FUN].open_array    = open_array;
+                p->funcs[ARRAY_FUN].open_array  = open_array;
+                p->funcs[OBJECT_FUN].open_array = open_array_key;
+            } else {
+                p->funcs[TOP_FUN].open_array    = open_array_loc;
+                p->funcs[ARRAY_FUN].open_array  = open_array_loc;
+                p->funcs[OBJECT_FUN].open_array = open_array_loc_key;
+            }
         }
         if (rb_respond_to(value, oj_hash_end_id)) {
-            p->funcs[TOP_FUN].close_object    = close_object;
-            p->funcs[ARRAY_FUN].close_object  = close_object;
-            p->funcs[OBJECT_FUN].close_object = close_object;
+            if (1 == rb_obj_method_arity(value, oj_hash_end_id)) {
+                p->funcs[TOP_FUN].close_object    = close_object;
+                p->funcs[ARRAY_FUN].close_object  = close_object;
+                p->funcs[OBJECT_FUN].close_object = close_object;
+            } else {
+                p->funcs[TOP_FUN].close_object    = close_object_loc;
+                p->funcs[ARRAY_FUN].close_object  = close_object_loc;
+                p->funcs[OBJECT_FUN].close_object = close_object_loc;
+            }
         }
         if (rb_respond_to(value, oj_array_end_id)) {
-            p->funcs[TOP_FUN].close_array    = close_array;
-            p->funcs[ARRAY_FUN].close_array  = close_array;
-            p->funcs[OBJECT_FUN].close_array = close_array;
+            if (1 == rb_obj_method_arity(value, oj_array_end_id)) {
+                p->funcs[TOP_FUN].close_array    = close_array;
+                p->funcs[ARRAY_FUN].close_array  = close_array;
+                p->funcs[OBJECT_FUN].close_array = close_array;
+            } else {
+                p->funcs[TOP_FUN].close_array    = close_array_loc;
+                p->funcs[ARRAY_FUN].close_array  = close_array_loc;
+                p->funcs[OBJECT_FUN].close_array = close_array_loc;
+            }
         }
         if (rb_respond_to(value, oj_add_value_id)) {
-            p->funcs[TOP_FUN].add_null    = add_null;
-            p->funcs[ARRAY_FUN].add_null  = add_null;
-            p->funcs[OBJECT_FUN].add_null = add_null_key;
+            if (2 == rb_obj_method_arity(value, oj_add_value_id)) {
+                p->funcs[TOP_FUN].add_null    = add_null;
+                p->funcs[ARRAY_FUN].add_null  = add_null;
+                p->funcs[OBJECT_FUN].add_null = add_null_key;
 
-            p->funcs[TOP_FUN].add_true    = add_true;
-            p->funcs[ARRAY_FUN].add_true  = add_true;
-            p->funcs[OBJECT_FUN].add_true = add_true_key;
+                p->funcs[TOP_FUN].add_true    = add_true;
+                p->funcs[ARRAY_FUN].add_true  = add_true;
+                p->funcs[OBJECT_FUN].add_true = add_true_key;
 
-            p->funcs[TOP_FUN].add_false    = add_false;
-            p->funcs[ARRAY_FUN].add_false  = add_false;
-            p->funcs[OBJECT_FUN].add_false = add_false_key;
+                p->funcs[TOP_FUN].add_false    = add_false;
+                p->funcs[ARRAY_FUN].add_false  = add_false;
+                p->funcs[OBJECT_FUN].add_false = add_false_key;
 
-            p->funcs[TOP_FUN].add_int    = add_int;
-            p->funcs[ARRAY_FUN].add_int  = add_int;
-            p->funcs[OBJECT_FUN].add_int = add_int_key;
+                p->funcs[TOP_FUN].add_int    = add_int;
+                p->funcs[ARRAY_FUN].add_int  = add_int;
+                p->funcs[OBJECT_FUN].add_int = add_int_key;
 
-            p->funcs[TOP_FUN].add_float    = add_float;
-            p->funcs[ARRAY_FUN].add_float  = add_float;
-            p->funcs[OBJECT_FUN].add_float = add_float_key;
+                p->funcs[TOP_FUN].add_float    = add_float;
+                p->funcs[ARRAY_FUN].add_float  = add_float;
+                p->funcs[OBJECT_FUN].add_float = add_float_key;
 
-            p->funcs[TOP_FUN].add_big    = add_big;
-            p->funcs[ARRAY_FUN].add_big  = add_big;
-            p->funcs[OBJECT_FUN].add_big = add_big_key;
+                p->funcs[TOP_FUN].add_big    = add_big;
+                p->funcs[ARRAY_FUN].add_big  = add_big;
+                p->funcs[OBJECT_FUN].add_big = add_big_key;
 
-            p->funcs[TOP_FUN].add_str    = add_str;
-            p->funcs[ARRAY_FUN].add_str  = add_str;
-            p->funcs[OBJECT_FUN].add_str = add_str_key;
+                p->funcs[TOP_FUN].add_str    = add_str;
+                p->funcs[ARRAY_FUN].add_str  = add_str;
+                p->funcs[OBJECT_FUN].add_str = add_str_key;
+            } else {
+                p->funcs[TOP_FUN].add_null    = add_null_loc;
+                p->funcs[ARRAY_FUN].add_null  = add_null_loc;
+                p->funcs[OBJECT_FUN].add_null = add_null_key_loc;
+
+                p->funcs[TOP_FUN].add_true    = add_true_loc;
+                p->funcs[ARRAY_FUN].add_true  = add_true_loc;
+                p->funcs[OBJECT_FUN].add_true = add_true_key_loc;
+
+                p->funcs[TOP_FUN].add_false    = add_false_loc;
+                p->funcs[ARRAY_FUN].add_false  = add_false_loc;
+                p->funcs[OBJECT_FUN].add_false = add_false_key_loc;
+
+                p->funcs[TOP_FUN].add_int    = add_int_loc;
+                p->funcs[ARRAY_FUN].add_int  = add_int_loc;
+                p->funcs[OBJECT_FUN].add_int = add_int_key_loc;
+
+                p->funcs[TOP_FUN].add_float    = add_float_loc;
+                p->funcs[ARRAY_FUN].add_float  = add_float_loc;
+                p->funcs[OBJECT_FUN].add_float = add_float_key_loc;
+
+                p->funcs[TOP_FUN].add_big    = add_big_loc;
+                p->funcs[ARRAY_FUN].add_big  = add_big_loc;
+                p->funcs[OBJECT_FUN].add_big = add_big_key_loc;
+
+                p->funcs[TOP_FUN].add_str    = add_str_loc;
+                p->funcs[ARRAY_FUN].add_str  = add_str_loc;
+                p->funcs[OBJECT_FUN].add_str = add_str_key_loc;
+            }
         }
         return Qnil;
     }
@@ -283,7 +527,7 @@ static VALUE option(ojParser p, const char *key, VALUE value) {
 
         return INT2NUM((int)d->cache_str);
     }
-    rb_raise(rb_eArgError, "%s is not an option for the SAJ (Simple API for JSON) delegate", key);
+    rb_raise(rb_eArgError, "%s is not an option for the SAJ (Simple API for JSON) saj", key);
 
     return Qnil;  // Never reached due to the raise but required by the compiler.
 }
@@ -293,13 +537,13 @@ static VALUE result(ojParser p) {
 }
 
 static void start(ojParser p) {
-    Delegate d = (Delegate)p->ctx;
+    Saj d = (Saj)p->ctx;
 
     d->tail = d->keys;
 }
 
 static void dfree(ojParser p) {
-    Delegate d = (Delegate)p->ctx;
+    Saj d = (Saj)p->ctx;
 
     if (NULL != d->keys) {
         xfree(d->keys);
@@ -309,11 +553,11 @@ static void dfree(ojParser p) {
 }
 
 static void mark(ojParser p) {
-    if (NULL == p->ctx) {
+    if (NULL == p || NULL == p->ctx) {
         return;
     }
-    Delegate d = (Delegate)p->ctx;
-    VALUE *kp;
+    Saj d = (Saj)p->ctx;
+    VALUE   *kp;
 
     cache_mark(d->str_cache);
     if (Qnil != d->handler) {
@@ -330,9 +574,7 @@ static VALUE form_str(const char *str, size_t len) {
     return rb_str_freeze(rb_utf8_str_new(str, len));
 }
 
-void oj_set_parser_saj(ojParser p) {
-    Delegate d = ALLOC(struct _delegate);
-
+void oj_init_saj(ojParser p, Saj d) {
     d->klen      = 256;
     d->keys      = ALLOC_N(VALUE, d->klen);
     d->tail      = d->keys;
@@ -345,4 +587,10 @@ void oj_set_parser_saj(ojParser p) {
     p->free   = dfree;
     p->mark   = mark;
     p->start  = start;
+}
+
+void oj_set_parser_saj(ojParser p) {
+    Saj d = ALLOC(struct _saj);
+
+    oj_init_saj(p, d);
 }

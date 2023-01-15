@@ -1,4 +1,8 @@
-## Unreleased
+## 1.0.5 (2022-05-25)
+
+- Silence SQLite3 warnings
+
+## 1.0.4 (2021-06-07)
 
 - Support Mozilla's cookie storage format up to version 7.
 

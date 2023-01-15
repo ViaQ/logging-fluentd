@@ -248,7 +248,9 @@ module Fluent::Plugin
         end
 
         begin
-          record.merge!({"@timestamp" => Time.at(time).iso8601(@time_precision)})
+          unless record.has_key?("@timestamp")
+            record.merge!({"@timestamp" => Time.at(time).iso8601(@time_precision)})
+          end
           bulk_message = append_record_to_messages(CREATE_OP, {}, headers, record, bulk_message)
         rescue => e
           router.emit_error_event(tag, time, record, e)
@@ -263,6 +265,7 @@ module Fluent::Plugin
         response = client(host).bulk(params)
         if response['errors']
           log.error "Could not bulk insert to Data Stream: #{data_stream_name} #{response}"
+          @num_errors_metrics.inc
         end
       rescue => e
         raise RecoverableRequestFailure, "could not push logs to Elasticsearch cluster (#{data_stream_name}): #{e.message}"

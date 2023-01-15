@@ -42,13 +42,15 @@ gem install faraday-multipart
 First of all, you'll need to add the multipart middleware to your Faraday connection:
 
 ```ruby
+require 'faraday'
 require 'faraday/multipart'
 
 conn = Faraday.new(...) do |f|
-  f.request :multipart
+  f.request :multipart, **options
   # ...
 end
 ```
+
 
 Payload can be a mix of POST data and multipart values.
 
@@ -91,6 +93,50 @@ payload[:raw_with_id] = Faraday::Multipart::ParamPart.new(
 conn.post('/', payload)
 ```
 
+### Sending an array of documents
+
+Sometimes, the server you're calling will expect an array of documents or other values for the same key.
+The `multipart` middleware will automatically handle this scenario for you:
+
+```ruby
+payload = {
+  files: [
+    Faraday::Multipart::FilePart.new(__FILE__, 'text/x-ruby'),
+    Faraday::Multipart::FilePart.new(__FILE__, 'text/x-pdf')
+  ],
+  url: [
+    'http://mydomain.com/callback1',
+    'http://mydomain.com/callback2'
+  ]
+}
+
+conn.post(url, payload)
+#=> POST url[]=http://mydomain.com/callback1&url[]=http://mydomain.com/callback2
+#=>   and includes both files in the request under the `files[]` name
+```
+
+However, by default these will be sent with `files[]` key and the URLs with `url[]`, similarly to arrays in URL parameters.
+Some servers (e.g. Mailgun) expect each document to have the same parameter key instead.
+You can instruct the `multipart` middleware to do so by providing the `flat_encode` option:
+
+```ruby
+require 'faraday'
+require 'faraday/multipart'
+
+conn = Faraday.new(...) do |f|
+  f.request :multipart, flat_encode: true
+  # ...
+end
+
+payload = ... # see example above
+
+conn.post(url, payload)
+#=> POST url=http://mydomain.com/callback1&url=http://mydomain.com/callback2
+#=>   and includes both files in the request under the `files` name
+```
+
+This works for both `UploadIO` and normal parameters alike.
+
 ## Development
 
 After checking out the repo, run `bin/setup` to install dependencies.
@@ -99,8 +145,9 @@ Then, run `bin/test` to run the tests.
 
 To install this gem onto your local machine, run `rake build`.
 
-To release a new version, make a commit with a message such as "Bumped to 0.0.2" and then run `rake release`. See how it
-works [here](https://bundler.io/guides/creating_gem.html#releasing-the-gem).
+### Releasing a new version
+
+To release a new version, make a commit with a message such as "Bumped to 0.0.2", and change the _Unreleased_ heading in `CHANGELOG.md` to a heading like "0.0.2 (2022-01-01)", and then use GitHub Releases to author a release. A GitHub Actions workflow then publishes a new gem to [RubyGems.org](https://rubygems.org/gems/faraday-multipart).
 
 ## Contributing
 

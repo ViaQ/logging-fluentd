@@ -193,6 +193,7 @@ If `ruby-kafka` doesn't fit your kafka environment, check `rdkafka2` plugin inst
       message_key_key       (string) :default => 'message_key'
       default_topic         (string) :default => nil
       default_partition_key (string) :default => nil
+      record_key            (string) :default => nil
       default_message_key   (string) :default => nil
       exclude_topic_key     (bool)   :default => false
       exclude_partition_key (bool)   :default => false
@@ -205,6 +206,7 @@ If `ruby-kafka` doesn't fit your kafka environment, check `rdkafka2` plugin inst
       use_default_for_unknown_topic (bool) :default => false
       discard_kafka_delivery_failed (bool) :default => false (No discard)
       partitioner_hash_function (enum) (crc32|murmur2) :default => 'crc32'
+      share_producer        (bool)   :default => false
 
       <format>
         @type (json|ltsv|msgpack|attr:<record name>|<formatter name>) :default => json
@@ -335,6 +337,40 @@ For example, `$.source.ip` can be extracted with config `headers_from_record` an
 
 > Using this config to remove unused fields is discouraged. A [filter plugin](https://docs.fluentd.org/v/0.12/filter) can be used for this purpose.
 
+#### Send only a sub field as a message payload
+
+If `record_key` is provided, the plugin sends only a sub field given by that key.
+The configuration format is jsonpath.
+
+e.g. When the following configuration and the incoming record are given:
+
+configuration:
+
+    <match **>
+      @type kafka2
+      [...]
+      record_key '$.data'
+    </match>
+
+record:
+
+    {
+        "specversion" : "1.0",
+        "type" : "com.example.someevent",
+        "id" : "C234-1234-1234",
+        "time" : "2018-04-05T17:31:00Z",
+        "datacontenttype" : "application/json",
+        "data" : {
+            "appinfoA" : "abc",
+            "appinfoB" : 123,
+            "appinfoC" : true
+        },
+        ...
+    }
+
+only the `data` field will be serialized by the formatter and sent to Kafka.
+The toplevel `data` key will be removed.
+
 ### Buffered output plugin
 
 This plugin uses ruby-kafka producer for writing data. This plugin is for v0.12. If you use v1, see `kafka2`.
@@ -460,6 +496,7 @@ You need to install rdkafka gem.
       # same with kafka2
       headers               (hash) :default => {}
       headers_from_record   (hash) :default => {}
+      record_key            (string) :default => nil
 
       <format>
         @type (json|ltsv|msgpack|attr:<record name>|<formatter name>) :default => json

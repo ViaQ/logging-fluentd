@@ -198,7 +198,6 @@ static int mimic_limit_arg(VALUE a) {
  * Returns [_String_] a JSON string.
  */
 static VALUE mimic_dump(int argc, VALUE *argv, VALUE self) {
-    char            buf[4096];
     struct _out     out;
     struct _options copts = oj_default_options;
     VALUE           rstr;
@@ -206,9 +205,9 @@ static VALUE mimic_dump(int argc, VALUE *argv, VALUE self) {
 
     copts.str_rx.head = NULL;
     copts.str_rx.tail = NULL;
-    out.buf           = buf;
-    out.end           = buf + sizeof(buf) - 10;
-    out.allocated     = false;
+
+    oj_out_init(&out);
+
     out.caller        = CALLER_DUMP;
     copts.escape_mode = JXEsc;
     copts.mode        = CompatMode;
@@ -257,9 +256,9 @@ static VALUE mimic_dump(int argc, VALUE *argv, VALUE self) {
         rb_funcall2(io, oj_write_id, 1, args);
         rstr = io;
     }
-    if (out.allocated) {
-        xfree(out.buf);
-    }
+
+    oj_out_free(&out);
+
     return rstr;
 }
 
@@ -358,15 +357,16 @@ static VALUE mimic_dump_load(int argc, VALUE *argv, VALUE self) {
 }
 
 static VALUE mimic_generate_core(int argc, VALUE *argv, Options copts) {
-    char        buf[4096];
     struct _out out;
     VALUE       rstr;
 
-    memset(buf, 0, sizeof(buf));
+    if (0 == argc) {
+        rb_raise(rb_eArgError, "wrong number of arguments (0))");
+    }
+    memset(out.stack_buffer, 0, sizeof(out.stack_buffer));
 
-    out.buf       = buf;
-    out.end       = buf + sizeof(buf) - 10;
-    out.allocated = false;
+    oj_out_init(&out);
+
     out.omit_nil  = copts->dump_opts.omit_nil;
     out.caller    = CALLER_GENERATE;
     // For obj.to_json or generate nan is not allowed but if called from dump
@@ -388,6 +388,10 @@ static VALUE mimic_generate_core(int argc, VALUE *argv, Options copts) {
         VALUE active_hack[1];
 
         if (Qundef == state_class) {
+            rb_warn(
+              "Oj::Rails.mimic_JSON was called implicitly. "
+              "Call it explicitly beforehand if you want to remove this warning."
+            );
             oj_define_mimic_json(0, NULL, Qnil);
         }
         active_hack[0] = rb_funcall(state_class, oj_new_id, 0);
@@ -398,9 +402,9 @@ static VALUE mimic_generate_core(int argc, VALUE *argv, Options copts) {
     }
     rstr = rb_str_new2(out.buf);
     rstr = oj_encode(rstr);
-    if (out.allocated) {
-        xfree(out.buf);
-    }
+
+    oj_out_free(&out);
+
     return rstr;
 }
 
@@ -457,9 +461,12 @@ oj_mimic_pretty_generate(int argc, VALUE *argv, VALUE self) {
     // a Hash. I haven't dug deep enough to find out why but using a State
     // instance and not a Hash gives the desired behavior.
     *rargs = *argv;
-    if (1 == argc) {
+    if (0 == argc) {
+        rb_raise(rb_eArgError, "wrong number of arguments (0))");
+    }
+    if (1 == argc || Qnil == argv[1]) {
         h = rb_hash_new();
-    } else {
+    } else  {
         h = argv[1];
     }
     if (!oj_hash_has_key(h, oj_indent_sym)) {
@@ -478,6 +485,10 @@ oj_mimic_pretty_generate(int argc, VALUE *argv, VALUE self) {
         rb_hash_aset(h, oj_array_nl_sym, rb_str_new2("\n"));
     }
     if (Qundef == state_class) {
+        rb_warn(
+          "Oj::Rails.mimic_JSON was called implicitly. "
+          "Call it explicitly beforehand if you want to remove this warning."
+        );
         oj_define_mimic_json(0, NULL, Qnil);
     }
     rargs[1] = rb_funcall(state_class, oj_new_id, 1, h);
@@ -533,14 +544,6 @@ static int parse_options_cb(VALUE k, VALUE v, VALUE info) {
         }
     } else if (oj_decimal_class_sym == k) {
         pi->options.compat_bigdec = (oj_bigdecimal_class == v);
-    } else if (oj_max_nesting_sym == k) {
-        if (Qtrue == v) {
-            pi->max_depth = 100;
-        } else if (Qfalse == v || Qnil == v) {
-            pi->max_depth = 0;
-        } else if (T_FIXNUM == rb_type(v)) {
-            pi->max_depth = NUM2INT(v);
-        }
     }
     return ST_CONTINUE;
 }
@@ -570,11 +573,21 @@ static VALUE mimic_parse_core(int argc, VALUE *argv, VALUE self, bool bang) {
     pi.max_depth             = 100;
 
     if (Qnil != ropts) {
+        VALUE v;
+
         if (T_HASH != rb_type(ropts)) {
             rb_raise(rb_eArgError, "options must be a hash.");
         }
 
         rb_hash_foreach(ropts, parse_options_cb, (VALUE)&pi);
+        v = rb_hash_lookup(ropts, oj_max_nesting_sym);
+        if (Qtrue == v) {
+            pi.max_depth = 100;
+        } else if (Qfalse == v || Qnil == v) {
+            pi.max_depth = 0;
+        } else if (T_FIXNUM == rb_type(v)) {
+            pi.max_depth = NUM2INT(v);
+        }
         oj_parse_opt_match_string(&pi.options.str_rx, ropts);
         if (Yes == pi.options.create_ok && Yes == pi.options.sym_key) {
             rb_raise(rb_eArgError, ":symbolize_names and :create_additions can not both be true.");
@@ -740,16 +753,15 @@ static struct _options mimic_object_to_json_options = {0,              // indent
                                                        }};
 
 static VALUE mimic_object_to_json(int argc, VALUE *argv, VALUE self) {
-    char            buf[4096];
     struct _out     out;
     VALUE           rstr;
     struct _options copts = oj_default_options;
 
     copts.str_rx.head = NULL;
     copts.str_rx.tail = NULL;
-    out.buf           = buf;
-    out.end           = buf + sizeof(buf) - 10;
-    out.allocated     = false;
+
+    oj_out_init(&out);
+
     out.omit_nil      = copts.dump_opts.omit_nil;
     copts.mode        = CompatMode;
     copts.to_json     = No;
@@ -765,9 +777,9 @@ static VALUE mimic_object_to_json(int argc, VALUE *argv, VALUE self) {
     }
     rstr = rb_str_new2(out.buf);
     rstr = oj_encode(rstr);
-    if (out.allocated) {
-        xfree(out.buf);
-    }
+
+    oj_out_free(&out);
+
     return rstr;
 }
 

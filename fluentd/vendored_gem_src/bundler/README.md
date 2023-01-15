@@ -1,8 +1,5 @@
-[![Version     ](https://img.shields.io/gem/v/bundler.svg?style=flat)](https://rubygems.org/gems/bundler)
-[![Build Status](https://img.shields.io/travis/bundler/bundler/master.svg?style=flat)](https://travis-ci.org/bundler/bundler)
-[![Code Climate](https://img.shields.io/codeclimate/github/bundler/bundler.svg?style=flat)](https://codeclimate.com/github/bundler/bundler)
-[![Inline docs ](http://inch-ci.org/github/bundler/bundler.svg?style=flat)](http://inch-ci.org/github/bundler/bundler)
-[![Slack       ](http://bundler-slackin.herokuapp.com/badge.svg)](http://bundler-slackin.herokuapp.com)
+[![Version ](https://img.shields.io/gem/v/bundler.svg?style=flat)](https://rubygems.org/gems/bundler)
+[![Slack   ](https://bundler-slackin.herokuapp.com/badge.svg)](https://bundler-slackin.herokuapp.com)
 
 # Bundler: a gem to bundle gems
 
@@ -29,25 +26,27 @@ bundle install
 bundle exec rspec
 ```
 
-See [bundler.io](http://bundler.io) for the full documentation.
+See [bundler.io](https://bundler.io) for the full documentation.
 
 ### Troubleshooting
 
 For help with common problems, see [TROUBLESHOOTING](doc/TROUBLESHOOTING.md).
 
-Still stuck? Try [filing an issue](doc/contributing/ISSUES.md).
+Still stuck? Try [filing an issue](https://github.com/rubygems/rubygems/issues/new?labels=Bundler&template=bundler-related-issue.md).
 
 ### Other questions
 
 To see what has changed in recent versions of Bundler, see the [CHANGELOG](CHANGELOG.md).
 
-To get in touch with the Bundler core team and other Bundler users, please see [getting help](doc/contributing/GETTING_HELP.md).
+To get in touch with the Bundler core team and other Bundler users, please join [the Bundler slack](https://slack.bundler.io).
 
 ### Contributing
 
-If you'd like to contribute to Bundler, that's awesome, and we <3 you. There's a guide to contributing to Bundler (both code and general help) over in [our documentation section](doc/README.md).
+If you'd like to contribute to Bundler, that's awesome, and we <3 you. We've put together [the Bundler contributor guide](https://github.com/rubygems/rubygems/blob/master/bundler/doc/contributing/README.md) with all of the information you need to get started.
 
-While some Bundler contributors are compensated by Ruby Together, the project maintainers make decisions independent of Ruby Together. As a project, we welcome contributions regardless of the author’s affiliation with Ruby Together.
+If you'd like to request a substantial change to Bundler or its documentation, refer to the [Bundler RFC process](https://github.com/rubygems/rfcs) for more information.
+
+While some Bundler contributors are compensated by Ruby Together, the project maintainers make decisions independent of Ruby Together. As a project, we welcome contributions regardless of the author's affiliation with Ruby Together.
 
 ### Supporting
 
@@ -56,8 +55,8 @@ While some Bundler contributors are compensated by Ruby Together, the project ma
 
 ### Code of Conduct
 
-Everyone interacting in the Bundler project’s codebases, issue trackers, chat rooms, and mailing lists is expected to follow the [Bundler code of conduct](https://github.com/bundler/bundler/blob/master/CODE_OF_CONDUCT.md).
+Everyone interacting in the Bundler project's codebases, issue trackers, chat rooms, and mailing lists is expected to follow the [Bundler code of conduct](https://github.com/rubygems/rubygems/blob/master/CODE_OF_CONDUCT.md).
 
 ### License
 
-[MIT License](https://github.com/bundler/bundler/blob/master/LICENSE.md)
+Bundler is available under an [MIT License](https://github.com/rubygems/rubygems/blob/master/bundler/LICENSE.md).

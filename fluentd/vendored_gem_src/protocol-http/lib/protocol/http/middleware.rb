@@ -55,7 +55,16 @@ module Protocol
 				end
 				
 				def self.call(request)
-					Response[200, {}, []]
+					Response[200]
+				end
+			end
+			
+			module NotFound
+				def self.close
+				end
+				
+				def self.call(request)
+					Response[404]
 				end
 			end
 			

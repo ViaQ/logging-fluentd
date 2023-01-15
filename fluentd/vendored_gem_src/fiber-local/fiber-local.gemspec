@@ -13,7 +13,7 @@ Gem::Specification.new do |s|
   s.homepage = "https://github.com/socketry/fiber-local".freeze
   s.licenses = ["MIT".freeze]
   s.required_ruby_version = Gem::Requirement.new(">= 2.5.0".freeze)
-  s.rubygems_version = "3.1.4".freeze
+  s.rubygems_version = "3.3.26".freeze
   s.summary = "Provides a class-level mixin to make fiber local state easy.".freeze
 
   if s.respond_to? :specification_version then

@@ -1,10 +1,9 @@
 # frozen_string_literal: true
 
 require "active_support/core_ext/hash/deep_merge"
-require "active_support/core_ext/symbol/starts_ends_with"
 
 module ActiveSupport
-  class OptionMerger #:nodoc:
+  class OptionMerger # :nodoc:
     instance_methods.each do |method|
       undef_method(method) unless method.start_with?("__", "instance_eval", "class", "object_id")
     end
@@ -16,8 +15,8 @@ module ActiveSupport
     private
       def method_missing(method, *arguments, &block)
         options = nil
-        if arguments.first.is_a?(Proc)
-          proc = arguments.pop
+        if arguments.size == 1 && arguments.first.is_a?(Proc)
+          proc = arguments.shift
           arguments << lambda { |*args| @options.deep_merge(proc.call(*args)) }
         elsif arguments.last.respond_to?(:to_hash)
           options = @options.deep_merge(arguments.pop)
@@ -25,22 +24,15 @@ module ActiveSupport
           options = @options
         end
 
-        invoke_method(method, arguments, options, &block)
-      end
-
-      if RUBY_VERSION >= "2.7"
-        def invoke_method(method, arguments, options, &block)
-          if options
-            @context.__send__(method, *arguments, **options, &block)
-          else
-            @context.__send__(method, *arguments, &block)
-          end
-        end
-      else
-        def invoke_method(method, arguments, options, &block)
-          arguments << options.dup if options
+        if options
+          @context.__send__(method, *arguments, **options, &block)
+        else
           @context.__send__(method, *arguments, &block)
         end
+      end
+
+      def respond_to_missing?(*arguments)
+        @context.respond_to?(*arguments)
       end
   end
 end

@@ -4,7 +4,39 @@ Notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 Kubeclient release versioning follows [SemVer](https://semver.org/).
 
-## 4.9.3 — 2021-03-23
+## 4.11.0 — 2022-12-22
+
+### Removed
+
+- Dropped support for EOL Ruby versions 2.5, 2.6. (#589)
+
+### Added
+
+- Relaxed dependency on `http` gem (used for watches) to allow 5.y.z versions. (#589)
+
+  - Specifically, http 5.1.1 may fix issues watching with IPv6. (#585)
+
+## 4.10.1 — 2022-10-01
+
+### Removed
+
+- Dropped debug logging about bearer token options that was added in 4.10.0. (#577)
+
+## 4.10.0 — 2022-08-29
+
+### Added
+
+- When using `:bearer_token_file`, re-read the file on every request. (#566 closed #561)
+
+  Kubernetes version 1.21 graduated [BoundServiceAccountTokenVolume feature][] to beta
+  and enabled it by default, so standard in-cluster auth now uses short-lived tokens.
+
+  This changes allows a long-lived `Client` object to keep working when the token file gets
+  rotated.  It's not optimized at all, if you feel the performance overhead, please report!
+
+  [BoundServiceAccountTokenVolume feature]: https://github.com/kubernetes/enhancements/issues/542
+
+## 4.9.3 — 2022-03-23
 
 ### Fixed
 
@@ -23,11 +55,15 @@ Kubeclient release versioning follows [SemVer](https://semver.org/).
   This was broken IN ALL RELEASES MADE BEFORE 2022, ever since
   [`Kubeclient::Config` was created](https://github.com/ManageIQ/kubeclient/pull/127/files#diff-32e70f2f6781a9e9c7b83ae5e7eaf5ffd068a05649077fa38f6789e72f3de837R41-R48).
 
+  [#554](https://github.com/ManageIQ/kubeclient/issues/554).
+
 - Bug fix: kubeconfig `insecure-skip-tls-verify` field was ignored.
   When kubeconfig did define custom CA, `Config` was returning hard-coded `VERIFY_PEER`.
 
   Now we honor it, return `VERIFY_NONE` iff kubeconfig has explicit
   `insecure-skip-tls-verify: true`, otherwise `VERIFY_PEER`.
+
+  [#555](https://github.com/ManageIQ/kubeclient/issues/555).
 
 - `Config`: fixed parsing of `certificate-authority` file containing concatenation of
   several certificates.  Previously, server's cert was checked against only first CA cert,

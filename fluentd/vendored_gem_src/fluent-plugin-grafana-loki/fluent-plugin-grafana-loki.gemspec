@@ -14,7 +14,7 @@ Gem::Specification.new do |s|
   s.files = ["LICENSE".freeze, "README.md".freeze, "bin/console".freeze, "bin/setup".freeze, "bin/test".freeze, "lib/fluent/plugin/out_loki.rb".freeze]
   s.homepage = "https://github.com/grafana/loki/".freeze
   s.licenses = ["Apache-2.0".freeze]
-  s.rubygems_version = "3.1.4".freeze
+  s.rubygems_version = "3.3.26".freeze
   s.summary = "Output plugin to ship logs to a Grafana Loki server".freeze
 
   if s.respond_to? :specification_version then

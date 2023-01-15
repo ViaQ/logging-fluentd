@@ -1,29 +1,15 @@
 # frozen_string_literal: true
 
-# Copyright, 2017, by Samuel G. D. Williams. <http://www.codeotaku.com>
-# 
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-# 
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-# 
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
+# Released under the MIT License.
+# Copyright, 2018-2022, by Samuel Williams.
+# Copyright, 2019, by Ryan Musgrave.
+# Copyright, 2020-2022, by Bruno Sutic.
 
 require_relative 'notification'
 
 module Async
 	# A queue which allows items to be processed in order.
+	# @public Since `stable-v1`.
 	class Queue < Notification
 		def initialize(parent: nil)
 			super()
@@ -42,14 +28,16 @@ module Async
 			@items.empty?
 		end
 		
-		def enqueue(item)
-			@items.push(item)
+		def <<(item)
+			@items << item
 			
 			self.signal unless self.empty?
 		end
 		
-		def <<(item)
-			enqueue(item)
+		def enqueue(*items)
+			@items.concat(items)
+			
+			self.signal unless self.empty?
 		end
 		
 		def dequeue
@@ -73,6 +61,7 @@ module Async
 		end
 	end
 	
+	# @public Since `stable-v1`.
 	class LimitedQueue < Queue
 		def initialize(limit = 1, **options)
 			super(**options)
@@ -84,17 +73,30 @@ module Async
 		
 		attr :limit
 		
-		# @return [Boolean] Whether trying to enqueue an item would block.
+		# @returns [Boolean] Whether trying to enqueue an item would block.
 		def limited?
 			@items.size >= @limit
 		end
 		
-		def enqueue item
+		def <<(item)
 			while limited?
 				@full.wait
 			end
 			
 			super
+		end
+		
+		def enqueue *items
+			while !items.empty?
+				while limited?
+					@full.wait
+				end
+				
+				available = @limit - @items.size
+				@items.concat(items.shift(available))
+				
+				self.signal unless self.empty?
+			end
 		end
 		
 		def dequeue

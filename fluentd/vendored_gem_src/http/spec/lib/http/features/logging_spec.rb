@@ -4,10 +4,8 @@ require "logger"
 
 RSpec.describe HTTP::Features::Logging do
   subject(:feature) do
-    logger = Logger.new(logdev)
-    logger.formatter = ->(severity, _, _, message) do
-      format("** %s **\n%s\n", severity, message)
-    end
+    logger           = Logger.new(logdev)
+    logger.formatter = ->(severity, _, _, message) { format("** %s **\n%s\n", severity, message) }
 
     described_class.new(:logger => logger)
   end
@@ -17,10 +15,10 @@ RSpec.describe HTTP::Features::Logging do
   describe "logging the request" do
     let(:request) do
       HTTP::Request.new(
-        :verb     => :post,
-        :uri      => "https://example.com/",
-        :headers  => {:accept => "application/json"},
-        :body     => '{"hello": "world!"}'
+        :verb    => :post,
+        :uri     => "https://example.com/",
+        :headers => {:accept => "application/json"},
+        :body    => '{"hello": "world!"}'
       )
     end
 
@@ -44,10 +42,10 @@ RSpec.describe HTTP::Features::Logging do
     let(:response) do
       HTTP::Response.new(
         :version => "1.1",
-        :uri     => "https://example.com",
         :status  => 200,
         :headers => {:content_type => "application/json"},
-        :body    => '{"success": true}'
+        :body    => '{"success": true}',
+        :request => HTTP::Request.new(:verb => :get, :uri => "https://example.com")
       )
     end
 

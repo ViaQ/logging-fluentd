@@ -1,5 +1,24 @@
 = BinData Changelog
 
+== Version 2.4.14 (2022-10-31)
+
+* Use Comparable#clamp instead of manual calculations.
+* Update tests to new minitest requirements.
+* Adjust tests due to changes in ruby 3.1
+
+== Version 2.4.13 (2022-10-16)
+
+* Relax over-strict parameter naming requirements.  Requested by
+  vinayak3qilabs.
+
+== Version 2.4.12 (2022-10-03)
+
+* Do not include DelayedIO objects when :onlyif is false.
+
+== Version 2.4.11 (2022-09-27)
+
+* Make DelayedIO work with :onlyif.  Reported by Spencer McIntyre.
+
 == Version 2.4.10 (2021-05-18)
 
 * Improve speed of dynamic object creation.  Reported by Charlie Ablett.

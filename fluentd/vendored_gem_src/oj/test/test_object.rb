@@ -821,10 +821,10 @@ class ObjectJuice < Minitest::Test
   def test_range_object
     Oj.default_options = { :mode => :object }
     json = Oj.dump(1..7, :mode => :object, :indent => 0)
-    if 'rubinius' == $ruby
-      assert(%{{"^O":"Range","begin":1,"end":7,"exclude_end?":false}} == json)
-    else
+    if 'ruby' == $ruby
       assert_equal(%{{"^u":["Range",1,7,false]}}, json)
+    else
+      assert(%{{"^O":"Range","begin":1,"end":7,"exclude_end?":false}} == json)
     end
     dump_and_load(1..7, false)
     dump_and_load(1..1, false)
@@ -948,6 +948,11 @@ class ObjectJuice < Minitest::Test
 
   def test_odd_date
     dump_and_load(Date.new(2012, 6, 19), false)
+
+    Oj.register_odd(Date, Date, :jd, :jd)
+    json = Oj.dump(Date.new(2015, 3, 7), :mode => :object)
+    assert_equal(%|{"^O":"Date","jd":2457089}|, json)
+    dump_and_load(Date.new(2012, 6, 19), false)
   end
 
   def test_odd_datetime
@@ -970,13 +975,6 @@ class ObjectJuice < Minitest::Test
     Oj.register_odd(Strung, Strung, :create, :to_s, 'safe?')
     s = Strung.new("Pete", true)
     dump_and_load(s, false)
-  end
-
-  def test_odd_date_replaced
-    Oj.register_odd(Date, Date, :jd, :jd)
-    json = Oj.dump(Date.new(2015, 3, 7), :mode => :object)
-    assert_equal(%|{"^O":"Date","jd":2457089}|, json)
-    dump_and_load(Date.new(2012, 6, 19), false)
   end
 
   def test_odd_raw

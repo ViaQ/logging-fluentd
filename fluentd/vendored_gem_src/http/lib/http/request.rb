@@ -46,7 +46,10 @@ module HTTP
       :patch,
 
       # draft-reschke-webdav-search: WebDAV Search
-      :search
+      :search,
+
+      # RFC 4791: Calendaring Extensions to WebDAV -- CalDAV
+      :mkcalendar
     ].freeze
 
     # Allowed schemes
@@ -54,10 +57,10 @@ module HTTP
 
     # Default ports of supported schemes
     PORTS = {
-      :http   => 80,
-      :https  => 443,
-      :ws     => 80,
-      :wss    => 443
+      :http  => 80,
+      :https => 443,
+      :ws    => 80,
+      :wss   => 443
     }.freeze
 
     # Method is given as a lowercase symbol e.g. :get, :post
@@ -101,12 +104,26 @@ module HTTP
       headers = self.headers.dup
       headers.delete(Headers::HOST)
 
+      new_body = body.source
+      if verb == :get
+        # request bodies should not always be resubmitted when following a redirect
+        # some servers will close the connection after receiving the request headers
+        # which may cause Errno::ECONNRESET: Connection reset by peer
+        # see https://github.com/httprb/http/issues/649
+        # new_body = Request::Body.new(nil)
+        new_body = nil
+        # the CONTENT_TYPE header causes problems if set on a get request w/ an empty body
+        # the server might assume that there should be content if it is set to multipart
+        # rack raises EmptyContentError if this happens
+        headers.delete(Headers::CONTENT_TYPE)
+      end
+
       self.class.new(
         :verb           => verb,
         :uri            => @uri.join(uri),
         :headers        => headers,
         :proxy          => proxy,
-        :body           => body.source,
+        :body           => new_body,
         :version        => version,
         :uri_normalizer => uri_normalizer
       )
@@ -168,8 +185,8 @@ module HTTP
     # Headers to send with proxy connect request
     def proxy_connect_headers
       connect_headers = HTTP::Headers.coerce(
-        Headers::HOST        => headers[Headers::HOST],
-        Headers::USER_AGENT  => headers[Headers::USER_AGENT]
+        Headers::HOST       => headers[Headers::HOST],
+        Headers::USER_AGENT => headers[Headers::USER_AGENT]
       )
 
       connect_headers[Headers::PROXY_AUTHORIZATION] = proxy_authorization_header if using_authenticated_proxy?
@@ -213,7 +230,7 @@ module HTTP
 
     # @return [String] Default host (with port if needed) header value.
     def default_host_header_value
-      PORTS[@scheme] != port ? "#{host}:#{port}" : host
+      PORTS[@scheme] == port ? host : "#{host}:#{port}"
     end
 
     def prepare_body(body)
@@ -223,8 +240,8 @@ module HTTP
     def prepare_headers(headers)
       headers = HTTP::Headers.coerce(headers || {})
 
-      headers[Headers::HOST]        ||= default_host_header_value
-      headers[Headers::USER_AGENT]  ||= USER_AGENT
+      headers[Headers::HOST]       ||= default_host_header_value
+      headers[Headers::USER_AGENT] ||= USER_AGENT
 
       headers
     end

@@ -1,69 +1,70 @@
 # frozen_string_literal: true
 
-# Copyright, 2017, by Samuel G. D. Williams. <http://www.codeotaku.com>
-# 
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-# 
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-# 
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
+# Released under the MIT License.
+# Copyright, 2017-2022, by Samuel Williams.
+# Copyright, 2017, by Kent Gruber.
 
 require 'fiber'
-require_relative 'node'
+require_relative 'list'
 
 module Async
-	# A synchronization primative, which allows fibers to wait until a particular condition is triggered. Signalling the condition directly resumes the waiting fibers and thus blocks the caller.
+	# A synchronization primitive, which allows fibers to wait until a particular condition is (edge) triggered.
+	# @public Since `stable-v1`.
 	class Condition
 		def initialize
-			@waiting = []
+			@waiting = List.new
 		end
 		
+		class FiberNode < List::Node
+			def initialize(fiber)
+				@fiber = fiber
+			end
+			
+			def transfer(*arguments)
+				@fiber.transfer(*arguments)
+			end
+			
+			def alive?
+				@fiber.alive?
+			end
+		end
+		
+		private_constant :FiberNode
+		
 		# Queue up the current fiber and wait on yielding the task.
-		# @return [Object]
+		# @returns [Object]
 		def wait
-			fiber = Fiber.current
-			@waiting << fiber
-			
-			Task.yield
-			
-			# It would be nice if there was a better construct for this. We only need to invoke #delete if the task was not resumed normally. This can only occur with `raise` and `throw`. But there is no easy way to detect this.
-		# ensure when not return or ensure when raise, throw
-		rescue Exception
-			@waiting.delete(fiber)
-			raise
+			@waiting.stack(FiberNode.new(Fiber.current)) do
+				Fiber.scheduler.transfer
+			end
 		end
 		
 		# Is any fiber waiting on this notification?
-		# @return [Boolean]
+		# @returns [Boolean]
 		def empty?
 			@waiting.empty?
 		end
 		
 		# Signal to a given task that it should resume operations.
-		# @param value The value to return to the waiting fibers.
-		# @see Task.yield which is responsible for handling value.
-		# @return [void]
+		# @parameter value [Object | Nil] The value to return to the waiting fibers.
 		def signal(value = nil)
-			waiting = @waiting
-			@waiting = []
+			return if @waiting.empty?
+			
+			waiting = self.exchange
 			
 			waiting.each do |fiber|
-				fiber.resume(value) if fiber.alive?
+				Fiber.scheduler.resume(fiber, value) if fiber.alive?
 			end
 			
 			return nil
+		end
+		
+		protected
+		
+		def exchange
+			waiting = @waiting
+			@waiting = List.new
+			return waiting
 		end
 	end
 end

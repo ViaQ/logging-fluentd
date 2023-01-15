@@ -4,6 +4,7 @@ RSpec.describe HTTP::Response do
   let(:body)          { "Hello world!" }
   let(:uri)           { "http://example.com/" }
   let(:headers)       { {} }
+  let(:request)       { HTTP::Request.new(:verb => :get, :uri => uri) }
 
   subject(:response) do
     HTTP::Response.new(
@@ -11,7 +12,7 @@ RSpec.describe HTTP::Response do
       :version => "1.1",
       :headers => headers,
       :body    => body,
-      :uri     => uri
+      :request => request
     )
   end
 
@@ -109,7 +110,7 @@ RSpec.describe HTTP::Response do
         expect(response.parse("application/json")).to eq "foo" => "bar"
       end
 
-      it "supports MIME type aliases" do
+      it "supports mime type aliases" do
         expect(response.parse(:json)).to eq "foo" => "bar"
       end
     end
@@ -165,7 +166,8 @@ RSpec.describe HTTP::Response do
       HTTP::Response.new(
         :version    => "1.1",
         :status     => 200,
-        :connection => connection
+        :connection => connection,
+        :request    => request
       )
     end
 
@@ -181,5 +183,80 @@ RSpec.describe HTTP::Response do
       it { is_expected.to be_chunked }
     end
     it { is_expected.not_to be_chunked }
+  end
+
+  describe "backwards compatibilty with :uri" do
+    context "with no :verb" do
+      subject(:response) do
+        HTTP::Response.new(
+          :status  => 200,
+          :version => "1.1",
+          :headers => headers,
+          :body    => body,
+          :uri     => uri
+        )
+      end
+
+      it "defaults the uri to :uri" do
+        expect(response.request.uri.to_s).to eq uri
+      end
+
+      it "defaults to the verb to :get" do
+        expect(response.request.verb).to eq :get
+      end
+    end
+
+    context "with both a :request and :uri" do
+      subject(:response) do
+        HTTP::Response.new(
+          :status  => 200,
+          :version => "1.1",
+          :headers => headers,
+          :body    => body,
+          :uri     => uri,
+          :request => request
+        )
+      end
+
+      it "raises ArgumentError" do
+        expect { response }.to raise_error(ArgumentError)
+      end
+    end
+  end
+
+  describe "#body" do
+    let(:connection) { double(:sequence_id => 0) }
+    let(:chunks)     { ["Hello, ", "World!"] }
+
+    subject(:response) do
+      HTTP::Response.new(
+        :status     => 200,
+        :version    => "1.1",
+        :headers    => headers,
+        :request    => request,
+        :connection => connection
+      )
+    end
+
+    before do
+      allow(connection).to receive(:readpartial) { chunks.shift }
+      allow(connection).to receive(:body_completed?) { chunks.empty? }
+    end
+
+    context "with no Content-Type" do
+      let(:headers) { {} }
+
+      it "returns a body with default binary encoding" do
+        expect(response.body.to_s.encoding).to eq Encoding::BINARY
+      end
+    end
+
+    context "with Content-Type: application/json" do
+      let(:headers) { {"Content-Type" => "application/json"} }
+
+      it "returns a body with a default UTF_8 encoding" do
+        expect(response.body.to_s.encoding).to eq Encoding::UTF_8
+      end
+    end
   end
 end

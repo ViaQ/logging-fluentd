@@ -1,23 +1,27 @@
-This specification aims to formalize the Rack protocol.  You
+This specification aims to formalize the Rack protocol. You
 can (and should) use Rack::Lint to enforce it.
 
 When you develop middleware, be sure to add a Lint before and
 after to catch all mistakes.
+
 = Rack applications
+
 A Rack application is a Ruby object (not a class) that
 responds to +call+.
 It takes exactly one argument, the *environment*
-and returns an Array of exactly three values:
+and returns a non-frozen Array of exactly three values:
 The *status*,
 the *headers*,
 and the *body*.
+
 == The Environment
+
 The environment must be an unfrozen instance of Hash that includes
-CGI-like headers.  The application is free to modify the
+CGI-like headers. The Rack application is free to modify the
 environment.
 
 The environment is required to include these variables
-(adopted from PEP333), except when they'd be empty, but see
+(adopted from {PEP 333}[https://peps.python.org/pep-0333/]), except when they'd be empty, but see
 below.
 <tt>REQUEST_METHOD</tt>:: The HTTP request method, such as
                           "GET" or "POST". This cannot ever
@@ -54,6 +58,8 @@ below.
 <tt>SERVER_PORT</tt>:: An optional +Integer+ which is the port the
                        server is running on. Should be specified if
                        the server is running on a non-standard port.
+<tt>SERVER_PROTOCOL</tt>:: A string representing the HTTP version used
+                           for the request.
 <tt>HTTP_</tt> Variables:: Variables corresponding to the
                            client-supplied HTTP request
                            headers (i.e., variables whose
@@ -67,40 +73,19 @@ below.
                            for specific behavior.
 In addition to this, the Rack environment must include these
 Rack-specific variables:
-<tt>rack.version</tt>:: The Array representing this version of Rack
-                        See Rack::VERSION, that corresponds to
-                        the version of this SPEC.
 <tt>rack.url_scheme</tt>:: +http+ or +https+, depending on the
                            request URL.
 <tt>rack.input</tt>:: See below, the input stream.
 <tt>rack.errors</tt>:: See below, the error stream.
-<tt>rack.multithread</tt>:: true if the application object may be
-                            simultaneously invoked by another thread
-                            in the same process, false otherwise.
-<tt>rack.multiprocess</tt>:: true if an equivalent application object
-                             may be simultaneously invoked by another
-                             process, false otherwise.
-<tt>rack.run_once</tt>:: true if the server expects
-                         (but does not guarantee!) that the
-                         application will only be invoked this one
-                         time during the life of its containing
-                         process. Normally, this will only be true
-                         for a server based on CGI
-                         (or something similar).
-<tt>rack.hijack?</tt>:: present and true if the server supports
-                        connection hijacking. See below, hijacking.
-<tt>rack.hijack</tt>:: an object responding to #call that must be
-                       called at least once before using
-                       rack.hijack_io.
-                       It is recommended #call return rack.hijack_io
-                       as well as setting it in env if necessary.
-<tt>rack.hijack_io</tt>:: if rack.hijack? is true, and rack.hijack
-                          has received #call, this will contain
-                          an object resembling an IO. See hijacking.
+<tt>rack.hijack?</tt>:: See below, if present and true, indicates
+                        that the server supports partial hijacking.
+<tt>rack.hijack</tt>:: See below, if present, an object responding
+                       to +call+ that is used to perform a full
+                       hijack.
 Additional environment specifications have approved to
-standardized middleware APIs.  None of these are required to
+standardized middleware APIs. None of these are required to
 be implemented by the server.
-<tt>rack.session</tt>:: A hash like interface for storing
+<tt>rack.session</tt>:: A hash-like interface for storing
                         request session data.
                         The store must implement:
                         store(key, value)         (aliased as []=);
@@ -126,6 +111,8 @@ accepted specifications and must not be used otherwise.
 The <tt>SERVER_PORT</tt> must be an Integer if set.
 The <tt>SERVER_NAME</tt> must be a valid authority as defined by RFC7540.
 The <tt>HTTP_HOST</tt> must be a valid authority as defined by RFC7540.
+The <tt>SERVER_PROTOCOL</tt> must match the regexp <tt>HTTP/\d(\.\d)?</tt>.
+If the <tt>HTTP_VERSION</tt> is present, it must equal the <tt>SERVER_PROTOCOL</tt>.
 The environment must not contain the keys
 <tt>HTTP_CONTENT_TYPE</tt> or <tt>HTTP_CONTENT_LENGTH</tt>
 (use the versions without <tt>HTTP_</tt>).
@@ -133,26 +120,32 @@ The CGI keys (named without a period) must have String values.
 If the string values for CGI keys contain non-ASCII characters,
 they should use ASCII-8BIT encoding.
 There are the following restrictions:
-* <tt>rack.version</tt> must be an array of Integers.
 * <tt>rack.url_scheme</tt> must either be +http+ or +https+.
 * There must be a valid input stream in <tt>rack.input</tt>.
 * There must be a valid error stream in <tt>rack.errors</tt>.
-* There may be a valid hijack stream in <tt>rack.hijack_io</tt>
+* There may be a valid hijack callback in <tt>rack.hijack</tt>
 * The <tt>REQUEST_METHOD</tt> must be a valid token.
 * The <tt>SCRIPT_NAME</tt>, if non-empty, must start with <tt>/</tt>
 * The <tt>PATH_INFO</tt>, if non-empty, must start with <tt>/</tt>
 * The <tt>CONTENT_LENGTH</tt>, if given, must consist of digits only.
 * One of <tt>SCRIPT_NAME</tt> or <tt>PATH_INFO</tt> must be
-  set.  <tt>PATH_INFO</tt> should be <tt>/</tt> if
+  set. <tt>PATH_INFO</tt> should be <tt>/</tt> if
   <tt>SCRIPT_NAME</tt> is empty.
   <tt>SCRIPT_NAME</tt> never should be <tt>/</tt>, but instead be empty.
+<tt>rack.response_finished</tt>:: An array of callables run by the server after the response has been
+processed. This would typically be invoked after sending the response to the client, but it could also be
+invoked if an error occurs while generating the response or sending the response; in that case, the error
+argument will be a subclass of +Exception+.
+The callables are invoked with +env, status, headers, error+ arguments and should not raise any
+exceptions. They should be invoked in reverse order of registration.
+
 === The Input Stream
 
 The input stream is an IO-like object which contains the raw HTTP
 POST data.
 When applicable, its external encoding must be "ASCII-8BIT" and it
 must be opened in binary mode, for Ruby 1.9 compatibility.
-The input stream must respond to +gets+, +each+, +read+ and +rewind+.
+The input stream must respond to +gets+, +each+, and +read+.
 * +gets+ must be called without arguments and return a string,
   or +nil+ on EOF.
 * +read+ behaves like IO#read.
@@ -173,120 +166,175 @@ The input stream must respond to +gets+, +each+, +read+ and +rewind+.
   If +buffer+ is given, then the read data will be placed
   into +buffer+ instead of a newly created String object.
 * +each+ must be called without arguments and only yield Strings.
-* +rewind+ must be called without arguments. It rewinds the input
-  stream back to the beginning. It must not raise Errno::ESPIPE:
-  that is, it may not be a pipe or a socket. Therefore, handler
-  developers must buffer the input data into some rewindable object
-  if the underlying input stream is not rewindable.
-* +close+ must never be called on the input stream.
+* +close+ can be called on the input stream to indicate that the
+any remaining input is not needed.
+
 === The Error Stream
+
 The error stream must respond to +puts+, +write+ and +flush+.
 * +puts+ must be called with a single argument that responds to +to_s+.
 * +write+ must be called with a single argument that is a String.
 * +flush+ must be called without arguments and must be called
   in order to make the error appear for sure.
 * +close+ must never be called on the error stream.
+
 === Hijacking
-==== Request (before status)
-If rack.hijack? is true then rack.hijack must respond to #call.
-rack.hijack must return the io that will also be assigned (or is
-already present, in rack.hijack_io.
 
-rack.hijack_io must respond to:
-<tt>read, write, read_nonblock, write_nonblock, flush, close,
-close_read, close_write, closed?</tt>
+The hijacking interfaces provides a means for an application to take
+control of the HTTP connection. There are two distinct hijack
+interfaces: full hijacking where the application takes over the raw
+connection, and partial hijacking where the application takes over
+just the response body stream. In both cases, the application is
+responsible for closing the hijacked stream.
 
-The semantics of these IO methods must be a best effort match to
-those of a normal ruby IO or Socket object, using standard
-arguments and raising standard exceptions. Servers are encouraged
-to simply pass on real IO objects, although it is recognized that
-this approach is not directly compatible with SPDY and HTTP 2.0.
+Full hijacking only works with HTTP/1. Partial hijacking is functionally
+equivalent to streaming bodies, and is still optionally supported for
+backwards compatibility with older Rack versions.
 
-IO provided in rack.hijack_io should preference the
-IO::WaitReadable and IO::WaitWritable APIs wherever supported.
+==== Full Hijack
 
-There is a deliberate lack of full specification around
-rack.hijack_io, as semantics will change from server to server.
-Users are encouraged to utilize this API with a knowledge of their
-server choice, and servers may extend the functionality of
-hijack_io to provide additional features to users. The purpose of
-rack.hijack is for Rack to "get out of the way", as such, Rack only
-provides the minimum of specification and support.
+Full hijack is used to completely take over an HTTP/1 connection. It
+occurs before any headers are written and causes the request to
+ignores any response generated by the application.
 
-If rack.hijack? is false, then rack.hijack should not be set.
+It is intended to be used when applications need access to raw HTTP/1
+connection.
 
-If rack.hijack? is false, then rack.hijack_io should not be set.
-==== Response (after headers)
-It is also possible to hijack a response after the status and headers
-have been sent.
-In order to do this, an application may set the special header
-<tt>rack.hijack</tt> to an object that responds to <tt>call</tt>
-accepting an argument that conforms to the <tt>rack.hijack_io</tt>
-protocol.
+If +rack.hijack+ is present in +env+, it must respond to +call+
+and return an +IO+ instance which can be used to read and write
+to the underlying connection using HTTP/1 semantics and
+formatting.
 
-After the headers have been sent, and this hijack callback has been
-called, the application is now responsible for the remaining lifecycle
-of the IO. The application is also responsible for maintaining HTTP
-semantics. Of specific note, in almost all cases in the current SPEC,
-applications will have wanted to specify the header Connection:close in
-HTTP/1.1, and not Connection:keep-alive, as there is no protocol for
-returning hijacked sockets to the web server. For that purpose, use the
-body streaming API instead (progressively yielding strings via each).
+==== Partial Hijack
 
-Servers must ignore the <tt>body</tt> part of the response tuple when
-the <tt>rack.hijack</tt> response API is in use.
+Partial hijack is used for bi-directional streaming of the request and
+response body. It occurs after the status and headers are written by
+the server and causes the server to ignore the Body of the response.
 
-The special response header <tt>rack.hijack</tt> must only be set
-if the request env has <tt>rack.hijack?</tt> <tt>true</tt>.
-==== Conventions
-* Middleware should not use hijack unless it is handling the whole
-  response.
-* Middleware may wrap the IO object for the response pattern.
-* Middleware should not wrap the IO object for the request pattern. The
-  request pattern is intended to provide the hijacker with "raw tcp".
+It is intended to be used when applications need bi-directional
+streaming.
+
+If +rack.hijack?+ is present in +env+ and truthy,
+an application may set the special response header +rack.hijack+
+to an object that responds to +call+,
+accepting a +stream+ argument.
+
+After the response status and headers have been sent, this hijack
+callback will be invoked with a +stream+ argument which follows the
+same interface as outlined in "Streaming Body". Servers must
+ignore the +body+ part of the response tuple when the
++rack.hijack+ response header is present. Using an empty +Array+
+instance is recommended.
+
+The special response header +rack.hijack+ must only be set
+if the request +env+ has a truthy +rack.hijack?+.
 == The Response
+
 === The Status
-This is an HTTP status. When parsed as integer (+to_i+), it must be
-greater than or equal to 100.
+
+This is an HTTP status. It must be an Integer greater than or equal to
+100.
+
 === The Headers
-The header must respond to +each+, and yield values of key and value.
+
+The headers must be a unfrozen Hash.
 The header keys must be Strings.
 Special headers starting "rack." are for communicating with the
 server, and must not be sent back to the client.
 The header must not contain a +Status+ key.
-The header must conform to RFC7230 token specification, i.e. cannot
+Header keys must conform to RFC7230 token specification, i.e. cannot
 contain non-printable ASCII, DQUOTE or "(),/:;<=>?@[\]{}".
-The values of the header must be Strings,
-consisting of lines (for multiple header values, e.g. multiple
-<tt>Set-Cookie</tt> values) separated by "\\n".
-The lines must not contain characters below 037.
-=== The Content-Type
-There must not be a <tt>Content-Type</tt>, when the +Status+ is 1xx,
-204 or 304.
-=== The Content-Length
-There must not be a <tt>Content-Length</tt> header when the
-+Status+ is 1xx, 204 or 304.
+Header keys must not contain uppercase ASCII characters (A-Z).
+Header values must be either a String instance,
+or an Array of String instances,
+such that each String instance must not contain characters below 037.
+
+=== The content-type
+
+There must not be a <tt>content-type</tt> header key when the +Status+ is 1xx,
+204, or 304.
+
+=== The content-length
+
+There must not be a <tt>content-length</tt> header key when the
++Status+ is 1xx, 204, or 304.
+
 === The Body
-The Body must respond to +each+
+
+The Body is typically an +Array+ of +String+ instances, an enumerable
+that yields +String+ instances, a +Proc+ instance, or a File-like
+object.
+
+The Body must respond to +each+ or +call+. It may optionally respond
+to +to_path+ or +to_ary+. A Body that responds to +each+ is considered
+to be an Enumerable Body. A Body that responds to +call+ is considered
+to be a Streaming Body.
+
+A Body that responds to both +each+ and +call+ must be treated as an
+Enumerable Body, not a Streaming Body. If it responds to +each+, you
+must call +each+ and not +call+. If the Body doesn't respond to
++each+, then you can assume it responds to +call+.
+
+The Body must either be consumed or returned. The Body is consumed by
+optionally calling either +each+ or +call+.
+Then, if the Body responds to +close+, it must be called to release
+any resources associated with the generation of the body.
+In other words, +close+ must always be called at least once; typically
+after the web server has sent the response to the client, but also in
+cases where the Rack application makes internal/virtual requests and
+discards the response.
+
+
+After calling +close+, the Body is considered closed and should not
+be consumed again.
+If the original Body is replaced by a new Body, the new Body must
+also consume the original Body by calling +close+ if possible.
+
+If the Body responds to +to_path+, it must return a +String+
+path for the local file system whose contents are identical
+to that produced by calling +each+; this may be used by the
+server as an alternative, possibly more efficient way to
+transport the response. The +to_path+ method does not consume
+the body.
+
+==== Enumerable Body
+
+The Enumerable Body must respond to +each+.
+It must only be called once.
+It must not be called after being closed.
 and must only yield String values.
 
 The Body itself should not be an instance of String, as this will
 break in Ruby 1.9.
 
-If the Body responds to +close+, it will be called after iteration. If
-the body is replaced by a middleware after action, the original body
-must be closed first, if it responds to close.
+Middleware must not call +each+ directly on the Body.
+Instead, middleware can return a new Body that calls +each+ on the
+original Body, yielding at least once per iteration.
 
-If the Body responds to +to_path+, it must return a String
-identifying the location of a file whose contents are identical
-to that produced by calling +each+; this may be used by the
-server as an alternative, possibly more efficient way to
-transport the response.
+If the Body responds to +to_ary+, it must return an +Array+ whose
+contents are identical to that produced by calling +each+.
+Middleware may call +to_ary+ directly on the Body and return a new
+Body in its place. In other words, middleware can only process the
+Body directly if it responds to +to_ary+. If the Body responds to both
++to_ary+ and +close+, its implementation of +to_ary+ must call
++close+.
 
-The Body commonly is an Array of Strings, the application
-instance itself, or a File-like object.
+==== Streaming Body
+
+The Streaming Body must respond to +call+.
+It must only be called once.
+It must not be called after being closed.
+It takes a +stream+ argument.
+
+The +stream+ argument must implement:
+<tt>read, write, <<, flush, close, close_read, close_write, closed?</tt>
+
+The semantics of these IO methods must be a best effort match to
+those of a normal Ruby IO or Socket object, using standard arguments
+and raising standard exceptions. Servers are encouraged to simply
+pass on real IO objects, although it is recognized that this approach
+is not directly compatible with HTTP/2.
+
 == Thanks
-Some parts of this specification are adopted from PEP333: Python
-Web Server Gateway Interface
-v1.0 (http://www.python.org/dev/peps/pep-0333/). I'd like to thank
-everyone involved in that effort.
+Some parts of this specification are adopted from {PEP 333 – Python Web Server Gateway Interface v1.0}[https://peps.python.org/pep-0333/]
+I'd like to thank everyone involved in that effort.

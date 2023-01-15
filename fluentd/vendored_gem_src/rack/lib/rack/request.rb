@@ -1,5 +1,9 @@
 # frozen_string_literal: true
 
+require_relative 'constants'
+require_relative 'utils'
+require_relative 'media_type'
+
 module Rack
   # Rack::Request provides a convenient interface to a Rack
   # environment.  It is stateless, the environment +env+ passed to the
@@ -10,22 +14,54 @@ module Rack
   #   req.params["data"]
 
   class Request
-    (require_relative 'core_ext/regexp'; using ::Rack::RegexpExtensions) if RUBY_VERSION < '2.4'
-
     class << self
       attr_accessor :ip_filter
+
+      # The priority when checking forwarded headers. The default
+      # is <tt>[:forwarded, :x_forwarded]</tt>, which means, check the
+      # +Forwarded+ header first, followed by the appropriate
+      # <tt>X-Forwarded-*</tt> header.  You can revert the priority by
+      # reversing the priority, or remove checking of either
+      # or both headers by removing elements from the array.
+      #
+      # This should be set as appropriate in your environment
+      # based on what reverse proxies are in use.  If you are not
+      # using reverse proxies, you should probably use an empty
+      # array.
+      attr_accessor :forwarded_priority
+
+      # The priority when checking either the <tt>X-Forwarded-Proto</tt>
+      # or <tt>X-Forwarded-Scheme</tt> header for the forwarded protocol.
+      # The default is <tt>[:proto, :scheme]</tt>, to try the
+      # <tt>X-Forwarded-Proto</tt> header before the
+      # <tt>X-Forwarded-Scheme</tt> header.  Rack 2 had behavior
+      # similar to <tt>[:scheme, :proto]</tt>.  You can remove either or
+      # both of the entries in array to ignore that respective header.
+      attr_accessor :x_forwarded_proto_priority
     end
 
-    self.ip_filter = lambda { |ip| /\A127\.0\.0\.1\Z|\A(10|172\.(1[6-9]|2[0-9]|30|31)|192\.168)\.|\A::1\Z|\Afd[0-9a-f]{2}:.+|\Alocalhost\Z|\Aunix\Z|\Aunix:/i.match?(ip) }
-    ALLOWED_SCHEMES = %w(https http).freeze
-    SCHEME_WHITELIST = ALLOWED_SCHEMES
-    if Object.respond_to?(:deprecate_constant)
-      deprecate_constant :SCHEME_WHITELIST
-    end
+    @forwarded_priority = [:forwarded, :x_forwarded]
+    @x_forwarded_proto_priority = [:proto, :scheme]
+
+    valid_ipv4_octet = /\.(25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])/
+
+    trusted_proxies = Regexp.union(
+      /\A127#{valid_ipv4_octet}{3}\z/,                          # localhost IPv4 range 127.x.x.x, per RFC-3330
+      /\A::1\z/,                                                # localhost IPv6 ::1
+      /\Af[cd][0-9a-f]{2}(?::[0-9a-f]{0,4}){0,7}\z/i,           # private IPv6 range fc00 .. fdff
+      /\A10#{valid_ipv4_octet}{3}\z/,                           # private IPv4 range 10.x.x.x
+      /\A172\.(1[6-9]|2[0-9]|3[01])#{valid_ipv4_octet}{2}\z/,   # private IPv4 range 172.16.0.0 .. 172.31.255.255
+      /\A192\.168#{valid_ipv4_octet}{2}\z/,                     # private IPv4 range 192.168.x.x
+      /\Alocalhost\z|\Aunix(\z|:)/i,                            # localhost hostname, and unix domain sockets
+    )
+
+    self.ip_filter = lambda { |ip| trusted_proxies.match?(ip) }
+
+    ALLOWED_SCHEMES = %w(https http wss ws).freeze
 
     def initialize(env)
+      @env = env
       @params = nil
-      super(env)
     end
 
     def params
@@ -49,6 +85,8 @@ module Rack
 
       def initialize(env)
         @env = env
+        # This module is included at least in `ActionDispatch::Request`
+        # The call to `super()` allows additional mixed-in initializers are called
         super()
       end
 
@@ -135,6 +173,8 @@ module Rack
       # The contents of the host/:authority header sent to the proxy.
       HTTP_X_FORWARDED_HOST = 'HTTP_X_FORWARDED_HOST'
 
+      HTTP_FORWARDED          = 'HTTP_FORWARDED'
+
       # The value of the scheme sent to the proxy.
       HTTP_X_FORWARDED_SCHEME = 'HTTP_X_FORWARDED_SCHEME'
 
@@ -144,7 +184,7 @@ module Rack
       # The port used to connect to the proxy.
       HTTP_X_FORWARDED_PORT = 'HTTP_X_FORWARDED_PORT'
 
-      # Another way for specifing https scheme was used.
+      # Another way for specifying https scheme was used.
       HTTP_X_FORWARDED_SSL = 'HTTP_X_FORWARDED_SSL'
 
       def body;            get_header(RACK_INPUT)                         end
@@ -159,7 +199,6 @@ module Rack
       def content_length;  get_header('CONTENT_LENGTH')                   end
       def logger;          get_header(RACK_LOGGER)                        end
       def user_agent;      get_header('HTTP_USER_AGENT')                  end
-      def multithread?;    get_header(RACK_MULTITHREAD)                   end
 
       # the referer of the client
       def referer;         get_header('HTTP_REFERER')                     end
@@ -248,9 +287,7 @@ module Rack
       end
 
       def server_port
-        if port = get_header(SERVER_PORT)
-          Integer(port)
-        end
+        get_header(SERVER_PORT)
       end
 
       def cookies
@@ -307,44 +344,67 @@ module Rack
 
       def port
         if authority = self.authority
-          _, _, port = split_authority(self.authority)
-
-          if port
-            return port
-          end
+          _, _, port = split_authority(authority)
         end
 
-        if forwarded_port = self.forwarded_port
-          return forwarded_port.first
-        end
-
-        if scheme = self.scheme
-          if port = DEFAULT_PORTS[self.scheme]
-            return port
-          end
-        end
-
-        self.server_port
+        port || forwarded_port&.last || DEFAULT_PORTS[scheme] || server_port
       end
 
       def forwarded_for
-        if value = get_header(HTTP_X_FORWARDED_FOR)
-          split_header(value).map do |authority|
-            split_authority(wrap_ipv6(authority))[1]
+        forwarded_priority.each do |type|
+          case type
+          when :forwarded
+            if forwarded_for = get_http_forwarded(:for)
+              return(forwarded_for.map! do |authority|
+                split_authority(authority)[1]
+              end)
+            end
+          when :x_forwarded
+            if value = get_header(HTTP_X_FORWARDED_FOR)
+              return(split_header(value).map do |authority|
+                split_authority(wrap_ipv6(authority))[1]
+              end)
+            end
           end
         end
+
+        nil
       end
 
       def forwarded_port
-        if value = get_header(HTTP_X_FORWARDED_PORT)
-          split_header(value).map(&:to_i)
+        forwarded_priority.each do |type|
+          case type
+          when :forwarded
+            if forwarded = get_http_forwarded(:for)
+              return(forwarded.map do |authority|
+                split_authority(authority)[2]
+              end.compact)
+            end
+          when :x_forwarded
+            if value = get_header(HTTP_X_FORWARDED_PORT)
+              return split_header(value).map(&:to_i)
+            end
+          end
         end
+
+        nil
       end
 
       def forwarded_authority
-        if value = get_header(HTTP_X_FORWARDED_HOST)
-          wrap_ipv6(split_header(value).first)
+        forwarded_priority.each do |type|
+          case type
+          when :forwarded
+            if forwarded = get_http_forwarded(:host)
+              return forwarded.last
+            end
+          when :x_forwarded
+            if value = get_header(HTTP_X_FORWARDED_HOST)
+              return wrap_ipv6(split_header(value).last)
+            end
+          end
         end
+
+        nil
       end
 
       def ssl?
@@ -356,17 +416,15 @@ module Rack
         external_addresses = reject_trusted_ip_addresses(remote_addresses)
 
         unless external_addresses.empty?
-          return external_addresses.first
+          return external_addresses.last
         end
 
-        if forwarded_for = self.forwarded_for
-          unless forwarded_for.empty?
-            # The forwarded for addresses are ordered: client, proxy1, proxy2.
-            # So we reject all the trusted addresses (proxy*) and return the
-            # last client. Or if we trust everyone, we just return the first
-            # address.
-            return reject_trusted_ip_addresses(forwarded_for).last || forwarded_for.first
-          end
+        if (forwarded_for = self.forwarded_for) && !forwarded_for.empty?
+          # The forwarded for addresses are ordered: client, proxy1, proxy2.
+          # So we reject all the trusted addresses (proxy*) and return the
+          # last client. Or if we trust everyone, we just return the first
+          # address.
+          return reject_trusted_ip_addresses(forwarded_for).last || forwarded_for.first
         end
 
         # If all the addresses are trusted, and we aren't forwarded, just return
@@ -402,13 +460,13 @@ module Rack
       end
 
       # Determine whether the request body contains form-data by checking
-      # the request Content-Type for one of the media-types:
+      # the request content-type for one of the media-types:
       # "application/x-www-form-urlencoded" or "multipart/form-data". The
       # list of form-data media types can be modified through the
       # +FORM_DATA_MEDIA_TYPES+ array.
       #
       # A request body is also assumed to contain form-data when no
-      # Content-Type header is provided and the request_method is POST.
+      # content-type header is provided and the request_method is POST.
       def form_data?
         type = media_type
         meth = get_header(RACK_METHODOVERRIDE_ORIGINAL_METHOD) || get_header(REQUEST_METHOD)
@@ -427,7 +485,7 @@ module Rack
         if get_header(RACK_REQUEST_QUERY_STRING) == query_string
           get_header(RACK_REQUEST_QUERY_HASH)
         else
-          query_hash = parse_query(query_string, '&;')
+          query_hash = parse_query(query_string, '&')
           set_header(RACK_REQUEST_QUERY_STRING, query_string)
           set_header(RACK_REQUEST_QUERY_HASH, query_hash)
         end
@@ -452,13 +510,12 @@ module Rack
 
             set_header RACK_REQUEST_FORM_VARS, form_vars
             set_header RACK_REQUEST_FORM_HASH, parse_query(form_vars, '&')
-
-            get_header(RACK_INPUT).rewind
           end
           set_header RACK_REQUEST_FORM_INPUT, get_header(RACK_INPUT)
           get_header RACK_REQUEST_FORM_HASH
         else
-          {}
+          set_header RACK_REQUEST_FORM_INPUT, get_header(RACK_INPUT)
+          set_header(RACK_REQUEST_FORM_HASH, {})
         end
       end
 
@@ -530,9 +587,7 @@ module Rack
 
       # shortcut for <tt>request.params[key]</tt>
       def [](key)
-        if $VERBOSE
-          warn("Request#[] is deprecated and will be removed in a future version of Rack. Please use request.params[] instead")
-        end
+        warn("Request#[] is deprecated and will be removed in a future version of Rack. Please use request.params[] instead", uplevel: 1)
 
         params[key.to_s]
       end
@@ -541,9 +596,7 @@ module Rack
       #
       # Note that modifications will not be persisted in the env. Use update_param or delete_param if you want to destructively modify params.
       def []=(key, value)
-        if $VERBOSE
-          warn("Request#[]= is deprecated and will be removed in a future version of Rack. Please use request.params[]= instead")
-        end
+        warn("Request#[]= is deprecated and will be removed in a future version of Rack. Please use request.params[]= instead", uplevel: 1)
 
         params[key.to_s] = value
       end
@@ -582,6 +635,11 @@ module Rack
         end
       end
 
+      # Get an array of values set in the RFC 7239 `Forwarded` request header.
+      def get_http_forwarded(token)
+        Utils.forwarded_values(get_header(HTTP_FORWARDED))&.[](token)
+      end
+
       def query_parser
         Utils.default_query_parser
       end
@@ -598,58 +656,94 @@ module Rack
         value ? value.strip.split(/[,\s]+/) : []
       end
 
-      AUTHORITY = /^
-        # The host:
+      # ipv6 extracted from resolv stdlib, simplified
+      # to remove numbered match group creation.
+      ipv6 = Regexp.union(
+        /(?:[0-9A-Fa-f]{1,4}:){7}
+         [0-9A-Fa-f]{1,4}/x,
+        /(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*)? ::
+         (?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*)?/x,
+        /(?:[0-9A-Fa-f]{1,4}:){6,6}
+         \d+\.\d+\.\d+\.\d+/x,
+        /(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*)? ::
+         (?:[0-9A-Fa-f]{1,4}:)*
+         \d+\.\d+\.\d+\.\d+/x,
+        /[Ff][Ee]80
+         (?::[0-9A-Fa-f]{1,4}){7}
+         %[-0-9A-Za-z._~]+/x,
+        /[Ff][Ee]80:
+         (?:
+           (?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*)? ::
+           (?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*)?
+           |
+           :(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*)?
+         )?
+         :[0-9A-Fa-f]{1,4}%[-0-9A-Za-z._~]+/x)
+
+      AUTHORITY = /
+        \A
         (?<host>
-          # An IPv6 address:
-          (\[(?<ip6>.*)\])
+          # Match IPv6 as a string of hex digits and colons in square brackets
+          \[(?<address>#{ipv6})\]
           |
-          # An IPv4 address:
-          (?<ip4>[\d\.]+)
-          |
-          # A hostname:
-          (?<name>[a-zA-Z0-9\.\-]+)
+          # Match any other printable string (except square brackets) as a hostname
+          (?<address>[[[:graph:]&&[^\[\]]]]*?)
         )
-        # The optional port:
         (:(?<port>\d+))?
-      $/x
+        \z
+      /x
 
       private_constant :AUTHORITY
 
       def split_authority(authority)
-        if match = AUTHORITY.match(authority)
-          if address = match[:ip6]
-            return match[:host], address, match[:port]&.to_i
-          else
-            return match[:host], match[:host], match[:port]&.to_i
-          end
-        end
-
-        # Give up!
-        return authority, authority, nil
+        return [] if authority.nil?
+        return [] unless match = AUTHORITY.match(authority)
+        return match[:host], match[:address], match[:port]&.to_i
       end
 
       def reject_trusted_ip_addresses(ip_addresses)
         ip_addresses.reject { |ip| trusted_proxy?(ip) }
       end
 
+      FORWARDED_SCHEME_HEADERS = {
+        proto: HTTP_X_FORWARDED_PROTO,
+        scheme: HTTP_X_FORWARDED_SCHEME
+      }.freeze
+      private_constant :FORWARDED_SCHEME_HEADERS
       def forwarded_scheme
-        allowed_scheme(get_header(HTTP_X_FORWARDED_SCHEME)) ||
-        allowed_scheme(extract_proto_header(get_header(HTTP_X_FORWARDED_PROTO)))
+        forwarded_priority.each do |type|
+          case type
+          when :forwarded
+            if (forwarded_proto = get_http_forwarded(:proto)) &&
+               (scheme = allowed_scheme(forwarded_proto.last))
+              return scheme
+            end
+          when :x_forwarded
+            x_forwarded_proto_priority.each do |x_type|
+              if header = FORWARDED_SCHEME_HEADERS[x_type]
+                split_header(get_header(header)).reverse_each do |scheme|
+                  if allowed_scheme(scheme)
+                    return scheme
+                  end
+                end
+              end
+            end
+          end
+        end
+
+        nil
       end
 
       def allowed_scheme(header)
         header if ALLOWED_SCHEMES.include?(header)
       end
 
-      def extract_proto_header(header)
-        if header
-          if (comma_index = header.index(','))
-            header[0, comma_index]
-          else
-            header
-          end
-        end
+      def forwarded_priority
+        Request.forwarded_priority
+      end
+
+      def x_forwarded_proto_priority
+        Request.x_forwarded_proto_priority
       end
     end
 
@@ -657,3 +751,7 @@ module Rack
     include Helpers
   end
 end
+
+# :nocov:
+require_relative 'multipart' unless defined?(Rack::Multipart)
+# :nocov:

@@ -20,7 +20,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu, macos]
-        ruby-version: [2.5, 2.6, 2.7, 3.0, head, debug, truffleruby, truffleruby-head]
+        ruby-version: [2.5, 2.6, 2.7, 3.0, head, debug, truffleruby]
     continue-on-error: ${{ endsWith(matrix.ruby, 'head') || matrix.ruby == 'debug' }}
     steps:
     - uses: actions/checkout@v2
@@ -30,7 +30,7 @@ jobs:
         then
           brew install curl
         else
-          sudo apt install -y libcurl4-openssl-dev
+          sudo apt update && sudo apt install -y --no-install-recommends libcurl4-openssl-dev
         fi
     - name: Set up Ruby
       uses: ruby/setup-ruby@v1

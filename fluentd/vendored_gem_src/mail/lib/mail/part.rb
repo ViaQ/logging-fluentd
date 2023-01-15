@@ -1,8 +1,10 @@
 # encoding: utf-8
 # frozen_string_literal: true
+require 'mail/constants'
+require 'mail/utilities'
+
 module Mail
   class Part < Message
-    
     # Creates a new empty Content-ID field and inserts it in the correct order
     # into the Header.  The ContentIdField object will automatically generate
     # a unique content ID if you try and encode it or output it to_s without
@@ -19,15 +21,9 @@ module Mail
       header.has_content_id?
     end
     
-    def inline_content_id
-      # TODO: Deprecated in 2.2.2 - Remove in 2.3
-      warn("Part#inline_content_id is deprecated, please call Part#cid instead")
-      cid
-    end
-    
     def cid
       add_content_id unless has_content_id?
-      uri_escape(unbracket(content_id))
+      Utilities.uri_escape(Utilities.unbracket(content_id))
     end
     
     def url
@@ -104,7 +100,7 @@ module Mail
     
     # A part may not have a header.... so, just init a body if no header
     def parse_message
-      header_part, body_part = raw_source.split(/#{Constants::CRLF}#{Constants::WSP}*#{Constants::CRLF}/m, 2)
+      header_part, body_part = raw_source.split(/#{Constants::LAX_CRLF}#{Constants::WSP}*#{Constants::LAX_CRLF}/m, 2)
       if header_part =~ Constants::HEADER_LINE
         self.header = header_part
         self.body   = body_part

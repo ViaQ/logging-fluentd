@@ -1,6 +1,275 @@
 Unreleased Changes
 ------------------
 
+3.168.4 (2022-12-08)
+------------------
+
+* Issue - Fix Sign to not sign Sigv2 requests to S3.
+
+3.168.3 (2022-12-02)
+------------------
+
+* Issue - Retry S3's `BadDigest` error
+
+3.168.2 (2022-11-29)
+------------------
+
+* Issue - Allow region resolution in `AssumeRoleCredentials` from `CredentialProviderChain`.
+
+3.168.1 (2022-11-18)
+------------------
+
+* Issue - Fix initialization of SSOTokenProvider when `AWS_PROFILE` is specified.
+
+3.168.0 (2022-11-17)
+------------------
+
+* Feature - Updated Aws::STS::Client with the latest API changes.
+
+3.167.0 (2022-11-09)
+------------------
+
+* Issue - Ensure the stream_thread is not killed before H2 connection status is updated (#2779).
+
+* Feature - Add token refresh support to `SSOCredentialProvider`.
+
+3.166.0 (2022-10-26)
+------------------
+
+* Feature - Updated Aws::STS::Client with the latest API changes.
+
+* Feature - Updated Aws::SSOOIDC::Client with the latest API changes.
+
+* Feature - Updated Aws::SSO::Client with the latest API changes.
+
+3.165.1 (2022-10-25)
+------------------
+
+* Issue - Require the SignatureV4 plugin to fix compatability with older `aws-sdk-s3` versions (#2774).
+
+3.165.0 (2022-10-25)
+------------------
+
+* Feature - Updated Aws::SSOOIDC::Client with the latest API changes.
+
+* Feature - Updated Aws::SSO::Client with the latest API changes.
+
+* Feature - Add support for service gems to dynamically determine their own endpoints via modeling. Service gems now generate a plugin called "Endpoints" that defines configuration for EndpointProvider, a new public type, and any client config related to endpoints. Endpoint providers will resolve values using another new public type, Endpoint Parameters, generated for each service. The plugin will use the endpoint provider to resolve an endpoint and then apply it to the request prior to serialization. Endpoint providers can be composed to change endpoint resolution logic, i.e. for testing. In addition to endpoints, the endpoint provider may also override the authentication scheme (auth scheme) which details how the request should be signed for the endpoint. A new "Sign" plugin in core replaces the SignatureV4 plugin that will generically sign any type of auth scheme that a service might have.
+
+3.164.0 (2022-10-21)
+------------------
+
+* Feature - Updated Aws::SSOOIDC::Client with the latest API changes.
+
+3.163.0 (2022-10-20)
+------------------
+
+* Feature - Updated Aws::SSOOIDC::Client with the latest API changes.
+
+3.162.0 (2022-10-19)
+------------------
+
+* Feature - Updated Aws::SSOOIDC::Client with the latest API changes.
+
+3.161.0 (2022-10-18)
+------------------
+
+* Feature - Support AwsQueryCompatible trait to read error code from x-amzn-query-error header.
+
+3.160.0 (2022-10-13)
+------------------
+
+* Feature - Updated Aws::SSO::Client with the latest API changes.
+
+3.159.0 (2022-10-07)
+------------------
+
+* Feature - Updated Aws::SSO::Client with the latest API changes.
+
+3.158.1 (2022-10-06)
+------------------
+
+* Issue - Ensure that the ReadCallbackIO is always unwrapped (#2761).
+
+3.158.0 (2022-09-30)
+------------------
+
+* Feature - Updated Aws::SSO::Client with the latest API changes.
+
+3.157.0 (2022-09-29)
+------------------
+
+* Feature - Updated Aws::SSO::Client with the latest API changes.
+
+3.156.0 (2022-09-27)
+------------------
+
+* Feature - Updated Aws::SSO::Client with the latest API changes.
+
+3.155.0 (2022-09-26)
+------------------
+
+* Feature - Updated Aws::SSO::Client with the latest API changes.
+
+3.154.0 (2022-09-23)
+------------------
+
+* Feature - Updated Aws::SSO::Client with the latest API changes.
+
+3.153.0 (2022-09-22)
+------------------
+
+* Feature - Updated Aws::SSO::Client with the latest API changes.
+
+3.152.0 (2022-09-21)
+------------------
+
+* Feature - Updated Aws::SSO::Client with the latest API changes.
+
+3.151.0 (2022-09-20)
+------------------
+
+* Feature - Updated Aws::SSO::Client with the latest API changes.
+
+3.150.0 (2022-09-19)
+------------------
+
+* Feature - Updated Aws::SSO::Client with the latest API changes.
+
+3.149.0 (2022-09-16)
+------------------
+
+* Feature - Updated Aws::SSO::Client with the latest API changes.
+
+3.148.0 (2022-09-15)
+------------------
+
+* Feature - Updated Aws::SSO::Client with the latest API changes.
+
+3.147.0 (2022-09-14)
+------------------
+
+* Feature - Updated Aws::SSO::Client with the latest API changes.
+
+3.146.0 (2022-09-13)
+------------------
+
+* Feature - Updated Aws::SSO::Client with the latest API changes.
+
+3.145.0 (2022-09-12)
+------------------
+
+* Feature - Updated Aws::SSO::Client with the latest API changes.
+
+3.144.0 (2022-09-09)
+------------------
+
+* Feature - Updated Aws::SSO::Client with the latest API changes.
+
+3.143.0 (2022-09-08)
+------------------
+
+* Feature - Updated Aws::SSO::Client with the latest API changes.
+
+3.142.0 (2022-09-07)
+------------------
+
+* Feature - Updated Aws::SSO::Client with the latest API changes.
+
+3.141.0 (2022-09-06)
+------------------
+
+* Feature - Updated Aws::SSO::Client with the latest API changes.
+
+3.140.0 (2022-09-02)
+------------------
+
+* Feature - Updated Aws::SSO::Client with the latest API changes.
+
+3.139.0 (2022-09-01)
+------------------
+
+* Feature - Updated Aws::SSO::Client with the latest API changes.
+
+3.138.0 (2022-08-31)
+------------------
+
+* Feature - Updated Aws::SSO::Client with the latest API changes.
+
+3.137.0 (2022-08-30)
+------------------
+
+* Feature - Updated Aws::SSO::Client with the latest API changes.
+
+* Issue - Fix errors in recursion detection when `_X_AMZN_TRACE_ID` is unset (#2748).
+
+3.136.0 (2022-08-25)
+------------------
+
+* Feature - Updated Aws::SSO::Client with the latest API changes.
+
+* Feature - Updated Aws::SSOOIDC::Client with the latest API changes.
+
+3.135.0 (2022-08-24)
+------------------
+
+* Feature - Updated Aws::SSO::Client with the latest API changes.
+
+3.134.0 (2022-08-23)
+------------------
+
+* Feature - Updated Aws::SSO::Client with the latest API changes.
+
+* Feature - Add support for Bearer Token Authentication and TokenProviders.
+
+* Issue - Validate that `_X_AMZN_TRACE_ID` ENV value contains only valid, non-control characters.
+
+3.133.0 (2022-08-22)
+------------------
+
+* Feature - Moved functionality from `aws-sdk-ssooidc` into core.
+
+3.132.0 (2022-08-08)
+------------------
+
+* Feature - Updated Aws::SSO::Client with the latest API changes.
+
+3.131.6 (2022-08-03)
+------------------
+
+* Issue - Fix typo in `RecursionDetection`, change amz to amzn in header and env name.
+
+3.131.5 (2022-07-28)
+------------------
+
+* Issue - Fix `to_json` usage in nested hashes by defining `as_json` (#2733).
+
+3.131.4 (2022-07-27)
+------------------
+
+* Issue - Fix `to_json` usage on pageable responses when using Rails (#2733).
+* Issue - Use `expand_path` on credential/config paths in SharedConfig (#2735).
+
+3.131.3 (2022-07-18)
+------------------
+
+* Issue - Add support for serializing shapes on the body with `jsonvalue` members.
+
+3.131.2 (2022-06-20)
+------------------
+
+* Issue - Populate context :request_id for XML error responses.
+
+3.131.1 (2022-05-20)
+------------------
+
+* Issue - Bump the minimum version of `jmespath` dependency.
+
+3.131.0 (2022-05-16)
+------------------
+
+* Feature - Updated Aws::STS::Client with the latest API changes.
+
 3.130.2 (2022-04-22)
 ------------------
 
@@ -50,7 +319,7 @@ Unreleased Changes
 3.126.2 (2022-02-16)
 ------------------
 
-* Issue - Add a before_refresh callback to AssumeRoleCredentials (#2529). 
+* Issue - Add a before_refresh callback to AssumeRoleCredentials (#2529).
 * Issue - Raise a `NoSuchProfileError` when config and credentials files don't exist.
 
 3.126.1 (2022-02-14)

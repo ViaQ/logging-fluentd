@@ -21,7 +21,7 @@ module HTTP
 
       def connect(socket_class, host, port, nodelay = false)
         reset_timer
-        ::Timeout.timeout(@time_left, TimeoutError) do
+        ::Timeout.timeout(@time_left, ConnectTimeoutError) do
           @socket = socket_class.open(host, port)
           @socket.setsockopt(Socket::IPPROTO_TCP, Socket::TCP_NODELAY, 1) if nodelay
         end
@@ -35,12 +35,10 @@ module HTTP
         begin
           @socket.connect_nonblock
         rescue IO::WaitReadable
-          IO.select([@socket], nil, nil, @time_left)
-          log_time
+          wait_readable_or_timeout
           retry
         rescue IO::WaitWritable
-          IO.select(nil, [@socket], nil, @time_left)
-          log_time
+          wait_writable_or_timeout
           retry
         end
       end
@@ -59,22 +57,12 @@ module HTTP
 
       private
 
-      if RUBY_VERSION < "2.1.0"
-        def read_nonblock(size, buffer = nil)
-          @socket.read_nonblock(size, buffer)
-        end
+      def read_nonblock(size, buffer = nil)
+        @socket.read_nonblock(size, buffer, :exception => false)
+      end
 
-        def write_nonblock(data)
-          @socket.write_nonblock(data)
-        end
-      else
-        def read_nonblock(size, buffer = nil)
-          @socket.read_nonblock(size, buffer, :exception => false)
-        end
-
-        def write_nonblock(data)
-          @socket.write_nonblock(data, :exception => false)
-        end
+      def write_nonblock(data)
+        @socket.write_nonblock(data, :exception => false)
       end
 
       # Perform the given I/O operation with the given argument
@@ -82,20 +70,18 @@ module HTTP
         reset_timer
 
         loop do
-          begin
-            result = yield
+          result = yield
 
-            case result
-            when :wait_readable then wait_readable_or_timeout
-            when :wait_writable then wait_writable_or_timeout
-            when NilClass       then return :eof
-            else                return result
-            end
-          rescue IO::WaitReadable
-            wait_readable_or_timeout
-          rescue IO::WaitWritable
-            wait_writable_or_timeout
+          case result
+          when :wait_readable then wait_readable_or_timeout
+          when :wait_writable then wait_writable_or_timeout
+          when NilClass       then return :eof
+          else                return result
           end
+        rescue IO::WaitReadable
+          wait_readable_or_timeout
+        rescue IO::WaitWritable
+          wait_writable_or_timeout
         end
       rescue EOFError
         :eof
@@ -121,9 +107,7 @@ module HTTP
 
       def log_time
         @time_left -= (Time.now - @started)
-        if @time_left <= 0
-          raise TimeoutError, "Timed out after using the allocated #{@timeout} seconds"
-        end
+        raise TimeoutError, "Timed out after using the allocated #{@timeout} seconds" if @time_left <= 0
 
         reset_timer
       end

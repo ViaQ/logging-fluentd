@@ -32,12 +32,12 @@ module Bundler
       @engine             = engine && engine.to_s || "ruby"
       @engine_versions    = (engine_version && Array(engine_version)) || @versions
       @engine_gem_version = Gem::Requirement.create(@engine_versions.first).requirements.first.last
-      @patchlevel         = patchlevel
+      @patchlevel         = patchlevel || (@gem_version.prerelease? ? "-1" : nil)
     end
 
     def to_s(versions = self.versions)
       output = String.new("ruby #{versions_string(versions)}")
-      output << "p#{patchlevel}" if patchlevel
+      output << "p#{patchlevel}" if patchlevel && patchlevel != "-1"
       output << " (#{engine} #{versions_string(engine_versions)})" unless engine == "ruby"
 
       output
@@ -46,10 +46,10 @@ module Bundler
     # @private
     PATTERN = /
       ruby\s
-      ([\d.]+) # ruby version
+      (\d+\.\d+\.\d+(?:\.\S+)?) # ruby version
       (?:p(-?\d+))? # optional patchlevel
       (?:\s\((\S+)\s(.+)\))? # optional engine info
-    /xo
+    /xo.freeze
 
     # Returns a RubyVersion from the given string.
     # @param [String] the version string to match.
@@ -74,7 +74,7 @@ module Bundler
       @host ||= [
         RbConfig::CONFIG["host_cpu"],
         RbConfig::CONFIG["host_vendor"],
-        RbConfig::CONFIG["host_os"]
+        RbConfig::CONFIG["host_os"],
       ].join("-")
     end
 
@@ -102,43 +102,15 @@ module Bundler
     end
 
     def self.system
-      ruby_engine = if defined?(RUBY_ENGINE) && !RUBY_ENGINE.nil?
-        RUBY_ENGINE.dup
-      else
-        # not defined in ruby 1.8.7
-        "ruby"
-      end
-      # :sob: mocking RUBY_VERSION breaks stuff on 1.8.7
-      ruby_version = ENV.fetch("BUNDLER_SPEC_RUBY_VERSION") { RUBY_VERSION }.dup
-      ruby_engine_version = case ruby_engine
-                            when "ruby"
-                              ruby_version
-                            when "rbx"
-                              Rubinius::VERSION.dup
-                            when "jruby"
-                              JRUBY_VERSION.dup
-                            else
-                              RUBY_ENGINE_VERSION.dup
-      end
+      ruby_engine = RUBY_ENGINE.dup
+      ruby_version = Gem.ruby_version.to_s
+      ruby_engine_version = RUBY_ENGINE == "ruby" ? ruby_version : RUBY_ENGINE_VERSION.dup
       patchlevel = RUBY_PATCHLEVEL.to_s
 
       @ruby_version ||= RubyVersion.new(ruby_version, patchlevel, ruby_engine, ruby_engine_version)
     end
 
-    def to_gem_version_with_patchlevel
-      @gem_version_with_patch ||= begin
-        Gem::Version.create("#{@gem_version}.#{@patchlevel}")
-      rescue ArgumentError
-        @gem_version
-      end
-    end
-
-    def exact?
-      return @exact if defined?(@exact)
-      @exact = versions.all? {|v| Gem::Requirement.create(v).exact? }
-    end
-
-  private
+    private
 
     def matches?(requirements, version)
       # Handles RUBY_PATCHLEVEL of -1 for instances like ruby-head

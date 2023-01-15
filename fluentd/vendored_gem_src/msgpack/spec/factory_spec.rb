@@ -587,6 +587,48 @@ describe MessagePack::Factory do
         GC.stress = false
       end
     end
+
+    it 'does not crash in recursive extensions' do
+      my_hash_type = Class.new(Hash)
+      factory = MessagePack::Factory.new
+      factory.register_type(7,
+        my_hash_type,
+        packer: ->(value, packer) do
+          packer.write(value.to_h)
+        end,
+        unpacker: ->(unpacker) { my_hash_type.new(unpacker.read) },
+        recursive: true,
+      )
+
+      payload = factory.dump(
+        [my_hash_type.new]
+      )
+
+      begin
+        GC.stress = true
+        factory.load(payload)
+      ensure
+        GC.stress = false
+      end
+    end
+  end
+
+  describe 'memsize' do
+    it 'works on a fresh factory' do
+      skip "JRuby doesn't support ObjectSpace.memsize_of" if IS_JRUBY
+
+      f = MessagePack::Factory.new
+      expect(ObjectSpace.memsize_of(f)).to be_an(Integer)
+    end
+
+    it 'works on a factory with registered types' do
+      skip "JRuby doesn't support ObjectSpace.memsize_of" if IS_JRUBY
+
+      f = MessagePack::Factory.new
+      base_size = ObjectSpace.memsize_of(f)
+      f.register_type(0x0a, Symbol)
+      expect(ObjectSpace.memsize_of(f)).to be > base_size
+    end
   end
 
   describe 'DefaultFactory' do

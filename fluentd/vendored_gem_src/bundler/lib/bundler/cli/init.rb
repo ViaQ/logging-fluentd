@@ -32,16 +32,20 @@ module Bundler
           file << spec.to_gemfile
         end
       else
-        FileUtils.cp(File.expand_path("../../templates/#{gemfile}", __FILE__), gemfile)
+        File.open(File.expand_path("../templates/#{gemfile}", __dir__), "r") do |template|
+          File.open(gemfile, "wb") do |destination|
+            IO.copy_stream(template, destination)
+          end
+        end
       end
 
       puts "Writing new #{gemfile} to #{SharedHelpers.pwd}/#{gemfile}"
     end
 
-  private
+    private
 
     def gemfile
-      @gemfile ||= Bundler.feature_flag.init_gems_rb? ? "gems.rb" : "Gemfile"
+      @gemfile ||= Bundler.preferred_gemfile_name
     end
   end
 end

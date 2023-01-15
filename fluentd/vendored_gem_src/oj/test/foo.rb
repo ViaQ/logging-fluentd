@@ -8,17 +8,15 @@ require "oj"
 require "socket"
 require 'io/nonblock'
 
-=begin
 #pid = spawn("nc -d 0.1 -l 5000", out: "/dev/null")
 pid = spawn("nc -i 1 -l 7777", out: "/dev/null")
 at_exit { Process.kill 9, pid }
 sleep 0.2
 s = Socket.tcp("localhost", 7777)
-#s.nonblock = false
+s.nonblock = false
 1_000_000.times do |x|
   Oj.to_stream(s, { x: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]})
 end
-=end
 
 =begin
 IO.pipe do |r, w|
@@ -47,6 +45,7 @@ IO.pipe do |r, w|
 end
 =end
 
+=begin
 IO.pipe do |r, w|
   if fork
     r.close
@@ -75,3 +74,4 @@ IO.pipe do |r, w|
     Process.exit(0)
   end
 end
+=end

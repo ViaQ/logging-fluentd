@@ -13,8 +13,7 @@ To learn more about groups and versions in kubernetes refer to [k8s docs](https:
 
 If you use `Kubeclient::Config`, all gem versions released before 2022 could return incorrect `ssl_options[:verify_ssl]`,
 endangering your connection and cluster credentials.
-See [latest CHANGELOG.md](https://github.com/ManageIQ/kubeclient/blob/master/CHANGELOG.md) for details and which versions got a fix.
-Open an issue if you want a backport to another version.
+See https://github.com/ManageIQ/kubeclient/issues/554 for details and which versions got a fix.
 
 ## Installation
 
@@ -105,8 +104,8 @@ client = Kubeclient::Client.new(
 ### Authentication
 
 If you are using basic authentication or bearer tokens as described
-[here](https://github.com/GoogleCloudPlatform/kubernetes/blob/master/docs/authentication.md) then you can specify one
-of the following:
+[here](https://github.com/GoogleCloudPlatform/kubernetes/blob/master/docs/authentication.md)
+then you can specify one of the following:
 
 ```ruby
 auth_options = {
@@ -118,7 +117,7 @@ client = Kubeclient::Client.new(
 )
 ```
 
-or
+or (fixed token, if it expires it's up to you to create a new `Client` object):
 
 ```ruby
 auth_options = {
@@ -129,7 +128,7 @@ client = Kubeclient::Client.new(
 )
 ```
 
-or
+or (will automatically re-read the token if file is updated):
 
 ```ruby
 auth_options = {

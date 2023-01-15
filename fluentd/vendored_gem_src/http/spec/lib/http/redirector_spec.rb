@@ -6,12 +6,17 @@ RSpec.describe HTTP::Redirector do
       :status  => status,
       :version => "1.1",
       :headers => headers,
-      :body    => body
+      :body    => body,
+      :request => HTTP::Request.new(:verb => :get, :uri => "http://example.com")
     )
   end
 
-  def redirect_response(status, location)
-    simple_response status, "", "Location" => location
+  def redirect_response(status, location, set_cookie = {})
+    res = simple_response status, "", "Location" => location
+    set_cookie.each do |name, value|
+      res.headers.add("Set-Cookie", "#{name}=#{value}; path=/; httponly; secure; SameSite=none; Secure")
+    end
+    res
   end
 
   describe "#strict" do
@@ -86,6 +91,87 @@ RSpec.describe HTTP::Redirector do
       end
 
       expect(res.to_s).to eq "http://example.com/123"
+    end
+
+    it "returns cookies in response" do
+      req  = HTTP::Request.new :verb => :head, :uri => "http://example.com"
+      hops = [
+        redirect_response(301, "http://example.com/1", {"foo" => "42"}),
+        redirect_response(301, "http://example.com/2", {"bar" => "53", "deleted" => "foo"}),
+        redirect_response(301, "http://example.com/3", {"baz" => "64", "deleted" => ""}),
+        redirect_response(301, "http://example.com/4", {"baz" => "65"}),
+        simple_response(200, "bar")
+      ]
+
+      request_cookies = [
+        {"foo" => "42"},
+        {"foo" => "42", "bar" => "53", "deleted" => "foo"},
+        {"foo" => "42", "bar" => "53", "baz" => "64"},
+        {"foo" => "42", "bar" => "53", "baz" => "65"}
+      ]
+
+      res = redirector.perform(req, hops.shift) do |request|
+        req_cookie = HTTP::Cookie.cookie_value_to_hash(request.headers["Cookie"] || "")
+        expect(req_cookie).to eq request_cookies.shift
+        hops.shift
+      end
+      expect(res.to_s).to eq "bar"
+      cookies = res.cookies.cookies.to_h { |c| [c.name, c.value] }
+      expect(cookies["foo"]).to eq "42"
+      expect(cookies["bar"]).to eq "53"
+      expect(cookies["baz"]).to eq "65"
+      expect(cookies["deleted"]).to eq nil
+    end
+
+    it "returns original cookies in response" do
+      req = HTTP::Request.new :verb => :head, :uri => "http://example.com"
+      req.headers.set("Cookie", "foo=42; deleted=baz")
+      hops = [
+        redirect_response(301, "http://example.com/1", {"bar" => "64", "deleted" => ""}),
+        simple_response(200, "bar")
+      ]
+
+      request_cookies = [
+        {"foo" => "42", "bar" => "64"},
+        {"foo" => "42", "bar" => "64"}
+      ]
+
+      res = redirector.perform(req, hops.shift) do |request|
+        req_cookie = HTTP::Cookie.cookie_value_to_hash(request.headers["Cookie"] || "")
+        expect(req_cookie).to eq request_cookies.shift
+        hops.shift
+      end
+      expect(res.to_s).to eq "bar"
+      cookies = res.cookies.cookies.to_h { |c| [c.name, c.value] }
+      expect(cookies["foo"]).to eq "42"
+      expect(cookies["bar"]).to eq "64"
+      expect(cookies["deleted"]).to eq nil
+    end
+
+    context "with on_redirect callback" do
+      let(:options) do
+        {
+          :on_redirect => proc do |response, location|
+            @redirect_response = response
+            @redirect_location = location
+          end
+        }
+      end
+
+      it "calls on_redirect" do
+        req = HTTP::Request.new :verb => :head, :uri => "http://example.com"
+        hops = [
+          redirect_response(301, "http://example.com/1"),
+          redirect_response(301, "http://example.com/2"),
+          simple_response(200, "foo")
+        ]
+
+        redirector.perform(req, hops.shift) do |prev_req, _|
+          expect(@redirect_location.uri.to_s).to eq prev_req.uri.to_s
+          expect(@redirect_response.code).to eq 301
+          hops.shift
+        end
+      end
     end
 
     context "following 300 redirect" do
@@ -391,6 +477,50 @@ RSpec.describe HTTP::Redirector do
 
         redirector.perform(req, res) do |prev_req, _|
           expect(prev_req.verb).to be :post
+          simple_response 200
+        end
+      end
+    end
+
+    describe "changing verbs during redirects" do
+      let(:options) { {:strict => false} }
+      let(:post_body) { HTTP::Request::Body.new("i might be way longer in real life") }
+      let(:cookie) { "dont=eat my cookies" }
+
+      def a_dangerous_request(verb)
+        HTTP::Request.new(
+          :verb => verb, :uri => "http://example.com",
+          :body => post_body, :headers => {
+            "Content-Type" => "meme",
+            "Cookie"       => cookie
+          }
+        )
+      end
+
+      def empty_body
+        HTTP::Request::Body.new(nil)
+      end
+
+      it "follows without body/content type if it has to change verb" do
+        req = a_dangerous_request(:post)
+        res = redirect_response 302, "http://example.com/1"
+
+        redirector.perform(req, res) do |prev_req, _|
+          expect(prev_req.body).to eq(empty_body)
+          expect(prev_req.headers["Cookie"]).to eq(cookie)
+          expect(prev_req.headers["Content-Type"]).to eq(nil)
+          simple_response 200
+        end
+      end
+
+      it "leaves body/content-type intact if it does not have to change verb" do
+        req = a_dangerous_request(:post)
+        res = redirect_response 307, "http://example.com/1"
+
+        redirector.perform(req, res) do |prev_req, _|
+          expect(prev_req.body).to eq(post_body)
+          expect(prev_req.headers["Cookie"]).to eq(cookie)
+          expect(prev_req.headers["Content-Type"]).to eq("meme")
           simple_response 200
         end
       end

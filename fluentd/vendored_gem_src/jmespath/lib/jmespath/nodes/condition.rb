@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 module JMESPath
   # @api private
   module Nodes
@@ -27,7 +28,7 @@ module JMESPath
 
     class ComparatorCondition < Node
       COMPARATOR_TO_CONDITION = {}
-      COMPARABLE_TYPES = [Integer, String].freeze
+      COMPARABLE_TYPES = [Numeric, String].freeze
 
       def initialize(left, right, child)
         @left = left
@@ -35,7 +36,7 @@ module JMESPath
         @child = child
       end
 
-      def visit(value)
+      def visit(_value)
         nil
       end
 

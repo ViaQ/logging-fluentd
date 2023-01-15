@@ -1,14 +1,12 @@
 # frozen_string_literal: true
 
-# rubocop:disable Metrics/ClassLength
-
 require "http/headers"
 require "openssl"
 require "socket"
 require "http/uri"
 
 module HTTP
-  class Options
+  class Options # rubocop:disable Metrics/ClassLength
     @default_socket_class     = TCPSocket
     @default_ssl_socket_class = OpenSSL::SSL::SSLSocket
     @default_timeout_class    = HTTP::Timeout::Null
@@ -18,9 +16,8 @@ module HTTP
       attr_accessor :default_socket_class, :default_ssl_socket_class, :default_timeout_class
       attr_reader :available_features
 
-      def new(options = {}) # rubocop:disable Style/OptionHash
-        return options if options.is_a?(self)
-        super
+      def new(options = {})
+        options.is_a?(self) ? options : super
       end
 
       def defined_options
@@ -35,7 +32,7 @@ module HTTP
 
       def def_option(name, reader_only: false, &interpreter)
         defined_options << name.to_sym
-        interpreter ||= lambda { |v| v }
+        interpreter ||= ->(v) { v }
 
         if reader_only
           attr_reader name
@@ -50,7 +47,7 @@ module HTTP
       end
     end
 
-    def initialize(options = {}) # rubocop:disable Style/OptionHash
+    def initialize(options = {})
       defaults = {
         :response           => :auto,
         :proxy              => {},

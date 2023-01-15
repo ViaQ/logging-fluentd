@@ -171,12 +171,8 @@ module TZInfo
           c.timezone 'America/Moncton', 461, 10, -3887, 60, 'Atlantic - New Brunswick'
           c.timezone 'America/Goose_Bay', 160, 3, -725, 12, 'Atlantic - Labrador (most areas)'
           c.timezone 'America/Toronto', 873, 20, -4763, 60, 'Eastern - ON, QC (most areas), Bahamas'
-          c.timezone 'America/Nipigon', 2941, 60, -1324, 15, 'Eastern - ON, QC (no DST 1967-73)'
-          c.timezone 'America/Thunder_Bay', 2903, 60, -357, 4, 'Eastern - ON (Thunder Bay)'
-          c.timezone 'America/Iqaluit', 956, 15, -1027, 15, 'Eastern - NU (most east areas)'
-          c.timezone 'America/Pangnirtung', 992, 15, -986, 15, 'Eastern - NU (Pangnirtung)'
+          c.timezone 'America/Iqaluit', 956, 15, -1027, 15, 'Eastern - NU (most areas)'
           c.timezone 'America/Winnipeg', 2993, 60, -1943, 20, 'Central - ON (west); Manitoba'
-          c.timezone 'America/Rainy_River', 2923, 60, -2837, 30, 'Central - ON (Rainy R, Ft Frances)'
           c.timezone 'America/Resolute', 33613, 450, -22759, 240, 'Central - NU (Resolute)'
           c.timezone 'America/Rankin_Inlet', 3769, 60, -331499, 3600, 'Central - NU (central)'
           c.timezone 'America/Regina', 252, 5, -2093, 20, 'CST - SK (most areas)'
@@ -575,17 +571,18 @@ module TZInfo
           c.timezone 'Africa/Maputo', -779, 30, 391, 12, 'Central Africa Time'
         end
         country 'MX', 'Mexico' do |c|
-          c.timezone 'America/Mexico_City', 97, 5, -1983, 20, 'Central Time'
-          c.timezone 'America/Cancun', 253, 12, -2603, 30, 'Eastern Standard Time - Quintana Roo'
-          c.timezone 'America/Merida', 629, 30, -5377, 60, 'Central Time - Campeche, Yucatán'
-          c.timezone 'America/Monterrey', 77, 3, -6019, 60, 'Central Time - Durango; Coahuila, Nuevo León, Tamaulipas (most areas)'
-          c.timezone 'America/Matamoros', 155, 6, -195, 2, 'Central Time US - Coahuila, Nuevo León, Tamaulipas (US border)'
-          c.timezone 'America/Mazatlan', 1393, 60, -1277, 12, 'Mountain Time - Baja California Sur, Nayarit, Sinaloa'
-          c.timezone 'America/Chihuahua', 859, 30, -1273, 12, 'Mountain Time - Chihuahua (most areas)'
-          c.timezone 'America/Ojinaga', 887, 30, -1253, 12, 'Mountain Time US - Chihuahua (US border)'
-          c.timezone 'America/Hermosillo', 436, 15, -3329, 30, 'Mountain Standard Time - Sonora'
-          c.timezone 'America/Tijuana', 488, 15, -7021, 60, 'Pacific Time US - Baja California'
-          c.timezone 'America/Bahia_Banderas', 104, 5, -421, 4, 'Central Time - Bahía de Banderas'
+          c.timezone 'America/Mexico_City', 97, 5, -1983, 20, 'Central Mexico'
+          c.timezone 'America/Cancun', 253, 12, -2603, 30, 'Quintana Roo'
+          c.timezone 'America/Merida', 629, 30, -5377, 60, 'Campeche, Yucatán'
+          c.timezone 'America/Monterrey', 77, 3, -6019, 60, 'Durango; Coahuila, Nuevo León, Tamaulipas (most areas)'
+          c.timezone 'America/Matamoros', 155, 6, -195, 2, 'Coahuila, Nuevo León, Tamaulipas (US border)'
+          c.timezone 'America/Chihuahua', 859, 30, -1273, 12, 'Chihuahua (most areas)'
+          c.timezone 'America/Ciudad_Juarez', 476, 15, -6389, 60, 'Chihuahua (US border - west)'
+          c.timezone 'America/Ojinaga', 887, 30, -1253, 12, 'Chihuahua (US border - east)'
+          c.timezone 'America/Mazatlan', 1393, 60, -1277, 12, 'Baja California Sur, Nayarit (most areas), Sinaloa'
+          c.timezone 'America/Bahia_Banderas', 104, 5, -421, 4, 'Bahía de Banderas'
+          c.timezone 'America/Hermosillo', 436, 15, -3329, 30, 'Sonora'
+          c.timezone 'America/Tijuana', 488, 15, -7021, 60, 'Baja California'
         end
         country 'MY', 'Malaysia' do |c|
           c.timezone 'Asia/Kuching', 31, 20, 331, 3, 'Sabah, Sarawak, Brunei'
@@ -795,7 +792,7 @@ module TZInfo
         country 'TD', 'Chad' do |c|
           c.timezone 'Africa/Ndjamena', 727, 60, 301, 20
         end
-        country 'TF', 'French Southern & Antarctic Lands' do |c|
+        country 'TF', 'French Southern Territories' do |c|
           c.timezone 'Asia/Dubai', 253, 10, 553, 10, 'UAE, Oman, Réunion, Seychelles, Crozet, Scattered Is'
           c.timezone 'Indian/Maldives', 25, 6, 147, 2, 'Maldives, Kerguelen, St Paul I, Amsterdam I'
         end
@@ -840,8 +837,6 @@ module TZInfo
         end
         country 'UA', 'Ukraine' do |c|
           c.timezone 'Europe/Kyiv', 1513, 30, 1831, 60, 'Ukraine (most areas)'
-          c.timezone 'Europe/Uzhgorod', 2917, 60, 223, 10, 'Transcarpathia'
-          c.timezone 'Europe/Zaporozhye', 287, 6, 211, 6, 'Zaporozhye and east Lugansk'
           c.timezone 'Europe/Simferopol', 899, 20, 341, 10, 'Crimea'
         end
         country 'UG', 'Uganda' do |c|

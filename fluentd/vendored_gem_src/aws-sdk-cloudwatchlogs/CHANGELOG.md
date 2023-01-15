@@ -1,6 +1,46 @@
 Unreleased Changes
 ------------------
 
+1.60.0 (2023-01-12)
+------------------
+
+* Feature - Bug fix: logGroupName is now not a required field in GetLogEvents, FilterLogEvents, GetLogGroupFields, and DescribeLogStreams APIs as logGroupIdentifier can be provided instead
+
+1.59.0 (2023-01-04)
+------------------
+
+* Feature - Update to remove sequenceToken as a required field in PutLogEvents calls.
+
+1.58.0 (2022-12-09)
+------------------
+
+* Feature - Doc-only update for CloudWatch Logs, for Tagging Permissions clarifications
+
+1.57.0 (2022-11-28)
+------------------
+
+* Feature - Updates to support CloudWatch Logs data protection and CloudWatch cross-account observability
+
+1.56.0 (2022-11-04)
+------------------
+
+* Feature - Doc-only update for bug fixes and support of export to buckets encrypted with SSE-KMS
+
+1.55.0 (2022-10-31)
+------------------
+
+* Feature - SDK release to support tagging for destinations and log groups with TagResource. Also supports tag on create with PutDestination.
+
+1.54.0 (2022-10-25)
+------------------
+
+* Feature - Code Generated Changes, see `./build_tools` or `aws-sdk-core`'s CHANGELOG.md for details.
+
+1.53.0 (2022-05-20)
+------------------
+
+* Feature - Doc-only update to publish the new valid values for log retention
+
 1.52.0 (2022-02-24)
 ------------------
 

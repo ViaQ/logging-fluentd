@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "bundler/vendored_thor"
+require_relative "../vendored_thor"
 
 module Bundler
   module UI
@@ -10,9 +10,7 @@ module Bundler
       attr_writer :shell
 
       def initialize(options = {})
-        if options["no-color"] || !$stdout.tty?
-          Thor::Base.shell = Thor::Shell::Basic
-        end
+        Thor::Base.shell = options["no-color"] ? Thor::Shell::Basic : nil
         @shell = Thor::Base.shell.new
         @level = ENV["DEBUG"] ? "debug" : "info"
         @warning_history = []
@@ -22,31 +20,52 @@ module Bundler
         @shell.set_color(string, *color)
       end
 
-      def info(msg, newline = nil)
-        tell_me(msg, nil, newline) if level("info")
+      def info(msg = nil, newline = nil)
+        return unless info?
+
+        tell_me(msg || yield, nil, newline)
       end
 
-      def confirm(msg, newline = nil)
-        tell_me(msg, :green, newline) if level("confirm")
+      def confirm(msg = nil, newline = nil)
+        return unless confirm?
+
+        tell_me(msg || yield, :green, newline)
       end
 
-      def warn(msg, newline = nil)
-        return unless level("warn")
+      def warn(msg = nil, newline = nil, color = :yellow)
+        return unless warn?
         return if @warning_history.include? msg
         @warning_history << msg
 
-        return tell_err(msg, :yellow, newline) if Bundler.feature_flag.error_on_stderr?
-        tell_me(msg, :yellow, newline)
+        tell_err(msg || yield, color, newline)
       end
 
-      def error(msg, newline = nil)
-        return unless level("error")
-        return tell_err(msg, :red, newline) if Bundler.feature_flag.error_on_stderr?
-        tell_me(msg, :red, newline)
+      def error(msg = nil, newline = nil, color = :red)
+        return unless error?
+
+        tell_err(msg || yield, color, newline)
       end
 
-      def debug(msg, newline = nil)
-        tell_me(msg, nil, newline) if debug?
+      def debug(msg = nil, newline = nil)
+        return unless debug?
+
+        tell_me(msg || yield, nil, newline)
+      end
+
+      def info?
+        level("info")
+      end
+
+      def confirm?
+        level("confirm")
+      end
+
+      def warn?
+        level("warn")
+      end
+
+      def error?
+        level("error")
       end
 
       def debug?
@@ -85,7 +104,7 @@ module Bundler
       def trace(e, newline = nil, force = false)
         return unless debug? || force
         msg = "#{e.class}: #{e.message}\n#{e.backtrace.join("\n  ")}"
-        tell_me(msg, nil, newline)
+        tell_err(msg, nil, newline)
       end
 
       def silence(&blk)
@@ -96,7 +115,7 @@ module Bundler
         []
       end
 
-    private
+      private
 
       # valimism
       def tell_me(msg, color = nil, newline = nil)

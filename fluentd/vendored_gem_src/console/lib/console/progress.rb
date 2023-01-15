@@ -1,24 +1,7 @@
 # frozen_string_literal: true
 
-# Copyright, 2019, by Samuel G. D. Williams. <http://www.codeotaku.com>
-# 
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-# 
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-# 
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
+# Released under the MIT License.
+# Copyright, 2020-2022, by Samuel Williams.
 
 require_relative 'event/progress'
 require_relative 'clock'
@@ -29,14 +12,14 @@ module Console
 			Process.clock_gettime(Process::CLOCK_MONOTONIC)
 		end
 		
-		def initialize(output, subject, total = 0, minimum_output_duration: 1.0)
+		def initialize(output, subject, total = 0, minimum_output_duration: 0.1)
 			@output = output
 			@subject = subject
 			
 			@start_time = Progress.now
 			
 			@last_output_time = nil
-			@minimum_output_duration = 0.1
+			@minimum_output_duration = minimum_output_duration
 			
 			@current = 0
 			@total = total
@@ -50,8 +33,8 @@ module Console
 			Progress.now - @start_time
 		end
 		
-		def progress
-			@current.to_f / @total.to_f
+		def ratio
+			Rational(@current.to_f, @total.to_f)
 		end
 		
 		def remaining
@@ -90,8 +73,8 @@ module Console
 			return self
 		end
 		
-		def mark(*arguments)
-			@output.info(@subject, *arguments)
+		def mark(...)
+			@output.info(@subject, ...)
 		end
 		
 		def to_s

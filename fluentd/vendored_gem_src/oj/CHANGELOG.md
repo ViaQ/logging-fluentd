@@ -1,5 +1,55 @@
 # CHANGELOG
 
+## 3.13.23 - 2022-11-06
+
+- Fixed issue with Oj::Parser extension regarding GC timeing.
+
+## 3.13.22 - 2022-11-01
+
+- Reorganized Oj::Parser code to allow for parser extensions in C.
+
+## 3.13.21 - 2022-08-19
+
+- Bug parsing big numbers fixed in the SAJ parser.
+
+## 3.13.20 - 2022-08-07
+
+- SSE4 made optional with a `--with-sse42` flag to the compile.
+
+## 3.13.19 - 2022-07-29
+
+- TruffleRuby issues resolved.
+
+## 3.13.18 - 2022-07-25
+
+- Fixed SSE detection at run time.
+
+## 3.13.17 - 2022-07-15
+
+- Fixed Oj::Parser to detect unterminated arrays and objects.
+
+## 3.13.16 - 2022-07-06
+
+- Added line and column as optional arguments to the Oj::Parser.saj parser.
+
+## 3.13.15 - 2022-07-03
+
+- Fixed issue dumping NaN  value in object mode.
+
+## 3.13.14 - 2022-06-03
+
+- Double fclose() due to bad merger fixed by tonobo.
+
+## 3.13.13 - 2022-05-20
+
+- Fixed flooding stdout with debug output when dumping.
+
+## 3.13.12 - 2022-05-20
+
+- Fixed crash on no arguments to pretty_generate. Now raises an exception.
+- Register all classes and globals.
+- Fixed memory issue with dumping.
+
 ## 3.13.11 - 2022-01-05
 
 - Fixed write blocking failures on writes to a slow stream with larger writes.

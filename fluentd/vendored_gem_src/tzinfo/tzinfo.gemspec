@@ -19,7 +19,7 @@ Gem::Specification.new do |s|
   s.licenses = ["MIT".freeze]
   s.rdoc_options = ["--title".freeze, "TZInfo".freeze, "--main".freeze, "README.md".freeze]
   s.required_ruby_version = Gem::Requirement.new(">= 1.9.3".freeze)
-  s.rubygems_version = "3.1.4".freeze
+  s.rubygems_version = "3.3.26".freeze
   s.summary = "Time Zone Library".freeze
 
   if s.respond_to? :specification_version then

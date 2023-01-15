@@ -72,6 +72,8 @@ EOT
     parsed_json = JSON.parse(json)
     assert_equal({"1"=>2}, parsed_json)
     assert_equal '666', JSON.pretty_generate(666)
+    json_nil_opts = JSON.pretty_generate({1=>2}, nil)
+    assert_equal json, json_nil_opts
   end
 
   def test_generate_custom
@@ -292,7 +294,9 @@ EOT
     assert_equal '2', state.indent
   end
 
-  if defined?(JSON::Ext::Generator)
+  if defined?(JSON::Ext::Generator) && Process.respond_to?(:fork)
+    # forking to avoid modifying core class of a parent process and
+    # introducing race conditions of tests are run in parallel
     def test_broken_bignum # [ruby-core:38867]
       pid = fork do
         x = 1 << 64
@@ -309,9 +313,6 @@ EOT
       end
       _, status = Process.waitpid2(pid)
       assert status.success?
-    rescue NotImplementedError
-      # forking to avoid modifying core class of a parent process and
-      # introducing race conditions of tests are run in parallel
     end
   end
 

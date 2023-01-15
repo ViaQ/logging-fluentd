@@ -1,39 +1,35 @@
-# Mail [![Build Status](https://travis-ci.org/mikel/mail.png?branch=master)](https://travis-ci.org/mikel/mail)
+# Mail [![Build Status](https://github.com/mikel/mail/actions/workflows/test.yml/badge.svg)](https://github.com/mikel/mail/actions/workflows/test.yml)
 
 ## Introduction
 
-Mail is an internet library for Ruby that is designed to handle emails
+Mail is an internet library for Ruby that is designed to handle email
 generation, parsing and sending in a simple, rubyesque manner.
 
 The purpose of this library is to provide a single point of access to handle
-all email functions, including sending and receiving emails.  All network
+all email functions, including sending and receiving email.  All network
 type actions are done through proxy methods to Net::SMTP, Net::POP3 etc.
 
 Built from my experience with TMail, it is designed to be a pure ruby
-implementation that makes generating, sending and parsing emails a no
+implementation that makes generating, sending and parsing email a no
 brainer.
 
 It is also designed from the ground up to work with the more modern versions
-of Ruby.  This is because Ruby > 1.9 handles text encodings much more wonderfully
-than Ruby 1.8.x and so these features have been taken full advantage of in this
-library allowing Mail to handle a lot more messages more cleanly than TMail.
-Mail does run on Ruby 1.8.x... it's just not as fun to code.
+of Ruby.  Modern Rubies handle text encodings much more wonderfully than before
+so these features have been taken full advantage of in this library allowing
+Mail to handle a lot more messages more cleanly than TMail.
 
 Finally, Mail has been designed with a very simple object oriented system
 that really opens up the email messages you are parsing, if you know what
 you are doing, you can fiddle with every last bit of your email directly.
 
-## Donations
+## You can contribute to this library
 
-Mail has been downloaded millions of times, by people around the world, in fact,
-it represents more than 1% of *all* gems downloaded.
+Yes, you! Mail is used in countless apps by people around the world. It is,
+like all open source software, a labour of love borne from our free time.
+If you would like to say thanks, please dig in and contribute alongside us!
+Triage and fix [GitHub issues](https://github.com/mikel/mail/issues), improve
+our documentation, add new features—up to you! Thank you for pitching in.
 
-It is (like all open source software) a labour of love and something I am doing
-with my own free time.  If you would like to say thanks, please feel free to
-[make a donation](http://www.pledgie.com/campaigns/8790) and feel free to send
-me a nice email :)
-
-<a href='http://www.pledgie.com/campaigns/8790'><img alt='Click here to lend your support to: mail and make a donation at www.pledgie.com !' src='http://www.pledgie.com/campaigns/8790.png?skin_name=chrome' border='0' /></a>
 
 # Contents
 * [Compatibility](#compatibility)
@@ -46,15 +42,16 @@ me a nice email :)
 * [Encodings](#encodings)
 * [Contributing](#contributing)
 * [Usage](#usage)
-* [Core Extensions](#core-extensions)
 * [Excerpts from TREC Span Corpus 2005](#excerpts-from-trec-span-corpus-2005)
 * [License](#license)
 
 ## Compatibility
 
-Mail supports Ruby 1.8.7+, including JRuby and Rubinius.
+Mail supports Ruby 2.5+, including JRuby and TruffleRuby.
 
-Every Mail commit is tested by Travis on [all supported Ruby versions](https://github.com/mikel/mail/blob/master/.travis.yml).
+As new versions of Ruby are released, Mail will be compatible with support for the "preview" and all "normal maintenance", "security maintenance" and the two most recent "end of life" versions listed at the [Ruby Maintenance Branches](https://www.ruby-lang.org/en/downloads/branches/) page.  Pull requests to assist in adding support for new preview releases are more than welcome.
+
+Every Mail commit is tested by GitHub Actions on [all supported Ruby versions](https://github.com/mikel/mail/blob/master/.github/workflows/test.yml).
 
 ## Discussion
 
@@ -65,14 +62,14 @@ the [Google Group](http://groups.google.com/group/mail-ruby).
 
 * RFC5322 Support, Reading and Writing
 * RFC6532 Support, reading UTF-8 headers
-* RFC2045-2049 Support for multipart emails
-* Support for creating multipart alternate emails
-* Support for reading multipart/report emails &amp; getting details from such
+* RFC2045-2049 Support for multipart email
+* Support for creating multipart alternate email
+* Support for reading multipart/report email &amp; getting details from such
 * Wrappers for File, Net/POP3, Net/SMTP
 * Auto-encoding of non-US-ASCII bodies and header fields
 
 Mail is RFC5322 and RFC6532 compliant now, that is, it can parse US-ASCII and UTF-8
-emails and generate US-ASCII emails. There are a few obsoleted syntax emails that
+email and generate US-ASCII email. There are a few obsoleted email syntax that
 it will have problems with, but it also is quite robust, meaning, if it finds something
 it doesn't understand it will not crash, instead, it will skip the problem and keep
 parsing. In the case of a header it doesn't understand, it will initialise the header
@@ -101,7 +98,9 @@ the gem gets released.
 
 It also means you can be sure Mail will behave correctly.
 
-Note: If you care about core extensions (aka "monkey-patching"), please read the Core Extensions section near the end of this README.
+You can run tests locally by running `bundle exec rspec`.
+
+You can run tests on all supported Ruby versions by using [act](https://github.com/nektos/act).
 
 ## API Policy
 
@@ -150,12 +149,14 @@ I have tried to simplify it some:
 
 ## Contributing
 
-Please do!  Contributing is easy in Mail.  Please read the CONTRIBUTING.md document for more info
+Please do!  Contributing is easy in Mail.  Please read the [CONTRIBUTING.md](CONTRIBUTING.md) document for more info.
 
 ## Usage
 
 All major mail functions should be able to happen from the Mail module.
 So, you should be able to just <code>require 'mail'</code> to get started.
+
+`mail` is pretty well documented in its Ruby code.  You can look it up e.g. at [rubydoc.info](https://www.rubydoc.info/gems/mail).
 
 ### Making an email
 
@@ -290,15 +291,25 @@ mail.delivery_method :logger
 mail.delivery_method :logger, logger: other_logger, severity: :debug
 ```
 
-### Getting Emails from a POP Server:
+### Getting Emails from a POP or IMAP Server:
 
 You can configure Mail to receive email using <code>retriever_method</code>
 within <code>Mail.defaults</code>:
 
 ```ruby
+# e.g. POP3
 Mail.defaults do
   retriever_method :pop3, :address    => "pop.gmail.com",
                           :port       => 995,
+                          :user_name  => '<username>',
+                          :password   => '<password>',
+                          :enable_ssl => true
+end
+
+# IMAP
+Mail.defaults do
+  retriever_method :imap, :address    => "imap.mailbox.org",
+                          :port       => 993,
                           :user_name  => '<username>',
                           :password   => '<password>',
                           :enable_ssl => true
@@ -445,7 +456,7 @@ Content-Transfer-Encoding: 7bit
 ```
 
 Mail inserts the content transfer encoding, the mime version,
-the content-id's and handles the content-type and boundary.
+the content-IDs and handles the content-type and boundary.
 
 Mail assumes that if your text in the body is only us-ascii, that your
 transfer encoding is 7bit and it is text/plain.  You can override this
@@ -638,6 +649,12 @@ describe "sending an email" do
 
   # ... or any attachment
   it { is_expected.to have_sent_email.with_attachments(any_attachment) }
+
+  # ... or attachment with filename
+  it { is_expected.to have_sent_email.with_attachments(an_attachment_with_filename('file.txt')) }
+
+  # ... or attachment with mime_type
+  it { is_expected.to have_sent_email.with_attachments(an_attachment_with_mime_type('application/pdf')) }
 
   # ... by array of attachments
   it { is_expected.to have_sent_email.with_attachments([my_attachment1, my_attachment2]) } #note that order is important

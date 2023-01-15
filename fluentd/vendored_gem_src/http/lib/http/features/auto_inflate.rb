@@ -12,15 +12,14 @@ module HTTP
         return response unless supported_encoding?(response)
 
         options = {
-          :status => response.status,
-          :version => response.version,
-          :headers => response.headers,
+          :status        => response.status,
+          :version       => response.version,
+          :headers       => response.headers,
           :proxy_headers => response.proxy_headers,
-          :connection => response.connection,
-          :body => stream_for(response.connection)
+          :connection    => response.connection,
+          :body          => stream_for(response.connection),
+          :request       => response.request
         }
-
-        options[:uri] = response.uri if response.uri
 
         Response.new(options)
       end

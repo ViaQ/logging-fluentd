@@ -12,7 +12,7 @@ module HTTP
 
       attr_reader :options, :socket
 
-      def initialize(options = {}) # rubocop:disable Style/OptionHash
+      def initialize(options = {})
         @options = options
       end
 
@@ -36,6 +36,7 @@ module HTTP
         connect_ssl
 
         return unless ssl_context.verify_mode == OpenSSL::SSL::VERIFY_PEER
+        return if ssl_context.respond_to?(:verify_hostname) && !ssl_context.verify_hostname
 
         @socket.post_connection_check(host)
       end

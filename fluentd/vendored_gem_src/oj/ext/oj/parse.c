@@ -183,6 +183,42 @@ static void unicode_to_chars(ParseInfo pi, Buf buf, uint32_t code) {
     }
 }
 
+static inline const char *scan_string_noSIMD(const char *str, const char *end) {
+    for (; '"' != *str; str++) {
+        if (end <= str || '\0' == *str || '\\' == *str) {
+            break;
+        }
+    }
+    return str;
+}
+
+#ifdef OJ_USE_SSE4_2
+static inline const char *scan_string_SIMD(const char *str, const char *end) {
+    static const char chars[16] = "\x00\\\"";
+    const __m128i terminate = _mm_loadu_si128((const __m128i *)&chars[0]);
+    const char *_end = (const char *)(end - 16);
+
+    for (; str <= _end; str += 16) {
+        const __m128i string = _mm_loadu_si128((const __m128i *)str);
+        const int r = _mm_cmpestri(terminate, 3, string, 16, _SIDD_UBYTE_OPS | _SIDD_CMP_EQUAL_ANY | _SIDD_LEAST_SIGNIFICANT);
+        if (r != 16) {
+            str = (char*)(str + r);
+            return str;
+        }
+    }
+
+    return scan_string_noSIMD(str, end);
+}
+#endif
+
+static const char *(*scan_func) (const char *str, const char *end) = scan_string_noSIMD;
+
+void oj_scanner_init(void) {
+#ifdef OJ_USE_SSE4_2
+    scan_func = scan_string_SIMD;
+#endif
+}
+
 // entered at /
 static void read_escaped_str(ParseInfo pi, const char *start) {
     struct _buf buf;
@@ -192,11 +228,11 @@ static void read_escaped_str(ParseInfo pi, const char *start) {
     Val         parent = stack_peek(&pi->stack);
 
     buf_init(&buf);
-    if (0 < cnt) {
-        buf_append_string(&buf, start, cnt);
-    }
-    for (s = pi->cur; '"' != *s; s++) {
-        if (s >= pi->end) {
+    buf_append_string(&buf, start, cnt);
+
+    for (s = pi->cur; '"' != *s;) {
+        const char *scanned = scan_func(s, pi->end);
+        if (scanned >= pi->end) {
             oj_set_error_at(pi,
                             oj_parse_error_class,
                             __FILE__,
@@ -204,7 +240,12 @@ static void read_escaped_str(ParseInfo pi, const char *start) {
                             "quoted string not terminated");
             buf_cleanup(&buf);
             return;
-        } else if ('\\' == *s) {
+        }
+
+        buf_append_string(&buf, s, (size_t)(scanned - s));
+        s = scanned;
+
+        if ('\\' == *s) {
             s++;
             switch (*s) {
             case 'n': buf_append(&buf, '\n'); break;
@@ -273,8 +314,7 @@ static void read_escaped_str(ParseInfo pi, const char *start) {
                 buf_cleanup(&buf);
                 return;
             }
-        } else {
-            buf_append(&buf, *s);
+            s++;
         }
     }
     if (0 == parent) {
@@ -331,22 +371,24 @@ static void read_str(ParseInfo pi) {
     const char *str    = pi->cur;
     Val         parent = stack_peek(&pi->stack);
 
-    for (; '"' != *pi->cur; pi->cur++) {
-        if (pi->end <= pi->cur) {
-            oj_set_error_at(pi,
-                            oj_parse_error_class,
-                            __FILE__,
-                            __LINE__,
-                            "quoted string not terminated");
-            return;
-        } else if ('\0' == *pi->cur) {
-            oj_set_error_at(pi, oj_parse_error_class, __FILE__, __LINE__, "NULL byte in string");
-            return;
-        } else if ('\\' == *pi->cur) {
-            read_escaped_str(pi, str);
-            return;
-        }
+    pi->cur = scan_func(pi->cur, pi->end);
+    if (RB_UNLIKELY(pi->end <= pi->cur)) {
+        oj_set_error_at(pi,
+                        oj_parse_error_class,
+                        __FILE__,
+                        __LINE__,
+                        "quoted string not terminated");
+        return;
     }
+    if (RB_UNLIKELY('\0' == *pi->cur)) {
+        oj_set_error_at(pi, oj_parse_error_class, __FILE__, __LINE__, "NULL byte in string");
+        return;
+    }
+    if ('\\' == *pi->cur) {
+        read_escaped_str(pi, str);
+        return;
+    }
+
     if (0 == parent) {  // simple add
         pi->add_cstr(pi, str, pi->cur - str, str);
     } else {
@@ -459,33 +501,31 @@ static void read_num(ParseInfo pi) {
         int  dec_cnt = 0;
         bool zero1   = false;
 
+        // Skip leading zeros.
+        for (; '0' == *pi->cur; pi->cur++) {
+            zero1 = true;
+        }
+
         for (; '0' <= *pi->cur && *pi->cur <= '9'; pi->cur++) {
-            if (0 == ni.i && '0' == *pi->cur) {
-                zero1 = true;
-            }
-            if (0 < ni.i) {
+            int d = (*pi->cur - '0');
+
+            if (RB_LIKELY(0 != ni.i)) {
                 dec_cnt++;
             }
-            if (!ni.big) {
-                int d = (*pi->cur - '0');
-
-                if (0 < d) {
-                    if (zero1 && CompatMode == pi->options.mode) {
-                        oj_set_error_at(pi,
-                                        oj_parse_error_class,
-                                        __FILE__,
-                                        __LINE__,
-                                        "not a number");
-                        return;
-                    }
-                    zero1 = false;
-                }
-                ni.i = ni.i * 10 + d;
-                if (INT64_MAX <= ni.i || DEC_MAX < dec_cnt) {
-                    ni.big = 1;
-                }
-            }
+            ni.i = ni.i * 10 + d;
         }
+        if (RB_UNLIKELY(0 != ni.i && zero1 && CompatMode == pi->options.mode)) {
+            oj_set_error_at(pi,
+                            oj_parse_error_class,
+                            __FILE__,
+                            __LINE__,
+                            "not a number");
+            return;
+        }
+        if (INT64_MAX <= ni.i || DEC_MAX < dec_cnt) {
+            ni.big = true;
+        }
+
         if ('.' == *pi->cur) {
             pi->cur++;
             // A trailing . is not a valid decimal but if encountered allow it
@@ -505,25 +545,20 @@ static void read_num(ParseInfo pi) {
             for (; '0' <= *pi->cur && *pi->cur <= '9'; pi->cur++) {
                 int d = (*pi->cur - '0');
 
-                if (0 < ni.num || 0 < ni.i) {
+                if (RB_LIKELY(0 != ni.num || 0 != ni.i)) {
                     dec_cnt++;
                 }
-                if (INT64_MAX <= ni.div) {
-                    if (!ni.no_big) {
-                        ni.big = true;
-                    }
-                } else {
-                    ni.num = ni.num * 10 + d;
-                    ni.div *= 10;
-                    ni.di++;
-                    if (INT64_MAX <= ni.div || DEC_MAX < dec_cnt) {
-                        if (!ni.no_big) {
-                            ni.big = true;
-                        }
-                    }
-                }
+                ni.num = ni.num * 10 + d;
+                ni.div *= 10;
+                ni.di++;
             }
         }
+        if (INT64_MAX <= ni.div || DEC_MAX < dec_cnt) {
+            if (!ni.no_big) {
+                ni.big = true;
+            }
+        }
+
         if ('e' == *pi->cur || 'E' == *pi->cur) {
             int eneg = 0;
 
@@ -596,7 +631,7 @@ static void read_num(ParseInfo pi) {
 }
 
 static void array_start(ParseInfo pi) {
-    volatile VALUE v = pi->start_array(pi);
+    VALUE v = pi->start_array(pi);
 
     stack_push(&pi->stack, v, NEXT_ARRAY_NEW);
 }
@@ -620,13 +655,13 @@ static void array_end(ParseInfo pi) {
 }
 
 static void hash_start(ParseInfo pi) {
-    volatile VALUE v = pi->start_hash(pi);
+    VALUE v = pi->start_hash(pi);
 
     stack_push(&pi->stack, v, NEXT_HASH_NEW);
 }
 
 static void hash_end(ParseInfo pi) {
-    volatile Val hash = stack_peek(&pi->stack);
+    Val hash = stack_peek(&pi->stack);
 
     // leave hash on stack until just before
     if (0 == hash) {
@@ -813,7 +848,7 @@ static long double exp_plus[] = {
 
 VALUE
 oj_num_as_value(NumInfo ni) {
-    volatile VALUE rnum = Qnil;
+    VALUE rnum = Qnil;
 
     if (ni->infinity) {
         if (ni->neg) {
@@ -848,7 +883,7 @@ oj_num_as_value(NumInfo ni) {
         }
     } else {  // decimal
         if (ni->big) {
-            volatile VALUE bd = rb_str_new(ni->str, ni->len);
+            VALUE bd = rb_str_new(ni->str, ni->len);
 
             rnum = rb_rescue2(parse_big_decimal, bd, rescue_big_decimal, bd, rb_eException, 0);
             if (ni->no_big) {
@@ -876,7 +911,7 @@ oj_num_as_value(NumInfo ni) {
             }
             rnum = rb_float_new((double)ld);
         } else if (RubyDec == ni->bigdec_load) {
-            volatile VALUE sv = rb_str_new(ni->str, ni->len);
+            VALUE sv = rb_str_new(ni->str, ni->len);
 
             rnum = rb_funcall(sv, rb_intern("to_f"), 0);
         } else {
@@ -971,10 +1006,11 @@ static VALUE protect_parse(VALUE pip) {
 
 extern int oj_utf8_index;
 
-static void oj_pi_set_input_str(ParseInfo pi, volatile VALUE *inputp) {
-    rb_encoding *enc = rb_enc_get(*inputp);
+static void oj_pi_set_input_str(ParseInfo pi, VALUE *inputp) {
+    int idx = RB_ENCODING_GET(*inputp);
 
-    if (oj_utf8_encoding != enc) {
+    if (oj_utf8_encoding_index != idx) {
+        rb_encoding *enc = rb_enc_from_index(idx);
         *inputp = rb_str_conv_enc(*inputp, enc, oj_utf8_encoding);
     }
     pi->json = RSTRING_PTR(*inputp);
@@ -983,12 +1019,12 @@ static void oj_pi_set_input_str(ParseInfo pi, volatile VALUE *inputp) {
 
 VALUE
 oj_pi_parse(int argc, VALUE *argv, ParseInfo pi, char *json, size_t len, int yieldOk) {
-    char *         buf = 0;
-    volatile VALUE input;
-    volatile VALUE wrapped_stack;
-    volatile VALUE result    = Qnil;
-    int            line      = 0;
-    int            free_json = 0;
+    char * buf = 0;
+    VALUE  input;
+    VALUE  wrapped_stack;
+    VALUE  result    = Qnil;
+    int    line      = 0;
+    int    free_json = 0;
 
     if (argc < 1) {
         rb_raise(rb_eArgError, "Wrong number of arguments to parse.");
@@ -1024,8 +1060,8 @@ oj_pi_parse(int argc, VALUE *argv, ParseInfo pi, char *json, size_t len, int yie
             rb_raise(rb_eTypeError, "Nil is not a valid JSON source.");
         }
     } else {
-        VALUE          clas = rb_obj_class(input);
-        volatile VALUE s;
+        VALUE clas = rb_obj_class(input);
+        VALUE s;
 
         if (oj_stringio_class == clas) {
             s = rb_funcall2(input, oj_string_id, 0, 0);

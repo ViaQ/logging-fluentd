@@ -30,7 +30,7 @@ require 'aws-sdk-core/plugins/http_checksum.rb'
 require 'aws-sdk-core/plugins/checksum_algorithm.rb'
 require 'aws-sdk-core/plugins/defaults_mode.rb'
 require 'aws-sdk-core/plugins/recursion_detection.rb'
-require 'aws-sdk-core/plugins/signature_v4.rb'
+require 'aws-sdk-core/plugins/sign.rb'
 require 'aws-sdk-core/plugins/protocols/rest_json.rb'
 
 Aws::Plugins::GlobalConfiguration.add_identifier(:sso)
@@ -79,8 +79,9 @@ module Aws::SSO
     add_plugin(Aws::Plugins::ChecksumAlgorithm)
     add_plugin(Aws::Plugins::DefaultsMode)
     add_plugin(Aws::Plugins::RecursionDetection)
-    add_plugin(Aws::Plugins::SignatureV4)
+    add_plugin(Aws::Plugins::Sign)
     add_plugin(Aws::Plugins::Protocols::RestJson)
+    add_plugin(Aws::SSO::Plugins::Endpoints)
 
     # @overload initialize(options)
     #   @param [Hash] options
@@ -287,6 +288,19 @@ module Aws::SSO
     #     ** Please note ** When response stubbing is enabled, no HTTP
     #     requests are made, and retries are disabled.
     #
+    #   @option options [Aws::TokenProvider] :token_provider
+    #     A Bearer Token Provider. This can be an instance of any one of the
+    #     following classes:
+    #
+    #     * `Aws::StaticTokenProvider` - Used for configuring static, non-refreshing
+    #       tokens.
+    #
+    #     * `Aws::SSOTokenProvider` - Used for loading tokens from AWS SSO using an
+    #       access token generated from `aws login`.
+    #
+    #     When `:token_provider` is not configured directly, the `Aws::TokenProviderChain`
+    #     will be used to search for tokens configured for your profile in shared configuration files.
+    #
     #   @option options [Boolean] :use_dualstack_endpoint
     #     When set to `true`, dualstack enabled endpoints (with `.aws` TLD)
     #     will be used if available.
@@ -299,6 +313,9 @@ module Aws::SSO
     #   @option options [Boolean] :validate_params (true)
     #     When `true`, request parameters are validated before
     #     sending the request.
+    #
+    #   @option options [Aws::SSO::EndpointProvider] :endpoint_provider
+    #     The endpoint provider used to resolve endpoints. Any object that responds to `#resolve_endpoint(parameters)` where `parameters` is a Struct similar to `Aws::SSO::EndpointParameters`
     #
     #   @option options [URI::HTTP,String] :http_proxy A proxy to send
     #     requests through.  Formatted like 'http://proxy.com:123'.
@@ -362,7 +379,8 @@ module Aws::SSO
     #
     # @option params [required, String] :access_token
     #   The token issued by the `CreateToken` API call. For more information,
-    #   see [CreateToken][1] in the *AWS SSO OIDC API Reference Guide*.
+    #   see [CreateToken][1] in the *IAM Identity Center OIDC API Reference
+    #   Guide*.
     #
     #
     #
@@ -407,7 +425,8 @@ module Aws::SSO
     #
     # @option params [required, String] :access_token
     #   The token issued by the `CreateToken` API call. For more information,
-    #   see [CreateToken][1] in the *AWS SSO OIDC API Reference Guide*.
+    #   see [CreateToken][1] in the *IAM Identity Center OIDC API Reference
+    #   Guide*.
     #
     #
     #
@@ -450,8 +469,8 @@ module Aws::SSO
 
     # Lists all AWS accounts assigned to the user. These AWS accounts are
     # assigned by the administrator of the account. For more information,
-    # see [Assign User Access][1] in the *AWS SSO User Guide*. This
-    # operation returns a paginated response.
+    # see [Assign User Access][1] in the *IAM Identity Center User Guide*.
+    # This operation returns a paginated response.
     #
     #
     #
@@ -466,7 +485,8 @@ module Aws::SSO
     #
     # @option params [required, String] :access_token
     #   The token issued by the `CreateToken` API call. For more information,
-    #   see [CreateToken][1] in the *AWS SSO OIDC API Reference Guide*.
+    #   see [CreateToken][1] in the *IAM Identity Center OIDC API Reference
+    #   Guide*.
     #
     #
     #
@@ -504,12 +524,32 @@ module Aws::SSO
       req.send_request(options)
     end
 
-    # Removes the client- and server-side session that is associated with
-    # the user.
+    # Removes the locally stored SSO tokens from the client-side cache and
+    # sends an API call to the IAM Identity Center service to invalidate the
+    # corresponding server-side IAM Identity Center sign in session.
+    #
+    # <note markdown="1"> If a user uses IAM Identity Center to access the AWS CLI, the user’s
+    # IAM Identity Center sign in session is used to obtain an IAM session,
+    # as specified in the corresponding IAM Identity Center permission set.
+    # More specifically, IAM Identity Center assumes an IAM role in the
+    # target account on behalf of the user, and the corresponding temporary
+    # AWS credentials are returned to the client.
+    #
+    #  After user logout, any existing IAM role sessions that were created by
+    # using IAM Identity Center permission sets continue based on the
+    # duration configured in the permission set. For more information, see
+    # [User authentications][1] in the *IAM Identity Center User Guide*.
+    #
+    #  </note>
+    #
+    #
+    #
+    # [1]: https://docs.aws.amazon.com/singlesignon/latest/userguide/authconcept.html
     #
     # @option params [required, String] :access_token
     #   The token issued by the `CreateToken` API call. For more information,
-    #   see [CreateToken][1] in the *AWS SSO OIDC API Reference Guide*.
+    #   see [CreateToken][1] in the *IAM Identity Center OIDC API Reference
+    #   Guide*.
     #
     #
     #
@@ -545,7 +585,7 @@ module Aws::SSO
         params: params,
         config: config)
       context[:gem_name] = 'aws-sdk-core'
-      context[:gem_version] = '3.130.2'
+      context[:gem_version] = '3.168.4'
       Seahorse::Client::Request.new(handlers, context)
     end
 

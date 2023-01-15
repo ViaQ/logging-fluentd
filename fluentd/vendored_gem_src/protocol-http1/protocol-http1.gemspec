@@ -1,20 +1,20 @@
 # -*- encoding: utf-8 -*-
-# stub: protocol-http1 0.14.4 ruby lib
+# stub: protocol-http1 0.14.6 ruby lib
 
 Gem::Specification.new do |s|
   s.name = "protocol-http1".freeze
-  s.version = "0.14.4"
+  s.version = "0.14.6"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0".freeze) if s.respond_to? :required_rubygems_version=
   s.require_paths = ["lib".freeze]
   s.authors = ["Samuel Williams".freeze, "Brian Morearty".freeze, "Bruno Sutic".freeze, "Olle Jonsson".freeze]
-  s.cert_chain = ["-----BEGIN CERTIFICATE-----\nMIIEhDCCAuygAwIBAgIBATANBgkqhkiG9w0BAQsFADA3MTUwMwYDVQQDDCxzYW11\nZWwud2lsbGlhbXMvREM9b3Jpb250cmFuc2Zlci9EQz1jby9EQz1uejAeFw0yMTA4\nMTYwNjMzNDRaFw0yMjA4MTYwNjMzNDRaMDcxNTAzBgNVBAMMLHNhbXVlbC53aWxs\naWFtcy9EQz1vcmlvbnRyYW5zZmVyL0RDPWNvL0RDPW56MIIBojANBgkqhkiG9w0B\nAQEFAAOCAY8AMIIBigKCAYEAyXLSS/cw+fXJ5e7hi+U/TeChPWeYdwJojDsFY1xr\nxvtqbTTL8gbLHz5LW3QD2nfwCv3qTlw0qI3Ie7a9VMJMbSvgVEGEfQirqIgJXWMj\neNMDgKsMJtC7u/43abRKx7TCURW3iWyR19NRngsJJmaR51yGGGm2Kfsr+JtKKLtL\nL188Wm3f13KAx7QJU8qyuBnj1/gWem076hzdA7xi1DbrZrch9GCRz62xymJlrJHn\n9iZEZ7AxrS7vokhMlzSr/XMUihx/8aFKtk+tMLClqxZSmBWIErWdicCGTULXCBNb\nE/mljo4zEVKhlTWpJklMIhr55ZRrSarKFuW7en0+tpJrfsYiAmXMJNi4XAYJH7uL\nrgJuJwSaa/dMz+VmUoo7VKtSfCoOI+6v5/z0sK3oT6sG6ZwyI47DBq2XqNC6tnAj\nw+XmCywiTQrFzMMAvcA7rPI4F0nU1rZId51rOvvfxaONp+wgTi4P8owZLw0/j0m4\n8C20DYi6EYx4AHDXiLpElWh3AgMBAAGjgZowgZcwCQYDVR0TBAIwADALBgNVHQ8E\nBAMCBLAwHQYDVR0OBBYEFB6ZaeWKxQjGTI+pmz7cKRmMIywwMC4GA1UdEQQnMCWB\nI3NhbXVlbC53aWxsaWFtc0BvcmlvbnRyYW5zZmVyLmNvLm56MC4GA1UdEgQnMCWB\nI3NhbXVlbC53aWxsaWFtc0BvcmlvbnRyYW5zZmVyLmNvLm56MA0GCSqGSIb3DQEB\nCwUAA4IBgQBVoM+pu3dpdUhZM1w051iw5GfiqclAr1Psypf16Tiod/ho//4oAu6T\n9fj3DPX/acWV9P/FScvqo4Qgv6g4VWO5ZU7z2JmPoTXZtYMunRAmQPFL/gSUc6aK\nvszMHIyhtyzRc6DnfW2AiVOjMBjaYv8xXZc9bduniRVPrLR4J7ozmGLh4o4uJp7w\nx9KCFaR8Lvn/r0oJWJOqb/DMAYI83YeN2Dlt3jpwrsmsONrtC5S3gOUle5afSGos\nbYt5ocnEpKSomR9ZtnCGljds/aeO1Xgpn2r9HHcjwnH346iNrnHmMlC7BtHUFPDg\nTs92S47PTOXzwPBDsrFiq3VLbRjHSwf8rpqybQBH9MfzxGGxTaETQYOd6b4e4Ag6\ny92abGna0bmIEb4+Tx9rQ10Uijh1POzvr/VTH4bbIPy9FbKrRsIQ24qDbNJRtOpE\nRAOsIl+HOBTb252nx1kIRN5hqQx272AJCbCjKx8egcUQKffFVVCI0nye09v5CK+a\nHiLJ8VOFx6w=\n-----END CERTIFICATE-----\n".freeze]
-  s.date = "2022-05-01"
-  s.files = ["lib/protocol/http1.rb".freeze, "lib/protocol/http1/body/chunked.rb".freeze, "lib/protocol/http1/body/fixed.rb".freeze, "lib/protocol/http1/body/remainder.rb".freeze, "lib/protocol/http1/connection.rb".freeze, "lib/protocol/http1/error.rb".freeze, "lib/protocol/http1/reason.rb".freeze, "lib/protocol/http1/version.rb".freeze]
+  s.cert_chain = ["-----BEGIN CERTIFICATE-----\nMIIE2DCCA0CgAwIBAgIBATANBgkqhkiG9w0BAQsFADBhMRgwFgYDVQQDDA9zYW11\nZWwud2lsbGlhbXMxHTAbBgoJkiaJk/IsZAEZFg1vcmlvbnRyYW5zZmVyMRIwEAYK\nCZImiZPyLGQBGRYCY28xEjAQBgoJkiaJk/IsZAEZFgJuejAeFw0yMjA4MDYwNDUz\nMjRaFw0zMjA4MDMwNDUzMjRaMGExGDAWBgNVBAMMD3NhbXVlbC53aWxsaWFtczEd\nMBsGCgmSJomT8ixkARkWDW9yaW9udHJhbnNmZXIxEjAQBgoJkiaJk/IsZAEZFgJj\nbzESMBAGCgmSJomT8ixkARkWAm56MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIB\nigKCAYEAomvSopQXQ24+9DBB6I6jxRI2auu3VVb4nOjmmHq7XWM4u3HL+pni63X2\n9qZdoq9xt7H+RPbwL28LDpDNflYQXoOhoVhQ37Pjn9YDjl8/4/9xa9+NUpl9XDIW\nsGkaOY0eqsQm1pEWkHJr3zn/fxoKPZPfaJOglovdxf7dgsHz67Xgd/ka+Wo1YqoE\ne5AUKRwUuvaUaumAKgPH+4E4oiLXI4T1Ff5Q7xxv6yXvHuYtlMHhYfgNn8iiW8WN\nXibYXPNP7NtieSQqwR/xM6IRSoyXKuS+ZNGDPUUGk8RoiV/xvVN4LrVm9upSc0ss\nRZ6qwOQmXCo/lLcDUxJAgG95cPw//sI00tZan75VgsGzSWAOdjQpFM0l4dxvKwHn\ntUeT3ZsAgt0JnGqNm2Bkz81kG4A2hSyFZTFA8vZGhp+hz+8Q573tAR89y9YJBdYM\nzp0FM4zwMNEUwgfRzv1tEVVUEXmoFCyhzonUUw4nE4CFu/sE3ffhjKcXcY//qiSW\nxm4erY3XAgMBAAGjgZowgZcwCQYDVR0TBAIwADALBgNVHQ8EBAMCBLAwHQYDVR0O\nBBYEFO9t7XWuFf2SKLmuijgqR4sGDlRsMC4GA1UdEQQnMCWBI3NhbXVlbC53aWxs\naWFtc0BvcmlvbnRyYW5zZmVyLmNvLm56MC4GA1UdEgQnMCWBI3NhbXVlbC53aWxs\naWFtc0BvcmlvbnRyYW5zZmVyLmNvLm56MA0GCSqGSIb3DQEBCwUAA4IBgQB5sxkE\ncBsSYwK6fYpM+hA5B5yZY2+L0Z+27jF1pWGgbhPH8/FjjBLVn+VFok3CDpRqwXCl\nxCO40JEkKdznNy2avOMra6PFiQyOE74kCtv7P+Fdc+FhgqI5lMon6tt9rNeXmnW/\nc1NaMRdxy999hmRGzUSFjozcCwxpy/LwabxtdXwXgSay4mQ32EDjqR1TixS1+smp\n8C/NCWgpIfzpHGJsjvmH2wAfKtTTqB9CVKLCWEnCHyCaRVuKkrKjqhYCdmMBqCws\nJkxfQWC+jBVeG9ZtPhQgZpfhvh+6hMhraUYRQ6XGyvBqEUe+yo6DKIT3MtGE2+CP\neX9i9ZWBydWb8/rvmwmX2kkcBbX0hZS1rcR593hGc61JR6lvkGYQ2MYskBveyaxt\nQ2K9NVun/S785AP05vKkXZEFYxqG6EW012U4oLcFl5MySFajYXRYbuUpH6AY+HP8\nvoD0MPg1DssDLKwXyt1eKD/+Fq0bFWhwVM/1XiAXL7lyYUyOq24KHgQ2Csg=\n-----END CERTIFICATE-----\n".freeze]
+  s.date = "2022-08-29"
+  s.files = ["lib/protocol/http1.rb".freeze, "lib/protocol/http1/body/chunked.rb".freeze, "lib/protocol/http1/body/fixed.rb".freeze, "lib/protocol/http1/body/remainder.rb".freeze, "lib/protocol/http1/connection.rb".freeze, "lib/protocol/http1/error.rb".freeze, "lib/protocol/http1/reason.rb".freeze, "lib/protocol/http1/version.rb".freeze, "license.md".freeze, "readme.md".freeze]
   s.homepage = "https://github.com/socketry/protocol-http1".freeze
   s.licenses = ["MIT".freeze]
   s.required_ruby_version = Gem::Requirement.new(">= 2.4".freeze)
-  s.rubygems_version = "3.1.4".freeze
+  s.rubygems_version = "3.3.26".freeze
   s.summary = "A low level implementation of the HTTP/1 protocol.".freeze
 
   if s.respond_to? :specification_version then

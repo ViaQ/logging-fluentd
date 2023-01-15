@@ -3,7 +3,6 @@
 require "forwardable"
 
 require "http/headers"
-require "http/response/parser"
 
 module HTTP
   # A connection to the HTTP server
@@ -45,8 +44,8 @@ module HTTP
       send_proxy_connect_request(req)
       start_tls(req, options)
       reset_timer
-    rescue IOError, SocketError, SystemCallError => ex
-      raise ConnectionError, "failed to connect: #{ex}", ex.backtrace
+    rescue IOError, SocketError, SystemCallError => e
+      raise ConnectionError, "failed to connect: #{e}", e.backtrace
     end
 
     # @see (HTTP::Response::Parser#status_code)
@@ -68,8 +67,13 @@ module HTTP
     # @param [Request] req Request to send to the server
     # @return [nil]
     def send_request(req)
-      raise StateError, "Tried to send a request while one is pending already. Make sure you read off the body." if @pending_response
-      raise StateError, "Tried to send a request while a response is pending. Make sure you read off the body."  if @pending_request
+      if @pending_response
+        raise StateError, "Tried to send a request while one is pending already. Make sure you read off the body."
+      end
+
+      if @pending_request
+        raise StateError, "Tried to send a request while a response is pending. Make sure you read off the body."
+      end
 
       @pending_request = true
 
@@ -216,8 +220,8 @@ module HTTP
       elsif value
         @parser << value
       end
-    rescue IOError, SocketError, SystemCallError => ex
-      raise ConnectionError, "error reading from socket: #{ex}", ex.backtrace
+    rescue IOError, SocketError, SystemCallError => e
+      raise ConnectionError, "error reading from socket: #{e}", e.backtrace
     end
   end
 end

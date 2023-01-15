@@ -1,8 +1,182 @@
-## 4.4.1 (2020-03-29)
+## 5.1.1 (2022-12-17)
 
-* Backport [#590](https://github.com/httprb/http/pull/590)
-  Fix parser failing on some edge cases.
+* [#731](https://github.com/httprb/http/pull/731)
+  Strip brackets from IPv6 addresses in `HTTP::URI`.
+  ([@jeraki])
+
+* [#722](https://github.com/httprb/http/pull/722)
+  Add `on_redirect` callback.
+  ([@benubois])
+
+## 5.1.0 (2022-06-17)
+
+* Drop ruby-2.5 support.
+
+* [#715](https://github.com/httprb/http/pull/715)
+  Set default encoding to UTF-8 for `application/json`.
+  ([@drwl])
+
+* [#712](https://github.com/httprb/http/pull/712)
+  Recognize cookies set by redirect.
+  ([@tkellogg])
+
+* [#707](https://github.com/httprb/http/pull/707)
+  Distinguish connection timeouts.
+  ([@YuLeven])
+
+## 5.0.4 (2021-10-07)
+
+* [#698](https://github.com/httprb/http/pull/698)
+  Fix `HTTP::Timeout::Global#connect_ssl`.
+  ([@tarcieri])
+
+## 5.0.3 (2021-10-06)
+
+* [#695](https://github.com/httprb/http/pull/695)
+  Revert DNS resolving feature.
+  ([@PhilCoggins])
+
+* [#694](https://github.com/httprb/http/pull/694)
+  Fix cookies extraction.
+  ([@flosacca])
+
+## 5.0.2 (2021-09-10)
+
+* [#686](https://github.com/httprb/http/pull/686)
+  Correctly reset the parser.
+  ([@bryanp])
+
+* [#684](https://github.com/httprb/http/pull/684)
+  Don't set Content-Length for GET, HEAD, DELETE, or CONNECT requests without a BODY.
+  ([@jyn514])
+
+* [#679](https://github.com/httprb/http/pull/679)
+  Use features on redirected requests.
+  ([@nomis])
+
+* [#678](https://github.com/schwern)
+  Restore `HTTP::Response` `:uri` option for backwards compatibility.
+  ([@schwern])
+
+* [#676](https://github.com/httprb/http/pull/676)
+  Update addressable because of CVE-2021-32740.
+  ([@matheussilvasantos])
+
+* [#653](https://github.com/httprb/http/pull/653)
+  Avoid force encodings on frozen strings.
+  ([@bvicenzo])
+
+* [#638](https://github.com/httprb/http/pull/638)
+  DNS failover handling.
+  ([@midnight-wonderer])
+
+
+## 5.0.1 (2021-06-26)
+
+* [#670](https://github.com/httprb/http/pull/670)
+  Revert `Response#parse` behavior introduced in [#540].
+  ([@DannyBen])
+
+* [#669](https://github.com/httprb/http/pull/669)
+  Prevent bodies from being resubmitted when following unsafe redirects.
+  ([@odinhb])
+
+* [#664](https://github.com/httprb/http/pull/664)
+  Bump llhttp-ffi to 0.3.0.
+  ([@bryanp])
+
+
+## 5.0.0 (2021-05-12)
+
+* [#656](https://github.com/httprb/http/pull/656)
+  Handle connection timeouts in `Features`
+  ([@semenyukdmitry])
+
+* [#651](https://github.com/httprb/http/pull/651)
+  Replace `http-parser` with `llhttp`
+  ([@bryanp])
+
+* [#647](https://github.com/httprb/http/pull/647)
+  Add support for `MKCALENDAR` HTTP verb
+  ([@meanphil])
+
+* [#632](https://github.com/httprb/http/pull/632)
+  Respect the SSL context's `verify_hostname` value
+  ([@colemannugent])
+
+* [#625](https://github.com/httprb/http/pull/625)
+  Fix inflator with empty responses
+  ([@LukaszMaslej])
+
+* [#599](https://github.com/httprb/http/pull/599)
+  Allow passing `HTTP::FormData::{Multipart,UrlEncoded}` object directly.
   ([@ixti])
+
+* [#593](https://github.com/httprb/http/pull/593)
+  [#592](https://github.com/httprb/http/issues/592)
+  Support informational (1XX) responses.
+  ([@ixti])
+
+* [#590](https://github.com/httprb/http/pull/590)
+  [#589](https://github.com/httprb/http/issues/589)
+  Fix response headers paring.
+  ([@Bonias])
+
+* [#587](https://github.com/httprb/http/pull/587)
+  [#585](https://github.com/httprb/http/issues/585)
+  Fix redirections when server responds with multiple Location headers.
+  ([@ixti])
+
+* [#581](https://github.com/httprb/http/pull/581)
+  [#582](https://github.com/httprb/http/issues/582)
+  Add Ruby 2.7.x support.
+  ([@janko])
+
+* [#577](https://github.com/httprb/http/pull/577)
+  Fix `Chainable#timeout` with frozen Hash.
+  ([@antonvolkoff])
+
+* [#576](https://github.com/httprb/http/pull/576)
+  [#524](https://github.com/httprb/http/issues/524)
+  **BREAKING CHANGE**
+  Preserve header names casing.
+  ([@joshuaflanagan])
+
+* [#540](https://github.com/httprb/http/pull/540)
+  [#538](https://github.com/httprb/http/issues/538)
+  **BREAKING CHANGE**
+  Require explicit MIME type for Response#parse
+  ([@ixti])
+
+* [#532](https://github.com/httprb/http/pull/532)
+  Fix pipes support in request bodies.
+  ([@ixti])
+
+* [#530](https://github.com/httprb/http/pull/530)
+  Improve header fields name/value validation.
+  ([@Bonias])
+
+* [#506](https://github.com/httprb/http/pull/506)
+  [#521](https://github.com/httprb/http/issues/521)
+  Skip auto-deflate when there is no body.
+  ([@Bonias])
+
+* [#489](https://github.com/httprb/http/pull/489)
+  Fix HTTP parser.
+  ([@ixti], [@fxposter])
+
+* [#546](https://github.com/httprb/http/pull/546)
+  **BREAKING CHANGE**
+  Provide initiating `HTTP::Request` object on `HTTP::Response`.
+  ([@joshuaflanagan])
+
+* [#571](https://github.com/httprb/http/pull/571)
+  Drop Ruby 2.3.x support.
+  ([@ixti])
+
+* [3ed0c31](https://github.com/httprb/http/commit/3ed0c318eab6a8c390654cda17bf6df9e963c7d6)
+  Drop Ruby 2.4.x support.
+
 
 ## 4.4.0 (2020-03-25)
 
@@ -13,6 +187,7 @@
 * Backport [#599](https://github.com/httprb/http/pull/599)
   Allow passing HTTP::FormData::{Multipart,UrlEncoded} object directly.
   ([@ixti])
+
 
 ## 4.3.0 (2020-01-09)
 
@@ -803,3 +978,25 @@ end
 [@RickCSong]: https://github.com/RickCSong
 [@fxposter]: https://github.com/fxposter
 [@mamoonraja]: https://github.com/mamoonraja
+[@joshuaflanagan]: https://github.com/joshuaflanagan
+[@antonvolkoff]: https://github.com/antonvolkoff
+[@LukaszMaslej]: https://github.com/LukaszMaslej
+[@colemannugent]: https://github.com/colemannugent
+[@semenyukdmitry]: https://github.com/semenyukdmitry
+[@bryanp]: https://github.com/bryanp
+[@meanphil]: https://github.com/meanphil
+[@odinhb]: https://github.com/odinhb
+[@DannyBen]: https://github.com/DannyBen
+[@jyn514]: https://github.com/jyn514
+[@bvicenzo]: https://github.com/bvicenzo
+[@nomis]: https://github.com/nomis
+[@midnight-wonderer]: https://github.com/midnight-wonderer
+[@schwern]: https://github.com/schwern
+[@matheussilvasantos]: https://github.com/matheussilvasantos
+[@PhilCoggins]: https://github.com/PhilCoggins
+[@flosacca]: https://github.com/flosacca
+[@YuLeven]: https://github.com/YuLeven
+[@drwl]: https://github.com/drwl
+[@tkellogg]: https://github.com/tkellogg
+[@jeraki]: https://github.com/jeraki
+[@benubois]: https://github.com/benubois

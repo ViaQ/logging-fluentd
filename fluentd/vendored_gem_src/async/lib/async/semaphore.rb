@@ -1,32 +1,20 @@
 # frozen_string_literal: true
 
-# Copyright, 2017, by Samuel G. D. Williams. <http://www.codeotaku.com>
-# 
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-# 
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-# 
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
+# Released under the MIT License.
+# Copyright, 2018-2022, by Samuel Williams.
+
+require_relative 'list'
 
 module Async
-	# A semaphore is used to control access to a common resource in a concurrent system. A useful way to think of a semaphore as used in the real-world systems is as a record of how many units of a particular resource are available, coupled with operations to adjust that record safely (i.e. to avoid race conditions) as units are required or become free, and, if necessary, wait until a unit of the resource becomes available.
+	# A synchronization primitive, which limits access to a given resource.
+	# @public Since `stable-v1`.
 	class Semaphore
+		# @parameter limit [Integer] The maximum number of times the semaphore can be acquired before it blocks.
+		# @parameter parent [Task | Semaphore | Nil] The parent for holding any children tasks.
 		def initialize(limit = 1, parent: nil)
 			@count = 0
 			@limit = limit
-			@waiting = []
+			@waiting = List.new
 			
 			@parent = parent
 		end
@@ -67,8 +55,8 @@ module Async
 		
 		# Acquire the semaphore, block if we are at the limit.
 		# If no block is provided, you must call release manually.
-		# @yield when the semaphore can be acquired
-		# @return the result of the block if invoked
+		# @yields {...} When the semaphore can be acquired.
+		# @returns The result of the block if invoked.
 		def acquire
 			wait
 			
@@ -87,26 +75,34 @@ module Async
 		def release
 			@count -= 1
 			
-			while (@limit - @count) > 0 and fiber = @waiting.shift
-				if fiber.alive?
-					fiber.resume
-				end
+			while (@limit - @count) > 0 and node = @waiting.first
+				node.resume
 			end
 		end
 		
 		private
 		
+		class FiberNode < List::Node
+			def initialize(fiber)
+				@fiber = fiber
+			end
+			
+			def resume
+				if @fiber.alive?
+					Fiber.scheduler.resume(@fiber)
+				end
+			end
+		end
+		
+		private_constant :FiberNode
+		
 		# Wait until the semaphore becomes available.
 		def wait
-			fiber = Fiber.current
+			return unless blocking?
 			
-			if blocking?
-				@waiting << fiber
-				Task.yield while blocking?
+			@waiting.stack(FiberNode.new(Fiber.current)) do
+				Fiber.scheduler.transfer while blocking?
 			end
-		rescue Exception
-			@waiting.delete(fiber)
-			raise
 		end
 	end
 end

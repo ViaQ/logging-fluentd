@@ -3,7 +3,11 @@
 module Aws
   # @api private
   class SharedConfig
-    SSO_PROFILE_KEYS = %w[sso_start_url sso_region sso_account_id sso_role_name].freeze
+    SSO_CREDENTIAL_PROFILE_KEYS = %w[sso_account_id sso_role_name].freeze
+    SSO_PROFILE_KEYS = %w[sso_session sso_start_url sso_region sso_account_id sso_role_name].freeze
+    SSO_TOKEN_PROFILE_KEYS = %w[sso_session].freeze
+    SSO_SESSION_KEYS = %w[sso_region sso_start_url].freeze
+
 
     # @return [String]
     attr_reader :credentials_path
@@ -51,10 +55,12 @@ module Aws
       @config_enabled = options[:config_enabled]
       @credentials_path = options[:credentials_path] ||
                           determine_credentials_path
+      @credentials_path = File.expand_path(@credentials_path) if @credentials_path
       @parsed_credentials = {}
       load_credentials_file if loadable?(@credentials_path)
       if @config_enabled
         @config_path = options[:config_path] || determine_config_path
+        @config_path = File.expand_path(@config_path) if @config_path
         load_config_file if loadable?(@config_path)
       end
     end
@@ -147,6 +153,18 @@ module Aws
         credentials ||= sso_credentials_from_profile(@parsed_config, p)
       end
       credentials
+    end
+
+    # Attempts to load from shared config or shared credentials file.
+    # Will always attempt first to load from the shared credentials
+    # file, if present.
+    def sso_token_from_config(opts = {})
+      p = opts[:profile] || @profile_name
+      token = sso_token_from_profile(@parsed_credentials, p)
+      if @parsed_config
+        token ||= sso_token_from_profile(@parsed_config, p)
+      end
+      token
     end
 
     # Add an accessor method (similar to attr_reader) to return a configuration value
@@ -314,13 +332,66 @@ module Aws
     def sso_credentials_from_profile(cfg, profile)
       if @parsed_config &&
          (prof_config = cfg[profile]) &&
-         !(prof_config.keys & SSO_PROFILE_KEYS).empty?
+         !(prof_config.keys & SSO_CREDENTIAL_PROFILE_KEYS).empty?
+
+        if sso_session_name = prof_config['sso_session']
+          sso_session = cfg["sso-session #{sso_session_name}"]
+          unless sso_session
+            raise ArgumentError,
+                  "sso-session #{sso_session_name} must be defined in the config file. " \
+                    "Referenced by profile #{profile}"
+          end
+          sso_region = sso_session['sso_region']
+          sso_start_url = sso_session['sso_start_url']
+
+          # validate sso_region and sso_start_url don't conflict if set on profile and session
+          if prof_config['sso_region'] &&  prof_config['sso_region'] != sso_region
+            raise ArgumentError,
+                  "sso-session #{sso_session_name}'s sso_region (#{sso_region}) " \
+                    "does not match the profile #{profile}'s sso_region (#{prof_config['sso_region']}'"
+          end
+          if prof_config['sso_start_url'] &&  prof_config['sso_start_url'] != sso_start_url
+            raise ArgumentError,
+                  "sso-session #{sso_session_name}'s sso_start_url (#{sso_start_url}) " \
+                    "does not match the profile #{profile}'s sso_start_url (#{prof_config['sso_start_url']}'"
+          end
+        else
+          sso_region = prof_config['sso_region']
+          sso_start_url = prof_config['sso_start_url']
+        end
 
         SSOCredentials.new(
-          sso_start_url: prof_config['sso_start_url'],
-          sso_region: prof_config['sso_region'],
           sso_account_id: prof_config['sso_account_id'],
-          sso_role_name: prof_config['sso_role_name']
+          sso_role_name: prof_config['sso_role_name'],
+          sso_session: prof_config['sso_session'],
+          sso_region: sso_region,
+          sso_start_url: prof_config['sso_start_url']
+          )
+      end
+    end
+
+    # If the required sso_ profile values are present, attempt to construct
+    # SSOTokenProvider
+    def sso_token_from_profile(cfg, profile)
+      if @parsed_config &&
+        (prof_config = cfg[profile]) &&
+        !(prof_config.keys & SSO_TOKEN_PROFILE_KEYS).empty?
+
+        sso_session_name = prof_config['sso_session']
+        sso_session = cfg["sso-session #{sso_session_name}"]
+        unless sso_session
+          raise ArgumentError,
+                "sso-session #{sso_session_name} must be defined in the config file." \
+                  "Referenced by profile #{profile}"
+        end
+
+        unless sso_session['sso_region']
+          raise ArgumentError, "sso-session #{sso_session_name} missing required parameter: sso_region"
+        end
+
+        SSOTokenProvider.new(
+          sso_session: sso_session_name,
+          sso_region: sso_session['sso_region']
         )
       end
     end

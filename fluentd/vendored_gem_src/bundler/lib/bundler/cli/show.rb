@@ -18,13 +18,13 @@ module Bundler
 
       if gem_name
         if gem_name == "bundler"
-          path = File.expand_path("../../../..", __FILE__)
+          path = File.expand_path("../../..", __dir__)
         else
           spec = Bundler::CLI::Common.select_spec(gem_name, :regex_match)
           return unless spec
           path = spec.full_gem_path
           unless File.directory?(path)
-            Bundler.ui.warn "The gem #{gem_name} has been deleted. It was installed at:"
+            return Bundler.ui.warn "The gem #{gem_name} has been deleted. It was installed at: #{path}"
           end
         end
         return Bundler.ui.info(path)
@@ -53,7 +53,7 @@ module Bundler
       end
     end
 
-  private
+    private
 
     def fetch_latest_specs
       definition = Bundler.definition(true)

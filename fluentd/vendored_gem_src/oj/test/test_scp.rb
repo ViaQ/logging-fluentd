@@ -320,8 +320,7 @@ class ScpTest < Minitest::Test
   end
 
   def test_pipe
-    # Windows does not support fork
-    return if RbConfig::CONFIG['host_os'] =~ /(mingw|mswin)/
+    skip 'needs fork' unless Process.respond_to?(:fork)
 
     handler = AllHandler.new()
     json = %{{"one":true,"two":false}}
@@ -357,8 +356,7 @@ class ScpTest < Minitest::Test
   end
 
   def test_pipe_close
-    # Windows does not support fork
-    return if RbConfig::CONFIG['host_os'] =~ /(mingw|mswin)/
+    skip 'needs fork' unless Process.respond_to?(:fork)
 
     json = %{{"one":true,"two":false}}
     IO.pipe do |read_io, write_io|

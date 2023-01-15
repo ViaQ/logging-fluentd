@@ -3,11 +3,10 @@
 require "active_support/json"
 require "active_support/core_ext/string/access"
 require "active_support/core_ext/string/behavior"
-require "active_support/core_ext/symbol/starts_ends_with"
 require "active_support/core_ext/module/delegation"
 
-module ActiveSupport #:nodoc:
-  module Multibyte #:nodoc:
+module ActiveSupport # :nodoc:
+  module Multibyte # :nodoc:
     # Chars enables you to work transparently with UTF-8 encoding in the Ruby
     # String class without having extensive knowledge about the encoding. A
     # Chars object accepts a string upon initialization and proxies String
@@ -103,7 +102,7 @@ module ActiveSupport #:nodoc:
       #
       #   'Café'.mb_chars.reverse.to_s # => 'éfaC'
       def reverse
-        chars(@wrapped_string.scan(/\X/).reverse.join)
+        chars(@wrapped_string.grapheme_clusters.reverse.join)
       end
 
       # Limits the byte size of the string to a number of bytes without breaking
@@ -126,16 +125,16 @@ module ActiveSupport #:nodoc:
 
       # Performs canonical decomposition on all the characters.
       #
-      #   'é'.length                         # => 2
-      #   'é'.mb_chars.decompose.to_s.length # => 3
+      #   'é'.length                         # => 1
+      #   'é'.mb_chars.decompose.to_s.length # => 2
       def decompose
         chars(Unicode.decompose(:canonical, @wrapped_string.codepoints.to_a).pack("U*"))
       end
 
       # Performs composition on all the characters.
       #
-      #   'é'.length                       # => 3
-      #   'é'.mb_chars.compose.to_s.length # => 2
+      #   'é'.length                       # => 1
+      #   'é'.mb_chars.compose.to_s.length # => 1
       def compose
         chars(Unicode.compose(@wrapped_string.codepoints.to_a).pack("U*"))
       end
@@ -143,9 +142,9 @@ module ActiveSupport #:nodoc:
       # Returns the number of grapheme clusters in the string.
       #
       #   'क्षि'.mb_chars.length   # => 4
-      #   'क्षि'.mb_chars.grapheme_length # => 3
+      #   'क्षि'.mb_chars.grapheme_length # => 2
       def grapheme_length
-        @wrapped_string.scan(/\X/).length
+        @wrapped_string.grapheme_clusters.length
       end
 
       # Replaces all ISO-8859-1 or CP1252 characters by their UTF-8 equivalent
@@ -157,7 +156,7 @@ module ActiveSupport #:nodoc:
         chars(Unicode.tidy_bytes(@wrapped_string, force))
       end
 
-      def as_json(options = nil) #:nodoc:
+      def as_json(options = nil) # :nodoc:
         to_s.as_json(options)
       end
 

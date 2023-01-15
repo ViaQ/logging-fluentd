@@ -1,9 +1,10 @@
-# frozen_string_literal: true
 # encoding: UTF-8
+# frozen_string_literal: true
+
+require "cgi"
 
 class DummyServer < WEBrick::HTTPServer
-  # rubocop:disable Metrics/ClassLength
-  class Servlet < WEBrick::HTTPServlet::AbstractServlet
+  class Servlet < WEBrick::HTTPServlet::AbstractServlet # rubocop:disable Metrics/ClassLength
     def self.sockets
       @sockets ||= []
     end
@@ -18,7 +19,7 @@ class DummyServer < WEBrick::HTTPServer
     end
 
     %w[get post head].each do |method|
-      class_eval <<-RUBY, __FILE__, __LINE__
+      class_eval <<-RUBY, __FILE__, __LINE__ + 1
         def self.#{method}(path, &block)
           handlers["#{method}:\#{path}"] = block
         end
@@ -157,7 +158,7 @@ class DummyServer < WEBrick::HTTPServer
       res.status = 200
 
       res.body = case req["Accept-Encoding"]
-                 when "gzip" then
+                 when "gzip"
                    res["Content-Encoding"] = "gzip"
                    StringIO.open do |out|
                      Zlib::GzipWriter.wrap(out) do |gz|
@@ -166,12 +167,24 @@ class DummyServer < WEBrick::HTTPServer
                        out.tap(&:rewind).read
                      end
                    end
-                 when "deflate" then
+                 when "deflate"
                    res["Content-Encoding"] = "deflate"
                    Zlib::Deflate.deflate("#{req.body}-deflated")
                  else
                    "#{req.body}-raw"
                  end
+    end
+
+    post "/no-content-204" do |req, res|
+      res.status = 204
+      res.body   = ""
+
+      case req["Accept-Encoding"]
+      when "gzip"
+        res["Content-Encoding"] = "gzip"
+      when "deflate"
+        res["Content-Encoding"] = "deflate"
+      end
     end
   end
 end

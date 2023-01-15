@@ -1,5 +1,5 @@
-# frozen_string_literal: true
 # encoding: utf-8
+# frozen_string_literal: true
 
 require "json"
 
@@ -95,7 +95,8 @@ RSpec.describe HTTP do
         expect(response.to_s).to match(/<!doctype html>/)
       end
 
-      context "ssl" do
+      # TODO: htt:s://github.com/httprb/http/issues/627
+      xcontext "ssl" do
         it "responds with the endpoint's body" do
           response = ssl_client.via(proxy.addr, proxy.port).get dummy_ssl.endpoint
           expect(response.to_s).to match(/<!doctype html>/)
@@ -131,7 +132,8 @@ RSpec.describe HTTP do
         expect(response.status).to eq(407)
       end
 
-      context "ssl" do
+      # TODO: htt:s://github.com/httprb/http/issues/627
+      xcontext "ssl" do
         it "responds with the endpoint's body" do
           response = ssl_client.via(proxy.addr, proxy.port, "username", "password").get dummy_ssl.endpoint
           expect(response.to_s).to match(/<!doctype html>/)
@@ -307,6 +309,15 @@ RSpec.describe HTTP do
       end
     end
 
+    context "specifying per operation timeouts as frozen hash" do
+      let(:frozen_options) { {:read => 123}.freeze }
+      subject(:client) { HTTP.timeout(frozen_options) }
+
+      it "does not raise an error" do
+        expect { client }.not_to raise_error
+      end
+    end
+
     context "specifying a global timeout" do
       subject(:client) { HTTP.timeout 123 }
 
@@ -428,6 +439,22 @@ RSpec.describe HTTP do
         response = client.post("#{dummy.endpoint}/encoded-body", :body => body)
 
         expect(response.to_s).to eq("#{body}-deflated")
+      end
+
+      it "returns empty body for no content response where Content-Encoding is gzip" do
+        client   = HTTP.use(:auto_inflate).headers("Accept-Encoding" => "gzip")
+        body     = "Hello!"
+        response = client.post("#{dummy.endpoint}/no-content-204", :body => body)
+
+        expect(response.to_s).to eq("")
+      end
+
+      it "returns empty body for no content response where Content-Encoding is deflate" do
+        client   = HTTP.use(:auto_inflate).headers("Accept-Encoding" => "deflate")
+        body     = "Hello!"
+        response = client.post("#{dummy.endpoint}/no-content-204", :body => body)
+
+        expect(response.to_s).to eq("")
       end
     end
 

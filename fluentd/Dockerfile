@@ -1,6 +1,6 @@
 ### This is a generated file from Dockerfile.in ###
-#@follow_tag(registry.redhat.io/ubi8/ruby-27:latest)
-FROM registry.access.redhat.com/ubi8/ruby-27 AS builder
+#@follow_tag(registry.redhat.io/ubi8/ruby-31:latest)
+FROM registry.redhat.io/ubi8/ruby-31 AS builder
 
 ENV REMOTE_SOURCES=${REMOTE_SOURCES:-"."}
 ENV REMOTE_SOURCES_DIR=${REMOTE_SOURCES_DIR:-"."}
@@ -35,8 +35,8 @@ COPY ${upstream_code}/*.patch ${HOME}/vendored_gem_src/
 
 RUN cd ${HOME}/vendored_gem_src/ && ./install-gems.sh
 
-#@follow_tag(registry.redhat.io/ubi8/ruby-27:latest)
-FROM registry.access.redhat.com/ubi8/ruby-27 AS runtime
+#@follow_tag(registry.redhat.io/ubi8/ruby-31:latest)
+FROM registry.redhat.io/ubi8/ruby-31 AS runtime
 
 ENV REMOTE_SOURCES=${REMOTE_SOURCES:-"."}
 ENV upstream_code=${upstream_code:-"."}

@@ -1,13 +1,12 @@
 # frozen_string_literal: true
 
-require "uri"
-
 module Bundler
   # Represents a lazily loaded gem specification, where the full specification
   # is on the source server in rubygems' "quick" index. The proxy object is to
   # be seeded with what we're given from the source's abbreviated index - the
   # full specification will only be fetched when necessary.
   class RemoteSpecification
+    include MatchRemoteMetadata
     include MatchPlatform
     include Comparable
 
@@ -18,7 +17,8 @@ module Bundler
     def initialize(name, version, platform, spec_fetcher)
       @name         = name
       @version      = Gem::Version.create version
-      @platform     = platform
+      @original_platform = platform || Gem::Platform::RUBY
+      @platform     = Gem::Platform.new(platform)
       @spec_fetcher = spec_fetcher
       @dependencies = nil
     end
@@ -29,11 +29,15 @@ module Bundler
       @platform = _remote_specification.platform
     end
 
+    def identifier
+      @__identifier ||= [name, version, @platform.to_s]
+    end
+
     def full_name
-      if platform == Gem::Platform::RUBY || platform.nil?
+      if @platform == Gem::Platform::RUBY
         "#{@name}-#{@version}"
       else
-        "#{@name}-#{@version}-#{platform}"
+        "#{@name}-#{@version}-#{@platform}"
       end
     end
 
@@ -52,6 +56,8 @@ module Bundler
     # once the remote gem is downloaded, the backend specification will
     # be swapped out.
     def __swap__(spec)
+      raise APIResponseInvalidDependenciesError unless spec.dependencies.all? {|d| d.is_a?(Gem::Dependency) }
+
       SharedHelpers.ensure_same_dependencies(self, dependencies, spec.dependencies)
       @_remote_specification = spec
     end
@@ -78,7 +84,8 @@ module Bundler
         deps = method_missing(:dependencies)
 
         # allow us to handle when the specs dependencies are an array of array of string
-        # see https://github.com/bundler/bundler/issues/5797
+        # in order to delay the crash to `#__swap__` where it results in a friendlier error
+        # see https://github.com/rubygems/bundler/issues/5797
         deps = deps.map {|d| d.is_a?(Gem::Dependency) ? d : Gem::Dependency.new(*d) }
 
         deps
@@ -90,14 +97,14 @@ module Bundler
       " #{source.revision[0..6]}"
     end
 
-  private
+    private
 
     def to_ary
       nil
     end
 
     def _remote_specification
-      @_remote_specification ||= @spec_fetcher.fetch_spec([@name, @version, @platform])
+      @_remote_specification ||= @spec_fetcher.fetch_spec([@name, @version, @original_platform])
       @_remote_specification || raise(GemspecError, "Gemspec data for #{full_name} was" \
         " missing from the server! Try installing with `--full-index` as a workaround.")
     end

@@ -11,8 +11,8 @@
 #define USE_THREAD_LIMIT 0
 // #define USE_THREAD_LIMIT 100000
 #define MAX_EXP 4932
-// max in the pow_map
-#define MAX_POW 400
+// max in the pow_map which is the limit for double
+#define MAX_POW 308
 
 #define MIN_SLEEP (1000000000LL / (double)CLOCKS_PER_SEC)
 // 9,223,372,036,854,775,807
@@ -385,7 +385,7 @@ static const byte hex_map[256] = "\
 ................................\
 ................................";
 
-static long double pow_map[401] = {
+static long double pow_map[309] = {
     1.0L,     1.0e1L,   1.0e2L,   1.0e3L,   1.0e4L,   1.0e5L,   1.0e6L,   1.0e7L,   1.0e8L,   1.0e9L,   1.0e10L,
     1.0e11L,  1.0e12L,  1.0e13L,  1.0e14L,  1.0e15L,  1.0e16L,  1.0e17L,  1.0e18L,  1.0e19L,  1.0e20L,  1.0e21L,
     1.0e22L,  1.0e23L,  1.0e24L,  1.0e25L,  1.0e26L,  1.0e27L,  1.0e28L,  1.0e29L,  1.0e30L,  1.0e31L,  1.0e32L,
@@ -414,15 +414,7 @@ static long double pow_map[401] = {
     1.0e275L, 1.0e276L, 1.0e277L, 1.0e278L, 1.0e279L, 1.0e280L, 1.0e281L, 1.0e282L, 1.0e283L, 1.0e284L, 1.0e285L,
     1.0e286L, 1.0e287L, 1.0e288L, 1.0e289L, 1.0e290L, 1.0e291L, 1.0e292L, 1.0e293L, 1.0e294L, 1.0e295L, 1.0e296L,
     1.0e297L, 1.0e298L, 1.0e299L, 1.0e300L, 1.0e301L, 1.0e302L, 1.0e303L, 1.0e304L, 1.0e305L, 1.0e306L, 1.0e307L,
-    1.0e308L, 1.0e309L, 1.0e310L, 1.0e311L, 1.0e312L, 1.0e313L, 1.0e314L, 1.0e315L, 1.0e316L, 1.0e317L, 1.0e318L,
-    1.0e319L, 1.0e320L, 1.0e321L, 1.0e322L, 1.0e323L, 1.0e324L, 1.0e325L, 1.0e326L, 1.0e327L, 1.0e328L, 1.0e329L,
-    1.0e330L, 1.0e331L, 1.0e332L, 1.0e333L, 1.0e334L, 1.0e335L, 1.0e336L, 1.0e337L, 1.0e338L, 1.0e339L, 1.0e340L,
-    1.0e341L, 1.0e342L, 1.0e343L, 1.0e344L, 1.0e345L, 1.0e346L, 1.0e347L, 1.0e348L, 1.0e349L, 1.0e350L, 1.0e351L,
-    1.0e352L, 1.0e353L, 1.0e354L, 1.0e355L, 1.0e356L, 1.0e357L, 1.0e358L, 1.0e359L, 1.0e360L, 1.0e361L, 1.0e362L,
-    1.0e363L, 1.0e364L, 1.0e365L, 1.0e366L, 1.0e367L, 1.0e368L, 1.0e369L, 1.0e370L, 1.0e371L, 1.0e372L, 1.0e373L,
-    1.0e374L, 1.0e375L, 1.0e376L, 1.0e377L, 1.0e378L, 1.0e379L, 1.0e380L, 1.0e381L, 1.0e382L, 1.0e383L, 1.0e384L,
-    1.0e385L, 1.0e386L, 1.0e387L, 1.0e388L, 1.0e389L, 1.0e390L, 1.0e391L, 1.0e392L, 1.0e393L, 1.0e394L, 1.0e395L,
-    1.0e396L, 1.0e397L, 1.0e398L, 1.0e399L, 1.0e400L};
+    1.0e308L};
 
 static VALUE parser_class;
 
@@ -541,6 +533,7 @@ static void calc_num(ojParser p) {
         // nothing to do
         break;
     }
+    p->type = OJ_NONE;
 }
 
 static void big_change(ojParser p) {
@@ -606,6 +599,8 @@ static void parse(ojParser p, const byte *json) {
     const byte *b = json;
     int         i;
 
+    p->line = 1;
+    p->col  = -1;
 #if DEBUG
     printf("*** parse - mode: %c %s\n", p->map[256], (const char *)json);
 #endif
@@ -660,6 +655,7 @@ static void parse(ojParser p, const byte *json) {
             }
             buf_append_string(&p->buf, (const char *)start, b - start);
             if ('"' == *b) {
+                p->cur = b - json;
                 p->funcs[p->stack[p->depth]].add_str(p);
                 p->map = (0 == p->depth) ? value_map : after_map;
                 break;
@@ -669,12 +665,14 @@ static void parse(ojParser p, const byte *json) {
             p->next_map = (0 == p->depth) ? value_map : after_map;
             break;
         case OPEN_OBJECT:
+            p->cur = b - json;
             p->funcs[p->stack[p->depth]].open_object(p);
             p->depth++;
             p->stack[p->depth] = OBJECT_FUN;
             p->map             = key1_map;
             break;
         case NUM_CLOSE_OBJECT:
+            p->cur = b - json;
             calc_num(p);
             // flow through
         case CLOSE_OBJECT:
@@ -685,15 +683,18 @@ static void parse(ojParser p, const byte *json) {
                 return;
             }
             p->depth--;
+            p->cur = b - json;
             p->funcs[p->stack[p->depth]].close_object(p);
             break;
         case OPEN_ARRAY:
+            p->cur = b - json;
             p->funcs[p->stack[p->depth]].open_array(p);
             p->depth++;
             p->stack[p->depth] = ARRAY_FUN;
             p->map             = value_map;
             break;
         case NUM_CLOSE_ARRAY:
+            p->cur = b - json;
             calc_num(p);
             // flow through
         case CLOSE_ARRAY:
@@ -704,9 +705,11 @@ static void parse(ojParser p, const byte *json) {
                 return;
             }
             p->depth--;
+            p->cur = b - json;
             p->funcs[p->stack[p->depth]].close_array(p);
             break;
         case NUM_COMMA:
+            p->cur = b - json;
             calc_num(p);
             if (0 < p->depth && OBJECT_FUN == p->stack[p->depth]) {
                 p->map = key_map;
@@ -868,8 +871,14 @@ static void parse(ojParser p, const byte *json) {
             b--;
             p->map = big_exp_map;
             break;
-        case NUM_SPC: calc_num(p); break;
-        case NUM_NEWLINE: calc_num(p); b++;
+        case NUM_SPC:
+            p->cur = b - json;
+            calc_num(p);
+            break;
+        case NUM_NEWLINE:
+            p->cur = b - json;
+            calc_num(p);
+            b++;
 #ifdef SPACE_JUMP
             // for (uint32_t *sj = (uint32_t*)b; 0x20202020 == *sj; sj++) { b += 4; }
             for (uint16_t *sj = (uint16_t *)b; 0x2020 == *sj; sj++) {
@@ -890,6 +899,7 @@ static void parse(ojParser p, const byte *json) {
                 buf_append_string(&p->buf, (const char *)start, b - start);
             }
             if ('"' == *b) {
+                p->cur = b - json;
                 p->funcs[p->stack[p->depth]].add_str(p);
                 p->map = p->next_map;
                 break;
@@ -898,6 +908,7 @@ static void parse(ojParser p, const byte *json) {
             break;
         case STR_SLASH: p->map = esc_map; break;
         case STR_QUOTE:
+            p->cur = b - json;
             p->funcs[p->stack[p->depth]].add_str(p);
             p->map = p->next_map;
             break;
@@ -975,6 +986,7 @@ static void parse(ojParser p, const byte *json) {
         case VAL_NULL:
             if ('u' == b[1] && 'l' == b[2] && 'l' == b[3]) {
                 b += 3;
+                p->cur = b - json;
                 p->funcs[p->stack[p->depth]].add_null(p);
                 p->map = (0 == p->depth) ? value_map : after_map;
                 break;
@@ -1000,6 +1012,7 @@ static void parse(ojParser p, const byte *json) {
         case VAL_TRUE:
             if ('r' == b[1] && 'u' == b[2] && 'e' == b[3]) {
                 b += 3;
+                p->cur = b - json;
                 p->funcs[p->stack[p->depth]].add_true(p);
                 p->map = (0 == p->depth) ? value_map : after_map;
                 break;
@@ -1025,6 +1038,7 @@ static void parse(ojParser p, const byte *json) {
         case VAL_FALSE:
             if ('a' == b[1] && 'l' == b[2] && 's' == b[3] && 'e' == b[4]) {
                 b += 4;
+                p->cur = b - json;
                 p->funcs[p->stack[p->depth]].add_false(p);
                 p->map = (0 == p->depth) ? value_map : after_map;
                 break;
@@ -1058,6 +1072,7 @@ static void parse(ojParser p, const byte *json) {
                         parse_error(p, "expected null");
                         return;
                     }
+                    p->cur = b - json;
                     p->funcs[p->stack[p->depth]].add_null(p);
                     p->map = (0 == p->depth) ? value_map : after_map;
                 }
@@ -1069,6 +1084,7 @@ static void parse(ojParser p, const byte *json) {
                         parse_error(p, "expected false");
                         return;
                     }
+                    p->cur = b - json;
                     p->funcs[p->stack[p->depth]].add_false(p);
                     p->map = (0 == p->depth) ? value_map : after_map;
                 }
@@ -1080,6 +1096,7 @@ static void parse(ojParser p, const byte *json) {
                         parse_error(p, "expected true");
                         return;
                     }
+                    p->cur = b - json;
                     p->funcs[p->stack[p->depth]].add_true(p);
                     p->map = (0 == p->depth) ? value_map : after_map;
                 }
@@ -1097,6 +1114,9 @@ static void parse(ojParser p, const byte *json) {
             p->map = trail_map;
         }
     }
+    if (0 < p->depth) {
+        parse_error(p, "parse error, not closed");
+    }
     if (0 == p->depth) {
         switch (p->map[256]) {
         case '0':
@@ -1107,7 +1127,10 @@ static void parse(ojParser p, const byte *json) {
         case 'D':
         case 'g':
         case 'B':
-        case 'Y': calc_num(p); break;
+        case 'Y':
+            p->cur = b - json;
+            calc_num(p);
+            break;
         }
     }
     return;
@@ -1122,7 +1145,9 @@ static void parser_free(void *ptr) {
     p = (ojParser)ptr;
     buf_cleanup(&p->key);
     buf_cleanup(&p->buf);
-    p->free(p);
+    if (NULL != p->free) {
+        p->free(p);
+    }
     xfree(ptr);
 }
 
@@ -1133,7 +1158,9 @@ static void parser_mark(void *ptr) {
         if (0 != p->reader) {
             rb_gc_mark(p->reader);
         }
-        p->mark(p);
+        if (NULL != p->mark) {
+            p->mark(p);
+        }
     }
 }
 
@@ -1190,7 +1217,7 @@ static VALUE parser_new(int argc, VALUE *argv, VALUE self) {
     p->map = value_map;
 
     if (argc < 1) {
-	oj_set_parser_validator(p);
+        oj_set_parser_validator(p);
     } else {
         VALUE mode = argv[0];
 
@@ -1229,6 +1256,32 @@ static VALUE parser_new(int argc, VALUE *argv, VALUE self) {
         }
     }
     return Data_Wrap_Struct(parser_class, parser_mark, parser_free, p);
+}
+
+// Create a new parser without setting the delegate. The parser is
+// wrapped. The parser is (ojParser)DATA_PTR(value) where value is the return
+// from this function. A delegate must be added before the parser can be
+// used. Optionally oj_parser_set_options can be called if the options are not
+// set directly.
+VALUE oj_parser_new() {
+    ojParser p = ALLOC(struct _ojParser);
+
+#if HAVE_RB_EXT_RACTOR_SAFE
+    // This doesn't seem to do anything.
+    rb_ext_ractor_safe(true);
+#endif
+    memset(p, 0, sizeof(struct _ojParser));
+    buf_init(&p->key);
+    buf_init(&p->buf);
+    p->map = value_map;
+
+    return Data_Wrap_Struct(parser_class, parser_mark, parser_free, p);
+}
+
+// Set set the options from a hash (ropts).
+void oj_parser_set_option(ojParser p, VALUE ropts) {
+    Check_Type(ropts, T_HASH);
+    rb_hash_foreach(ropts, opt_cb, (VALUE)p);
 }
 
 /* Document-method: method_missing(value)
@@ -1284,7 +1337,7 @@ static VALUE parser_new(int argc, VALUE *argv, VALUE self) {
  */
 static VALUE parser_missing(int argc, VALUE *argv, VALUE self) {
     ojParser       p    = (ojParser)DATA_PTR(self);
-    const char *   key  = NULL;
+    const char    *key  = NULL;
     volatile VALUE rkey = *argv;
     volatile VALUE rv   = Qnil;
 
@@ -1464,7 +1517,7 @@ static VALUE saj_parser = Qundef;
 /* Document-method: saj
  * call-seq: saj
  *
- * Returns the default saj parser. Note the default SAJ parser can not be used
+ * Returns the default SAJ parser. Note the default SAJ parser can not be used
  * concurrently in more than one thread.
  */
 static VALUE parser_saj(VALUE self) {
@@ -1515,8 +1568,11 @@ static VALUE parser_validate(VALUE self) {
  * isolates options to just the parser so that other parts of the code are not
  * forced to use the same options.
  */
-void oj_parser_init() {
+void oj_parser_init(void) {
     parser_class = rb_define_class_under(Oj, "Parser", rb_cObject);
+    rb_gc_register_address(&parser_class);
+    rb_undef_alloc_func(parser_class);
+
     rb_define_module_function(parser_class, "new", parser_new, -1);
     rb_define_method(parser_class, "parse", parser_parse, 1);
     rb_define_method(parser_class, "load", parser_load, 1);

@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-# coding: utf-8
 # Copyright (C) Bob Aman
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
@@ -996,6 +995,72 @@ describe Addressable::URI, "when frozen" do
       expect(error.message).to match(/can't modify frozen/)
       expect(error).to satisfy { |e| RuntimeError === e || TypeError === e }
     }
+  end
+end
+
+describe Addressable::URI, "when normalized and then deeply frozen" do
+  before do
+    @uri = Addressable::URI.parse(
+      "http://user:password@example.com:8080/path?query=value#fragment"
+    ).normalize!
+
+    @uri.instance_variables.each do |var|
+      @uri.instance_variable_set(var, @uri.instance_variable_get(var).freeze)
+    end
+
+    @uri.freeze
+  end
+
+  it "#normalized_scheme should not error" do
+    expect { @uri.normalized_scheme }.not_to raise_error
+  end
+
+  it "#normalized_user should not error" do
+    expect { @uri.normalized_user }.not_to raise_error
+  end
+
+  it "#normalized_password should not error" do
+    expect { @uri.normalized_password }.not_to raise_error
+  end
+
+  it "#normalized_userinfo should not error" do
+    expect { @uri.normalized_userinfo }.not_to raise_error
+  end
+
+  it "#normalized_host should not error" do
+    expect { @uri.normalized_host }.not_to raise_error
+  end
+
+  it "#normalized_authority should not error" do
+    expect { @uri.normalized_authority }.not_to raise_error
+  end
+
+  it "#normalized_port should not error" do
+    expect { @uri.normalized_port }.not_to raise_error
+  end
+
+  it "#normalized_site should not error" do
+    expect { @uri.normalized_site }.not_to raise_error
+  end
+
+  it "#normalized_path should not error" do
+    expect { @uri.normalized_path }.not_to raise_error
+  end
+
+  it "#normalized_query should not error" do
+    expect { @uri.normalized_query }.not_to raise_error
+  end
+
+  it "#normalized_fragment should not error" do
+    expect { @uri.normalized_fragment }.not_to raise_error
+  end
+
+  it "should be frozen" do
+    expect(@uri).to be_frozen
+  end
+
+  it "should not allow destructive operations" do
+    expect { @uri.normalize! }.to raise_error(RuntimeError)
   end
 end
 
@@ -5993,6 +6058,11 @@ describe Addressable::URI, "when unencoding a multibyte string" do
     expect(Addressable::URI.unencode_component("ski=%BA%DAɫ")).to eq("ski=\xBA\xDAɫ")
   end
 
+  it "should not fail with UTF-8 incompatible string" do
+    url = "/M%E9/\xE9?p=\xFC".b
+    expect(Addressable::URI.unencode_component(url)).to eq("/M\xE9/\xE9?p=\xFC")
+  end
+
   it "should result in correct percent encoded sequence as a URI" do
     expect(Addressable::URI.unencode(
       "/path?g%C3%BCnther", ::Addressable::URI
@@ -6661,5 +6731,15 @@ describe Addressable::URI, "when initializing a subclass of Addressable::URI" do
 
   it "should have the same class after being joined" do
     expect(@uri.class).to eq(@uri.join('path').class)
+  end
+end
+
+describe Addressable::URI, "when initialized in a non-main `Ractor`" do
+  it "should have the same value as if used in the main `Ractor`" do
+    pending("Ruby 3.0+ for `Ractor` support") unless defined?(Ractor)
+    main = Addressable::URI.parse("http://example.com")
+    expect(
+      Ractor.new { Addressable::URI.parse("http://example.com") }.take
+    ).to eq(main)
   end
 end

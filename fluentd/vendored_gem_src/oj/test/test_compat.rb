@@ -488,6 +488,31 @@ class CompatJuice < Minitest::Test
     assert_equal([1,2], Oj.load(s, :mode => :compat))
   end
 
+  def test_parse_large_string
+    error = assert_raises() { Oj.load(%|{"a":"aaaaaaaaaa\0aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}|) }
+    assert(error.message.include?('NULL byte in string'))
+
+    error = assert_raises() { Oj.load(%|{"a":"aaaaaaaaaaaaaaaaaaaa                       }|) }
+    assert(error.message.include?('quoted string not terminated'))
+
+    json =<<~JSON
+    {
+      "a": "\\u3074\\u30fc\\u305f\\u30fc",
+      "b": "aaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+    JSON
+    assert_equal("ぴーたー", Oj.load(json)['a'])
+  end
+
+  def test_parse_large_escaped_string
+    invalid_json = %|{"a":\"aaaa\\nbbbb\\rcccc\\tddd\\feee\\bf\/\\\\\\u3074\\u30fc\\u305f\\u30fc                             }|
+    error = assert_raises() { Oj.load(invalid_json) }
+    assert(error.message.include?('quoted string not terminated'))
+
+    json = "\"aaaa\\nbbbb\\rcccc\\tddd\\feee\\bf\/\\\\\\u3074\\u30fc\\u305f\\u30fc             \""
+    assert_equal("aaaa\nbbbb\rcccc\tddd\feee\bf/\\ぴーたー             ", Oj.load(json))
+  end
+
   def dump_and_load(obj, trace=false)
     json = Oj.dump(obj)
     puts json if trace

@@ -2,6 +2,17 @@
 
 ### [Unreleased]
 
+### 5.2.4
+- Pin Faraday 1.10 (#987)
+- Increase errors metric on error response in data stream (#986)
+
+### 5.2.3
+- Bump actions/checkout from 2 to 3 (#978)
+- chore: Included githubactions in the dependabot config (#977)
+- chore: Set permissions for GitHub actions (#972)
+- Remove nested msgpack\_each in handle\_error (#970)
+- do not overwrite @timestamp in data stream if it already exists in the record (#968)
+
 ### 5.2.2
 -  Add missing top level class markers (#961)
 - Ensure use_record_as_seed for same records (#960)

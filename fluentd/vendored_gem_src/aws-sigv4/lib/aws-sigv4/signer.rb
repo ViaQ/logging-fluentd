@@ -74,6 +74,14 @@ module Aws
     #
     class Signer
 
+      @@use_crt =
+        begin
+          require 'aws-crt'
+          true
+        rescue LoadError
+          false
+        end
+
       # @overload initialize(service:, region:, access_key_id:, secret_access_key:, session_token:nil, **options)
       #   @param [String] :service The service signing name, e.g. 's3'.
       #   @param [String] :region The region name, e.g. 'us-east-1'.
@@ -581,7 +589,7 @@ module Aws
       end
 
       def canonical_header_value(value)
-        value.match(/^".*"$/) ? value : value.gsub(/\s+/, ' ').strip
+        value.gsub(/\s+/, ' ').strip
       end
 
       def host(uri)
@@ -833,12 +841,7 @@ module Aws
       class << self
 
         def use_crt?
-          begin
-            require 'aws-crt'
-            return true
-          rescue LoadError
-            return false
-          end
+          @@use_crt
         end
 
         # @api private

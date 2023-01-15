@@ -1,6 +1,8 @@
 # encoding: utf-8
 # frozen_string_literal: true
-require "yaml"
+require 'mail/constants'
+require 'mail/utilities'
+require 'mail/yaml'
 
 module Mail
   # The Message class provides a single point of access to all things to do with an
@@ -46,10 +48,6 @@ module Mail
   #   follows the header and is separated from the header by an empty line
   #   (i.e., a line with nothing preceding the CRLF).
   class Message
-
-    include Constants
-    include Utilities
-
     # ==Making an email
     #
     # You can make an new mail object via a block, passing a string, file or direct assignment.
@@ -149,7 +147,7 @@ module Mail
       #     m.to 'recipient@example.com'
       #   end
       if block_given?
-        if block.arity.zero? || (RUBY_VERSION < '1.9' && block.arity < 1)
+        if block.arity.zero?
           instance_eval(&block)
         else
           yield self
@@ -235,11 +233,6 @@ module Mail
     def self.default_charset=(charset); @@default_charset = charset; end
     self.default_charset = 'UTF-8'
 
-    def register_for_delivery_notification(observer)
-      warn("Message#register_for_delivery_notification is deprecated, please call Mail.register_observer instead")
-      Mail.register_observer(observer)
-    end
-
     def inform_observers
       Mail.inform_observers(self)
     end
@@ -301,7 +294,7 @@ module Mail
           reply.references ||= bracketed_message_id
         end
         if subject
-          reply.subject = subject =~ /^Re:/i ? subject : "RE: #{subject}"
+          reply.subject = subject =~ /^Re:/i ? subject : "Re: #{subject}"
         end
         if reply_to || from
           reply.to = self[reply_to ? :reply_to : :from].to_s
@@ -406,9 +399,9 @@ module Mail
     end
 
     # Sets the envelope from for the email
-    def set_envelope( val )
+    def set_envelope(val)
       @raw_envelope = val
-      @envelope = Mail::Envelope.new( val )
+      @envelope = Mail::Envelope.parse(val) rescue nil
     end
 
     # The raw_envelope is the From mikel@test.lindsaar.net Mon May  2 16:07:05 2009
@@ -1339,7 +1332,7 @@ module Mail
     #  mail['foo'] = '1234'
     #  mail['foo'].to_s #=> '1234'
     def [](name)
-      header[underscoreize(name)]
+      header[Utilities.underscoreize(name)]
     end
 
     # Method Missing in this implementation allows you to set any of the
@@ -1385,7 +1378,7 @@ module Mail
       #:nodoc:
       # Only take the structured fields, as we could take _anything_ really
       # as it could become an optional field... "but therin lies the dark side"
-      field_name = underscoreize(name).chomp("=")
+      field_name = Utilities.underscoreize(name).chomp("=")
       if Mail::Field::KNOWN_FIELDS.include?(field_name)
         if args.empty?
           header[field_name]
@@ -1436,11 +1429,6 @@ module Mail
       header[:content_transfer_encoding] && Utilities.blank?(header[:content_transfer_encoding].errors)
     end
 
-    def has_transfer_encoding? # :nodoc:
-      warn(":has_transfer_encoding? is deprecated in Mail 1.4.3.  Please use has_content_transfer_encoding?\n#{caller}")
-      has_content_transfer_encoding?
-    end
-
     # Creates a new empty Message-ID field and inserts it in the correct order
     # into the Header.  The MessageIdField object will automatically generate
     # a unique message ID if you try and encode it or output it to_s without
@@ -1489,7 +1477,9 @@ module Mail
           warning = "Non US-ASCII detected and no charset defined.\nDefaulting to UTF-8, set your own if this is incorrect.\n"
           warn(warning)
         end
-        header[:content_type].parameters['charset'] = @charset
+        if @charset
+          header[:content_type].parameters['charset'] = @charset
+        end
       end
     end
 
@@ -1498,30 +1488,15 @@ module Mail
       header[:content_transfer_encoding] ||= body.default_encoding
     end
 
-    def add_transfer_encoding # :nodoc:
-      warn(":add_transfer_encoding is deprecated in Mail 1.4.3.  Please use add_content_transfer_encoding\n#{caller}")
-      add_content_transfer_encoding
-    end
-
-    def transfer_encoding # :nodoc:
-      warn(":transfer_encoding is deprecated in Mail 1.4.3.  Please use content_transfer_encoding\n#{caller}")
-      content_transfer_encoding
-    end
-
     # Returns the MIME media type of part we are on, this is taken from the content-type header
     def mime_type
       has_content_type? ? header[:content_type].string : nil rescue nil
     end
 
-    def message_content_type
-      warn(":message_content_type is deprecated in Mail 1.4.3.  Please use mime_type\n#{caller}")
-      mime_type
-    end
-
     # Returns the character set defined in the content type field
     def charset
       if @header
-        has_content_type? ? content_type_parameters['charset'] : @charset
+        has_content_type? && !multipart? ? content_type_parameters['charset'] : @charset
       else
         @charset
       end
@@ -1542,12 +1517,6 @@ module Mail
     # Returns the sub content type
     def sub_type
       has_content_type? ? header[:content_type].sub_type : nil rescue nil
-    end
-
-    # Returns the content type parameters
-    def mime_parameters
-      warn(':mime_parameters is deprecated in Mail 1.4.3, please use :content_type_parameters instead')
-      content_type_parameters
     end
 
     # Returns the content type parameters
@@ -1798,12 +1767,22 @@ module Mail
       self.attachments[basename] = filedata
     end
 
+    MULTIPART_CONVERSION_CONTENT_FIELDS = [ :content_description, :content_disposition, :content_transfer_encoding, :content_type ]
+    private_constant :MULTIPART_CONVERSION_CONTENT_FIELDS if respond_to?(:private_constant)
+
     def convert_to_multipart
-      text = body.decoded
-      self.body = ''
-      text_part = Mail::Part.new({:content_type => 'text/plain;',
-                                  :body => text})
+      text_part = Mail::Part.new(:body => body.decoded)
+
+      MULTIPART_CONVERSION_CONTENT_FIELDS.each do |field_name|
+        if value = send(field_name)
+          writer = :"#{field_name}="
+          text_part.send writer, value
+          send writer, nil
+        end
+      end
       text_part.charset = charset unless @defaulted_charset
+
+      self.body = ''
       self.body << text_part
     end
 
@@ -1816,11 +1795,6 @@ module Mail
         part.ready_to_send!
       end
       add_required_fields
-    end
-
-    def encode!
-      warn("Deprecated in 1.1.0 in favour of :ready_to_send! as it is less confusing with encoding and decoding.")
-      ready_to_send!
     end
 
     # Outputs an encoded string representation of the mail message including
@@ -1836,7 +1810,7 @@ module Mail
 
     def without_attachments!
       if has_attachments?
-        parts.delete_if { |p| p.attachment? }
+        parts.delete_attachments
 
         reencoded = parts.empty? ? '' : body.encoded(content_transfer_encoding)
         @body = nil # So the new parts won't be added to the existing body
@@ -1867,7 +1841,7 @@ module Mail
     end
 
     def self.from_yaml(str)
-      hash = YAML.load(str)
+      hash = Mail::YAML.load(str)
       m = self.new(:headers => hash['headers'])
       hash.delete('headers')
       hash.each do |k,v|
@@ -1898,6 +1872,15 @@ module Mail
 
     def inspect
       "#<#{self.class}:#{self.object_id}, Multipart: #{multipart?}, Headers: #{header.field_summary}>"
+    end
+
+    def inspect_structure
+      inspect +
+      if self.multipart?
+        "\n" + parts.inspect_structure
+      else
+        ''
+      end
     end
 
     def decoded
@@ -1984,7 +1967,7 @@ module Mail
 
   private
 
-    HEADER_SEPARATOR = /#{Constants::CRLF}#{Constants::CRLF}/
+    HEADER_SEPARATOR = /#{Constants::LAX_CRLF}#{Constants::LAX_CRLF}/
 
     #  2.1. General Description
     #   A message consists of header fields (collectively called "the header
@@ -2029,7 +2012,7 @@ module Mail
 
     def set_envelope_header
       raw_string = raw_source.to_s
-      if match_data = raw_string.match(/\AFrom\s(#{TEXT}+)#{Constants::CRLF}/m)
+      if match_data = raw_string.match(/\AFrom\s+([^:\s]#{Constants::TEXT}*)#{Constants::LAX_CRLF}/m)
         set_envelope(match_data[1])
         self.raw_source = raw_string.sub(match_data[0], "")
       end
@@ -2053,10 +2036,12 @@ module Mail
     end
 
     def identify_and_set_transfer_encoding
-      if body && body.multipart?
-        self.content_transfer_encoding = @transport_encoding
-      else
-        self.content_transfer_encoding = body.negotiate_best_encoding(@transport_encoding, allowed_encodings).to_s
+      if body
+        if body.multipart?
+          self.content_transfer_encoding = @transport_encoding
+        else
+          self.content_transfer_encoding = body.negotiate_best_encoding(@transport_encoding, allowed_encodings).to_s
+        end
       end
     end
 
@@ -2076,15 +2061,17 @@ module Mail
 
     def add_multipart_alternate_header
       header['content-type'] = ContentTypeField.with_boundary('multipart/alternative').value
-      header['content_type'].parameters[:charset] = @charset
       body.boundary = boundary
     end
 
     def add_boundary
       unless body.boundary && boundary
-        header['content-type'] = 'multipart/mixed' unless header['content-type']
+        unless header['content-type']
+          _charset = charset
+          header['content-type'] = 'multipart/mixed'
+          header['content-type'].parameters[:charset] = _charset
+        end
         header['content-type'].parameters[:boundary] = ContentTypeField.generate_boundary
-        header['content_type'].parameters[:charset] = @charset
         body.boundary = boundary
       end
     end
@@ -2092,7 +2079,6 @@ module Mail
     def add_multipart_mixed_header
       unless header['content-type']
         header['content-type'] = ContentTypeField.with_boundary('multipart/mixed').value
-        header['content_type'].parameters[:charset] = @charset
         body.boundary = boundary
       end
     end
@@ -2109,7 +2095,7 @@ module Mail
       body_content = nil
 
       passed_in_options.each_pair do |k,v|
-        k = underscoreize(k).to_sym if k.class == String
+        k = Utilities.underscoreize(k).to_sym if k.class == String
         if k == :headers
           self.headers(v)
         elsif k == :body

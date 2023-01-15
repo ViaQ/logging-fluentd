@@ -19,9 +19,9 @@ namespace :gem do
       exit(1)
     end
 
-    s.required_ruby_version = ">= 2.0"
+    s.required_ruby_version = ">= 2.2"
 
-    s.add_runtime_dependency "public_suffix", ">= 2.0.2", "< 5.0"
+    s.add_runtime_dependency "public_suffix", ">= 2.0.2", "< 6.0"
     s.add_development_dependency "bundler", ">= 1.0", "< 3.0"
 
     s.require_path = "lib"
@@ -30,6 +30,9 @@ namespace :gem do
     s.email = "bob@sporkmonger.com"
     s.homepage = "https://github.com/sporkmonger/addressable"
     s.license = "Apache-2.0"
+    s.metadata = {
+      "changelog_uri" => "https://github.com/sporkmonger/addressable/blob/main/CHANGELOG.md"
+    }
   end
 
   Gem::PackageTask.new(GEM_SPEC) do |p|

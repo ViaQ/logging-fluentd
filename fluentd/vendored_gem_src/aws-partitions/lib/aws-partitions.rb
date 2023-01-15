@@ -195,6 +195,12 @@ module Aws
         end
       end
 
+      # @param [Hash] partition metadata
+      # @api private For Internal use only
+      def merge_metadata(partition_metadata)
+        default_partition_list.merge_metadata(partition_metadata)
+      end
+
       # @api private For internal use only.
       def clear
         default_partition_list.clear
@@ -204,7 +210,11 @@ module Aws
       # @return [PartitionList]
       # @api private
       def default_partition_list
-        @default_partition_list ||= PartitionList.build(defaults)
+        @default_partition_list ||= begin
+          partitions = PartitionList.build(defaults)
+          partitions.merge_metadata(default_metadata)
+          partitions
+        end
       end
 
       # @return [Hash]
@@ -212,6 +222,16 @@ module Aws
       def defaults
         @defaults ||= begin
           path = File.expand_path('../../partitions.json', __FILE__)
+          defaults = JSON.parse(File.read(path), freeze: true)
+          defaults.merge('partitions' => defaults['partitions'].dup)
+        end
+      end
+
+      # @return [Hash]
+      # @api private
+      def default_metadata
+        @default_metadata ||= begin
+          path = File.expand_path('../../partitions-metadata.json', __FILE__)
           defaults = JSON.parse(File.read(path), freeze: true)
           defaults.merge('partitions' => defaults['partitions'].dup)
         end
@@ -227,6 +247,7 @@ module Aws
             'ACM' => 'acm',
             'ACMPCA' => 'acm-pca',
             'APIGateway' => 'apigateway',
+            'ARCZonalShift' => 'arc-zonal-shift',
             'AccessAnalyzer' => 'access-analyzer',
             'Account' => 'account',
             'AlexaForBusiness' => 'a4b',
@@ -255,6 +276,7 @@ module Aws
             'AutoScalingPlans' => 'autoscaling-plans',
             'Backup' => 'backup',
             'BackupGateway' => 'backup-gateway',
+            'BackupStorage' => 'backupstorage',
             'Batch' => 'batch',
             'BillingConductor' => 'billingconductor',
             'Braket' => 'braket',
@@ -264,6 +286,8 @@ module Aws
             'ChimeSDKMediaPipelines' => 'media-pipelines-chime',
             'ChimeSDKMeetings' => 'meetings-chime',
             'ChimeSDKMessaging' => 'messaging-chime',
+            'ChimeSDKVoice' => 'voice-chime',
+            'CleanRooms' => 'cleanrooms',
             'Cloud9' => 'cloud9',
             'CloudControlApi' => 'cloudcontrolapi',
             'CloudDirectory' => 'clouddirectory',
@@ -280,6 +304,7 @@ module Aws
             'CloudWatchRUM' => 'rum',
             'CodeArtifact' => 'codeartifact',
             'CodeBuild' => 'codebuild',
+            'CodeCatalyst' => 'codecatalyst',
             'CodeCommit' => 'codecommit',
             'CodeDeploy' => 'codedeploy',
             'CodeGuruProfiler' => 'codeguru-profiler',
@@ -296,9 +321,12 @@ module Aws
             'ComputeOptimizer' => 'compute-optimizer',
             'ConfigService' => 'config',
             'Connect' => 'connect',
+            'ConnectCampaignService' => 'connect-campaigns',
+            'ConnectCases' => 'cases',
             'ConnectContactLens' => 'contact-lens',
             'ConnectParticipant' => 'participant.connect',
             'ConnectWisdomService' => 'wisdom',
+            'ControlTower' => 'controltower',
             'CostExplorer' => 'ce',
             'CostandUsageReportService' => 'cur',
             'CustomerProfiles' => 'profile',
@@ -314,6 +342,7 @@ module Aws
             'DirectConnect' => 'directconnect',
             'DirectoryService' => 'ds',
             'DocDB' => 'rds',
+            'DocDBElastic' => 'docdb-elastic',
             'Drs' => 'drs',
             'DynamoDB' => 'dynamodb',
             'DynamoDBStreams' => 'streams.dynamodb',
@@ -327,6 +356,7 @@ module Aws
             'EKS' => 'eks',
             'EMR' => 'elasticmapreduce',
             'EMRContainers' => 'emr-containers',
+            'EMRServerless' => 'emr-serverless',
             'ElastiCache' => 'elasticache',
             'ElasticBeanstalk' => 'elasticbeanstalk',
             'ElasticInference' => 'api.elastic-inference',
@@ -372,7 +402,9 @@ module Aws
             'IoTEvents' => 'iotevents',
             'IoTEventsData' => 'data.iotevents',
             'IoTFleetHub' => 'api.fleethub.iot',
+            'IoTFleetWise' => 'iotfleetwise',
             'IoTJobsDataPlane' => 'data.jobs.iot',
+            'IoTRoboRunner' => 'iotroborunner',
             'IoTSecureTunneling' => 'api.tunneling.iot',
             'IoTSiteWise' => 'iotsitewise',
             'IoTThingsGraph' => 'iotthingsgraph',
@@ -383,6 +415,7 @@ module Aws
             'Kafka' => 'kafka',
             'KafkaConnect' => 'kafkaconnect',
             'Kendra' => 'kendra',
+            'KendraRanking' => 'kendra-ranking',
             'Keyspaces' => 'cassandra',
             'Kinesis' => 'kinesis',
             'KinesisAnalytics' => 'kinesisanalytics',
@@ -391,6 +424,7 @@ module Aws
             'KinesisVideoArchivedMedia' => 'kinesisvideo',
             'KinesisVideoMedia' => 'kinesisvideo',
             'KinesisVideoSignalingChannels' => 'kinesisvideo',
+            'KinesisVideoWebRTCStorage' => 'kinesisvideo',
             'LakeFormation' => 'lakeformation',
             'Lambda' => 'lambda',
             'LambdaPreview' => 'lambda',
@@ -399,6 +433,8 @@ module Aws
             'LexModelsV2' => 'models-v2-lex',
             'LexRuntimeV2' => 'runtime-v2-lex',
             'LicenseManager' => 'license-manager',
+            'LicenseManagerLinuxSubscriptions' => 'license-manager-linux-subscriptions',
+            'LicenseManagerUserSubscriptions' => 'license-manager-user-subscriptions',
             'Lightsail' => 'lightsail',
             'LocationService' => 'geo',
             'LookoutEquipment' => 'lookoutequipment',
@@ -410,6 +446,7 @@ module Aws
             'MachineLearning' => 'machinelearning',
             'Macie' => 'macie',
             'Macie2' => 'macie2',
+            'MainframeModernization' => 'm2',
             'ManagedBlockchain' => 'managedblockchain',
             'ManagedGrafana' => 'grafana',
             'MarketplaceCatalog' => 'catalog.marketplace',
@@ -428,6 +465,7 @@ module Aws
             'Mgn' => 'mgn',
             'MigrationHub' => 'mgh',
             'MigrationHubConfig' => 'migrationhub-config',
+            'MigrationHubOrchestrator' => 'migrationhub-orchestrator',
             'MigrationHubRefactorSpaces' => 'refactor-spaces',
             'MigrationHubStrategyRecommendations' => 'migrationhub-strategy',
             'Mobile' => 'mobile',
@@ -435,6 +473,9 @@ module Aws
             'NetworkFirewall' => 'network-firewall',
             'NetworkManager' => 'networkmanager',
             'NimbleStudio' => 'nimble',
+            'OAM' => 'oam',
+            'Omics' => 'omics',
+            'OpenSearchServerless' => 'aoss',
             'OpenSearchService' => 'es',
             'OpsWorks' => 'opsworks',
             'OpsWorksCM' => 'opsworks-cm',
@@ -449,8 +490,10 @@ module Aws
             'PinpointEmail' => 'email',
             'PinpointSMSVoice' => 'sms-voice.pinpoint',
             'PinpointSMSVoiceV2' => 'sms-voice',
+            'Pipes' => 'pipes',
             'Polly' => 'polly',
             'Pricing' => 'api.pricing',
+            'PrivateNetworks' => 'private-networks',
             'PrometheusService' => 'aps',
             'Proton' => 'proton',
             'QLDB' => 'qldb',
@@ -462,11 +505,14 @@ module Aws
             'RecycleBin' => 'rbin',
             'Redshift' => 'redshift',
             'RedshiftDataAPIService' => 'redshift-data',
+            'RedshiftServerless' => 'redshift-serverless',
             'Rekognition' => 'rekognition',
             'ResilienceHub' => 'resiliencehub',
+            'ResourceExplorer2' => 'resource-explorer-2',
             'ResourceGroups' => 'resource-groups',
             'ResourceGroupsTaggingAPI' => 'tagging',
             'RoboMaker' => 'robomaker',
+            'RolesAnywhere' => 'rolesanywhere',
             'Route53' => 'route53',
             'Route53Domains' => 'route53domains',
             'Route53RecoveryCluster' => 'route53-recovery-cluster',
@@ -491,24 +537,31 @@ module Aws
             'SWF' => 'swf',
             'SageMaker' => 'api.sagemaker',
             'SageMakerFeatureStoreRuntime' => 'featurestore-runtime.sagemaker',
+            'SageMakerGeospatial' => 'sagemaker-geospatial',
+            'SageMakerMetrics' => 'metrics.sagemaker',
             'SageMakerRuntime' => 'runtime.sagemaker',
             'SagemakerEdgeManager' => 'edge.sagemaker',
             'SavingsPlans' => 'savingsplans',
+            'Scheduler' => 'scheduler',
             'Schemas' => 'schemas',
             'SecretsManager' => 'secretsmanager',
             'SecurityHub' => 'securityhub',
+            'SecurityLake' => 'securitylake',
             'ServerlessApplicationRepository' => 'serverlessrepo',
             'ServiceCatalog' => 'servicecatalog',
             'ServiceDiscovery' => 'servicediscovery',
             'ServiceQuotas' => 'servicequotas',
             'Shield' => 'shield',
             'Signer' => 'signer',
+            'SimSpaceWeaver' => 'simspaceweaver',
             'SimpleDB' => 'sdb',
             'SnowDeviceManagement' => 'snow-device-management',
             'Snowball' => 'snowball',
+            'SsmSap' => 'ssm-sap',
             'States' => 'states',
             'StorageGateway' => 'storagegateway',
             'Support' => 'support',
+            'SupportApp' => 'supportapp',
             'Synthetics' => 'synthetics',
             'Textract' => 'textract',
             'TimestreamQuery' => 'query.timestream',

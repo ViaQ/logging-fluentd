@@ -1,163 +1,59 @@
 # frozen_string_literal: true
 
-# Copyright, 2017, by Samuel G. D. Williams. <http://www.codeotaku.com>
-# 
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-# 
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-# 
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
+# Released under the MIT License.
+# Copyright, 2017-2022, by Samuel Williams.
+# Copyright, 2017, by Kent Gruber.
+# Copyright, 2022, by Shannon Skipper.
+
+require_relative 'list'
 
 module Async
-	# A double linked list.
-	class List
-		def initialize
-			# The list behaves like a list node, so @tail points to the next item (the first one) and head points to the previous item (the last one). This may be slightly confusing but it makes the interface more natural.
-			@head = nil
-			@tail = nil
-			@size = 0
-		end
-		
-		attr :size
-		
-		attr_accessor :head
-		attr_accessor :tail
-		
-		# Inserts an item at the end of the list.
-		def insert(item)
-			unless @tail
-				@tail = item
-				@head = item
-				
-				# Consistency:
-				item.head = nil
-				item.tail = nil
-			else
-				@head.tail = item
-				item.head = @head
-				
-				# Consistency:
-				item.tail = nil
-				
-				@head = item
-			end
-			
-			@size += 1
-			
-			return self
-		end
-		
-		def delete(item)
-			if @tail.equal?(item)
-				@tail = @tail.tail
-			else
-				item.head.tail = item.tail
-			end
-			
-			if @head.equal?(item)
-				@head = @head.head
-			else
-				item.tail.head = item.head
-			end
-			
-			item.head = nil
-			item.tail = nil
-			
-			@size -= 1
-			
-			return self
-		end
-		
-		def each(&block)
-			return to_enum unless block_given?
-			
-			current = self
-			while node = current.tail
-				yield node
-				
-				# If the node has deleted itself or any subsequent node, it will no longer be the next node, so don't use it for continued traversal:
-				if current.tail.equal?(node)
-					current = node
-				end
-			end
-		end
-		
-		def include?(needle)
-			self.each do |item|
-				return true if needle.equal?(item)
-			end
-			
-			return false
-		end
-		
-		def first
-			@tail
-		end
-		
-		def last
-			@head
-		end
-		
-		def empty?
-			@tail.nil?
-		end
-		
-		def nil?
-			@tail.nil?
-		end
-	end
-	
-	private_constant :List
-	
+	# A list of children tasks.
 	class Children < List
 		def initialize
 			super
-			
 			@transient_count = 0
 		end
 		
-		# Does this node have (direct) transient children?
+		# Some children may be marked as transient. Transient children do not prevent the parent from finishing.
+		# @returns [Boolean] Whether the node has transient children.
 		def transients?
 			@transient_count > 0
 		end
 		
-		def insert(item)
-			if item.transient?
-				@transient_count += 1
-			end
-			
-			super
-		end
-		
-		def delete(item)
-			if item.transient?
-				@transient_count -= 1
-			end
-			
-			super
-		end
-		
+		# Whether all children are considered finished. Ignores transient children.
 		def finished?
 			@size == @transient_count
 		end
+		
+		# Whether the children is empty, preserved for compatibility.
+		def nil?
+			empty?
+		end
+		
+		private
+		
+		def added(node)
+			if node.transient?
+				@transient_count += 1
+			end
+			
+			return super
+		end
+		
+		def removed(node)
+			if node.transient?
+				@transient_count -= 1
+			end
+			
+			return super
+		end
 	end
 	
-	# Represents a node in a tree, used for nested {Task} instances.
+	# A node in a tree, used for implementing the task hierarchy.
 	class Node
 		# Create a new node in the tree.
-		# @param parent [Node, nil] This node will attach to the given parent.
+		# @parameter parent [Node | Nil] This node will attach to the given parent.
 		def initialize(parent = nil, annotation: nil, transient: false)
 			@parent = nil
 			@children = nil
@@ -175,26 +71,38 @@ module Async
 			end
 		end
 		
-		# You should not directly rely on these pointers but instead use `#children`.
-		# List pointers:
+		# @returns [Node] the root node in the hierarchy.
+		def root
+			@parent&.root || self
+		end
+		
+		# @private
 		attr_accessor :head
+		
+		# @private
 		attr_accessor :tail
 		
-		# @attr parent [Node, nil]
+		# @attribute [Node] The parent node.
 		attr :parent
 		
-		# @attr children [List<Node>] Optional list of children.
+		# @attribute children [Children | Nil] Optional list of children.
 		attr :children
 		
 		# A useful identifier for the current node.
 		attr :annotation
 		
-		# Whether there are children?
+		# Whether this node has any children.
+		# @returns [Boolean]
 		def children?
-			@children != nil && !@children.empty?
+			@children && !@children.empty?
 		end
 		
-		# Is this node transient?
+		# Represents whether a node is transient. Transient nodes are not considered
+		# when determining if a node is finished. This is useful for tasks which are
+		# internal to an object rather than explicit user concurrency. For example,
+		# a child task which is pruning a connection pool is transient, because it
+		# is not directly related to the parent task, and should not prevent the
+		# parent task from finishing.
 		def transient?
 			@transient
 		end
@@ -211,10 +119,12 @@ module Async
 		end
 		
 		def description
-			@object_name ||= "#{self.class}:0x#{object_id.to_s(16)}#{@transient ? ' transient' : nil}"
+			@object_name ||= "#{self.class}:#{format '%#018x', object_id}#{@transient ? ' transient' : nil}"
 			
 			if @annotation
 				"#{@object_name} #{@annotation}"
+			elsif line = self.backtrace(0, 1)&.first
+				"#{@object_name} #{line}"
 			else
 				@object_name
 			end
@@ -225,17 +135,20 @@ module Async
 		end
 		
 		def to_s
-			"\#<#{description}>"
+			"\#<#{self.description}>"
 		end
 		
+		alias inspect to_s
+		
 		# Change the parent of this node.
-		# @param parent [Node, nil] the parent to attach to, or nil to detach.
-		# @return [self]
+		#
+		# @parameter parent [Node | Nil] The parent to attach to, or nil to detach.
+		# @returns [Node] Itself.
 		def parent=(parent)
 			return if @parent.equal?(parent)
 			
 			if @parent
-				@parent.delete_child(self)
+				@parent.remove_child(self)
 				@parent = nil
 			end
 			
@@ -246,24 +159,24 @@ module Async
 			return self
 		end
 		
-		protected def set_parent parent
+		protected def set_parent(parent)
 			@parent = parent
 		end
 		
-		protected def add_child child
+		protected def add_child(child)
 			@children ||= Children.new
-			@children.insert(child)
+			@children.append(child)
 			child.set_parent(self)
 		end
 		
-		protected def delete_child(child)
-			@children.delete(child)
+		protected def remove_child(child)
+			@children.remove(child)
 			child.set_parent(nil)
 		end
 		
-		# Whether the node can be consumed safely. By default, checks if the
-		# children set is empty.
-		# @return [Boolean]
+		# Whether the node can be consumed (deleted) safely. By default, checks if the children set is empty.
+		#
+		# @returns [Boolean]
 		def finished?
 			@children.nil? || @children.finished?
 		end
@@ -272,15 +185,14 @@ module Async
 		# the parent.
 		def consume
 			if parent = @parent and finished?
-				parent.delete_child(self)
+				parent.remove_child(self)
 				
+				# If we have children, then we need to move them to our the parent if they are not finished:
 				if @children
-					@children.each do |child|
+					while child = @children.shift
 						if child.finished?
-							delete_child(child)
+							child.set_parent(nil)
 						else
-							# In theory we don't need to do this... because we are throwing away the list. However, if you don't correctly update the list when moving the child to the parent, it foobars the enumeration, and subsequent nodes will be skipped, or in the worst case you might start enumerating the parents nodes.
-							delete_child(child)
 							parent.add_child(child)
 						end
 					end
@@ -292,18 +204,25 @@ module Async
 			end
 		end
 		
-		# Traverse the tree.
-		# @yield [node, level] The node and the level relative to the given root.
-		def traverse(level = 0, &block)
+		# Traverse the task tree.
+		#
+		# @returns [Enumerator] An enumerator which will traverse the tree if no block is given.
+		# @yields {|node, level| ...} The node and the level relative to the given root.
+		def traverse(&block)
+			return enum_for(:traverse) unless block_given?
+			
+			self.traverse_recurse(&block)
+		end
+		
+		protected def traverse_recurse(level = 0, &block)
 			yield self, level
 			
 			@children&.each do |child|
-				child.traverse(level + 1, &block)
+				child.traverse_recurse(level + 1, &block)
 			end
 		end
 		
-		# Immediately terminate all children tasks, including transient tasks.
-		# Internally invokes `stop(false)` on all children.
+		# Immediately terminate all children tasks, including transient tasks. Internally invokes `stop(false)` on all children. This should be considered a last ditch effort and is used when closing the scheduler.
 		def terminate
 			# Attempt to stop the current task immediately, and all children:
 			stop(false)
@@ -314,8 +233,8 @@ module Async
 			end
 		end
 		
-		# Attempt to stop the current node immediately, including all non-transient children.
-		# Invokes {#stop_children} to stop all children.
+		# Attempt to stop the current node immediately, including all non-transient children. Invokes {#stop_children} to stop all children.
+		#
 		# @parameter later [Boolean] Whether to defer stopping until some point in the future.
 		def stop(later = false)
 			# The implementation of this method may defer calling `stop_children`.
@@ -327,6 +246,10 @@ module Async
 			@children&.each do |child|
 				child.stop(later) unless child.transient?
 			end
+		end
+		
+		def stopped?
+			@children.nil?
 		end
 		
 		def print_hierarchy(out = $stdout, backtrace: true)

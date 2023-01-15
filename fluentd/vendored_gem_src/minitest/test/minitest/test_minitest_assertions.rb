@@ -354,7 +354,7 @@ class TestMinitestAssertions < Minitest::Test
           @@ -1,3 +1,3 @@
           -# encoding: UTF-8
           -#    valid: false
-          +# encoding: ASCII-8BIT
+          +# encoding: #{Encoding::BINARY.name}
           +#    valid: true
            "bad-utf8-\\xF1.txt"
           EOM
@@ -373,7 +373,7 @@ class TestMinitestAssertions < Minitest::Test
           @@ -1,3 +1,3 @@
           -# encoding: US-ASCII
           -#    valid: false
-          +# encoding: ASCII-8BIT
+          +# encoding: #{Encoding::BINARY.name}
           +#    valid: true
            "bad-utf8-\\xF1.txt"
           EOM
@@ -484,7 +484,10 @@ class TestMinitestAssertions < Minitest::Test
 
   def test_assert_match
     @assertion_count = 2
-    @tc.assert_match(/\w+/, "blah blah blah")
+    m = @tc.assert_match(/\w+/, "blah blah blah")
+
+    assert_kind_of MatchData, m
+    assert_equal "blah", m[0]
   end
 
   def test_assert_match_matchee_to_str
@@ -804,7 +807,7 @@ class TestMinitestAssertions < Minitest::Test
   # *sigh* This is quite an odd scenario, but it is from real (albeit
   # ugly) test code in ruby-core:
 
-  # http://svn.ruby-lang.org/cgi-bin/viewvc.cgi?view=rev&revision=29259
+  # https://svn.ruby-lang.org/cgi-bin/viewvc.cgi?view=rev&revision=29259
 
   def test_assert_raises_skip
     @assertion_count = 0
@@ -1528,14 +1531,14 @@ class TestMinitestAssertionHelpers < Minitest::Test
 
   def test_mu_pp_for_diff_str_encoding
     str = "A\nB".b
-    exp = "# encoding: ASCII-8BIT\n#    valid: true\n\"A\nB\""
+    exp = "# encoding: #{Encoding::BINARY.name}\n#    valid: true\n\"A\nB\""
 
     assert_mu_pp_for_diff exp, str, :raw
   end
 
   def test_mu_pp_for_diff_str_encoding_both
     str = "A\\n\nB".b
-    exp = "# encoding: ASCII-8BIT\n#    valid: true\n\"A\\\\n\\nB\""
+    exp = "# encoding: #{Encoding::BINARY.name}\n#    valid: true\n\"A\\\\n\\nB\""
 
     assert_mu_pp_for_diff exp, str, :raw
   end
@@ -1575,7 +1578,7 @@ class TestMinitestAssertionHelpers < Minitest::Test
 
   def test_mu_pp_str_encoding
     str = "A\nB".b
-    exp = "# encoding: ASCII-8BIT\n#    valid: true\n\"A\\nB\""
+    exp = "# encoding: #{Encoding::BINARY.name}\n#    valid: true\n\"A\\nB\""
 
     assert_mu_pp exp, str, :raw
   end

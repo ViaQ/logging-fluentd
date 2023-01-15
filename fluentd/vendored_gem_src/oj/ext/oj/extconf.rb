@@ -23,20 +23,21 @@ dflags = {
   'RSTRUCT_LEN_RETURNS_INTEGER_OBJECT' => ('ruby' == type && '2' == version[0] && '4' == version[1] && '1' >= version[2]) ? 1 : 0,
 }
 
-have_func('rb_time_timespec')
-have_func('rb_ivar_count')
-have_func('rb_ivar_foreach')
 # Support for compaction.
 have_func('rb_gc_mark_movable')
 have_func('stpcpy')
 have_func('pthread_mutex_init')
-have_func('rb_enc_associate')
 have_func('rb_enc_interned_str')
 have_func('rb_ext_ractor_safe', 'ruby.h')
 # rb_hash_bulk_insert is deep down in a header not included in normal build and that seems to fool have_func.
 have_func('rb_hash_bulk_insert', 'ruby.h') unless '2' == version[0] && '6' == version[1]
 
 dflags['OJ_DEBUG'] = true unless ENV['OJ_DEBUG'].nil?
+
+if with_config('--with-sse42')
+  $CPPFLAGS += ' -msse4.2'
+  dflags['OJ_USE_SSE4_2'] = 1
+end
 
 dflags.each do |k,v|
   if v.nil?

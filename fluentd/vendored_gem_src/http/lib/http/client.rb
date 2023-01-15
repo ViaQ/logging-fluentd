@@ -16,7 +16,7 @@ module HTTP
     extend Forwardable
     include Chainable
 
-    HTTP_OR_HTTPS_RE = %r{^https?://}i
+    HTTP_OR_HTTPS_RE = %r{^https?://}i.freeze
 
     def initialize(default_options = {})
       @default_options = HTTP::Options.new(default_options)
@@ -25,19 +25,19 @@ module HTTP
     end
 
     # Make an HTTP request
-    def request(verb, uri, opts = {}) # rubocop:disable Style/OptionHash
+    def request(verb, uri, opts = {})
       opts = @default_options.merge(opts)
       req = build_request(verb, uri, opts)
       res = perform(req, opts)
       return res unless opts.follow
 
       Redirector.new(opts.follow).perform(req, res) do |request|
-        perform(request, opts)
+        perform(wrap_request(request, opts), opts)
       end
     end
 
     # Prepare an HTTP request
-    def build_request(verb, uri, opts = {}) # rubocop:disable Style/OptionHash
+    def build_request(verb, uri, opts = {})
       opts    = @default_options.merge(opts)
       uri     = make_request_uri(uri, opts)
       headers = make_request_headers(opts)
@@ -52,9 +52,7 @@ module HTTP
         :body           => body
       )
 
-      opts.features.inject(req) do |request, (_name, feature)|
-        feature.wrap_request(request)
-      end
+      wrap_request(req, opts)
     end
 
     # @!method persistent?
@@ -68,22 +66,20 @@ module HTTP
 
       @state = :dirty
 
-      @connection ||= HTTP::Connection.new(req, options)
+      begin
+        @connection ||= HTTP::Connection.new(req, options)
 
-      unless @connection.failed_proxy_connect?
-        @connection.send_request(req)
-        @connection.read_headers!
+        unless @connection.failed_proxy_connect?
+          @connection.send_request(req)
+          @connection.read_headers!
+        end
+      rescue Error => e
+        options.features.each_value do |feature|
+          feature.on_error(req, e)
+        end
+        raise
       end
-
-      res = Response.new(
-        :status        => @connection.status_code,
-        :version       => @connection.http_version,
-        :headers       => @connection.headers,
-        :proxy_headers => @connection.proxy_response_headers,
-        :connection    => @connection,
-        :encoding      => options.encoding,
-        :uri           => req.uri
-      )
+      res = build_response(req, options)
 
       res = options.features.inject(res) do |response, (_name, feature)|
         feature.wrap_response(response)
@@ -99,26 +95,44 @@ module HTTP
     end
 
     def close
-      @connection.close if @connection
+      @connection&.close
       @connection = nil
       @state = :clean
     end
 
     private
 
+    def wrap_request(req, opts)
+      opts.features.inject(req) do |request, (_name, feature)|
+        feature.wrap_request(request)
+      end
+    end
+
+    def build_response(req, options)
+      Response.new(
+        :status        => @connection.status_code,
+        :version       => @connection.http_version,
+        :headers       => @connection.headers,
+        :proxy_headers => @connection.proxy_response_headers,
+        :connection    => @connection,
+        :encoding      => options.encoding,
+        :request       => req
+      )
+    end
+
     # Verify our request isn't going to be made against another URI
     def verify_connection!(uri)
       if default_options.persistent? && uri.origin != default_options.persistent
         raise StateError, "Persistence is enabled for #{default_options.persistent}, but we got #{uri.origin}"
+      end
+
       # We re-create the connection object because we want to let prior requests
       # lazily load the body as long as possible, and this mimics prior functionality.
-      elsif @connection && (!@connection.keep_alive? || @connection.expired?)
-        close
+      return close if @connection && (!@connection.keep_alive? || @connection.expired?)
+
       # If we get into a bad state (eg, Timeout.timeout ensure being killed)
       # close the connection to prevent potential for mixed responses.
-      elsif @state == :dirty
-        close
-      end
+      return close if @state == :dirty
     end
 
     # Merges query params if needed
@@ -128,15 +142,11 @@ module HTTP
     def make_request_uri(uri, opts)
       uri = uri.to_s
 
-      if default_options.persistent? && uri !~ HTTP_OR_HTTPS_RE
-        uri = "#{default_options.persistent}#{uri}"
-      end
+      uri = "#{default_options.persistent}#{uri}" if default_options.persistent? && uri !~ HTTP_OR_HTTPS_RE
 
       uri = HTTP::URI.parse uri
 
-      if opts.params && !opts.params.empty?
-        uri.query_values = uri.query_values(Array).to_a.concat(opts.params.to_a)
-      end
+      uri.query_values = uri.query_values(Array).to_a.concat(opts.params.to_a) if opts.params && !opts.params.empty?
 
       # Some proxies (seen on WEBRick) fail if URL has
       # empty path (e.g. `http://example.com`) while it's RFC-complaint:

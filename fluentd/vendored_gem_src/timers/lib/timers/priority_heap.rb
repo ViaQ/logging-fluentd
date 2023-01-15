@@ -1,25 +1,8 @@
 # frozen_string_literal: true
 
+# Released under the MIT License.
 # Copyright, 2021, by Wander Hillen.
-# Copyright, 2021, by Samuel G. D. Williams. <http://www.codeotaku.com>
-# 
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-# 
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-# 
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
+# Copyright, 2021-2022, by Samuel Williams.
 
 module Timers
 	# A priority queue implementation using a standard binary minheap. It uses straight comparison
@@ -87,30 +70,19 @@ module Timers
 			return self
 		end
 		
-		private
-		
-		# Validate the heap invariant.
-		def validate!(index = 0)
-			if value = @contents[index]
-				left_index = index*2 + 1
-				if left_value = @contents[left_index]
-					unless value < left_value
-						raise "Invalid left index from #{index}!"
-					end
-					
-					validate!(left_index)
-				end
-				
-				right_index = left_index + 1
-				if right_value = @contents[right_index]
-					unless value < right_value
-						raise "Invalid right index from #{index}!"
-					end
-					
-					validate!(right_index)
-				end
-			end
+		# Empties out the heap, discarding all elements
+		def clear!
+			@contents = []
 		end
+
+		# Validate the heap invariant. Every element except the root must not be smaller than
+		# its parent element. Note that it MAY be equal.
+		def valid?
+			# notice we skip index 0 on purpose, because it has no parent
+			(1..(@contents.size - 1)).all? { |e| @contents[e] >= @contents[(e - 1) / 2] }
+		end
+
+		private
 		
 		def swap(i, j)
 			@contents[i], @contents[j] = @contents[j], @contents[i]

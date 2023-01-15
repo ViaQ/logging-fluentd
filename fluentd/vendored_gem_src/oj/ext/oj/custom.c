@@ -31,14 +31,14 @@ static void dump_obj_str(VALUE obj, int depth, Out out) {
 
 static void dump_obj_as_str(VALUE obj, int depth, Out out) {
     volatile VALUE rstr = rb_funcall(obj, oj_to_s_id, 0);
-    const char *   str  = RSTRING_PTR(rstr);
+    const char    *str  = RSTRING_PTR(rstr);
 
     oj_dump_cstr(str, RSTRING_LEN(rstr), 0, 0, out);
 }
 
 static void bigdecimal_dump(VALUE obj, int depth, Out out) {
     volatile VALUE rstr = rb_funcall(obj, oj_to_s_id, 0);
-    const char *   str  = RSTRING_PTR(rstr);
+    const char    *str  = RSTRING_PTR(rstr);
     int            len  = (int)RSTRING_LEN(rstr);
 
     if (0 == strcasecmp("Infinity", str)) {
@@ -82,8 +82,7 @@ static VALUE complex_load(VALUE clas, VALUE args) {
         real_id = rb_intern("real");
         imag_id = rb_intern("imag");
     }
-    return rb_complex_new(rb_hash_aref(args, rb_id2str(real_id)),
-                          rb_hash_aref(args, rb_id2str(imag_id)));
+    return rb_complex_new(rb_hash_aref(args, rb_id2str(real_id)), rb_hash_aref(args, rb_id2str(imag_id)));
 }
 
 static void time_dump(VALUE obj, int depth, Out out) {
@@ -246,8 +245,7 @@ static VALUE rational_load(VALUE clas, VALUE args) {
         numerator_id   = rb_intern("numerator");
         denominator_id = rb_intern("denominator");
     }
-    return rb_rational_new(rb_hash_aref(args, rb_id2str(numerator_id)),
-                           rb_hash_aref(args, rb_id2str(denominator_id)));
+    return rb_rational_new(rb_hash_aref(args, rb_id2str(numerator_id)), rb_hash_aref(args, rb_id2str(denominator_id)));
 }
 
 static VALUE regexp_load(VALUE clas, VALUE args) {
@@ -292,18 +290,15 @@ static int hash_cb(VALUE key, VALUE value, VALUE ov) {
         assure_size(out, depth * out->indent + 1);
         fill_indent(out, depth);
     } else {
-        assure_size(out,
-                    depth * out->opts->dump_opts.indent_size + out->opts->dump_opts.hash_size + 1);
+        assure_size(out, depth * out->opts->dump_opts.indent_size + out->opts->dump_opts.hash_size + 1);
         if (0 < out->opts->dump_opts.hash_size) {
-            strcpy(out->cur, out->opts->dump_opts.hash_nl);
-            out->cur += out->opts->dump_opts.hash_size;
+            APPEND_CHARS(out->cur, out->opts->dump_opts.hash_nl, out->opts->dump_opts.hash_size);
         }
         if (0 < out->opts->dump_opts.indent_size) {
             int i;
 
             for (i = depth; 0 < i; i--) {
-                strcpy(out->cur, out->opts->dump_opts.indent_str);
-                out->cur += out->opts->dump_opts.indent_size;
+                APPEND_CHARS(out->cur, out->opts->dump_opts.indent_str, out->opts->dump_opts.indent_size);
             }
         }
     }
@@ -317,13 +312,11 @@ static int hash_cb(VALUE key, VALUE value, VALUE ov) {
     } else {
         assure_size(out, out->opts->dump_opts.before_size + out->opts->dump_opts.after_size + 2);
         if (0 < out->opts->dump_opts.before_size) {
-            strcpy(out->cur, out->opts->dump_opts.before_sep);
-            out->cur += out->opts->dump_opts.before_size;
+            APPEND_CHARS(out->cur, out->opts->dump_opts.before_sep, out->opts->dump_opts.before_size);
         }
         *out->cur++ = ':';
         if (0 < out->opts->dump_opts.after_size) {
-            strcpy(out->cur, out->opts->dump_opts.after_sep);
-            out->cur += out->opts->dump_opts.after_size;
+            APPEND_CHARS(out->cur, out->opts->dump_opts.after_sep, out->opts->dump_opts.after_size);
         }
     }
     oj_dump_custom_val(value, depth, out, true);
@@ -344,8 +337,7 @@ static void dump_hash(VALUE obj, int depth, Out out, bool as_ok) {
     cnt = (int)RHASH_SIZE(obj);
     assure_size(out, 2);
     if (0 == cnt) {
-        *out->cur++ = '{';
-        *out->cur++ = '}';
+        APPEND_CHARS(out->cur, "{}", 2);
     } else {
         *out->cur++ = '{';
         out->depth  = depth + 1;
@@ -357,19 +349,15 @@ static void dump_hash(VALUE obj, int depth, Out out, bool as_ok) {
             assure_size(out, depth * out->indent + 2);
             fill_indent(out, depth);
         } else {
-            assure_size(
-                out,
-                depth * out->opts->dump_opts.indent_size + out->opts->dump_opts.hash_size + 1);
+            assure_size(out, depth * out->opts->dump_opts.indent_size + out->opts->dump_opts.hash_size + 1);
             if (0 < out->opts->dump_opts.hash_size) {
-                strcpy(out->cur, out->opts->dump_opts.hash_nl);
-                out->cur += out->opts->dump_opts.hash_size;
+                APPEND_CHARS(out->cur, out->opts->dump_opts.hash_nl, out->opts->dump_opts.hash_size);
             }
             if (0 < out->opts->dump_opts.indent_size) {
                 int i;
 
                 for (i = depth; 0 < i; i--) {
-                    strcpy(out->cur, out->opts->dump_opts.indent_str);
-                    out->cur += out->opts->dump_opts.indent_size;
+                    APPEND_CHARS(out->cur, out->opts->dump_opts.indent_str, out->opts->dump_opts.indent_size);
                 }
             }
         }
@@ -379,10 +367,10 @@ static void dump_hash(VALUE obj, int depth, Out out, bool as_ok) {
 }
 
 static void dump_odd(VALUE obj, Odd odd, VALUE clas, int depth, Out out) {
-    ID *           idp;
-    AttrGetFunc *  fp;
+    ID            *idp;
+    AttrGetFunc   *fp;
     volatile VALUE v;
-    const char *   name;
+    const char    *name;
     size_t         size;
     int            d2 = depth + 1;
 
@@ -391,29 +379,24 @@ static void dump_odd(VALUE obj, Odd odd, VALUE clas, int depth, Out out) {
     if (NULL != out->opts->create_id && Yes == out->opts->create_ok) {
         const char *classname = rb_class2name(clas);
         int         clen      = (int)strlen(classname);
-        size_t sep_len = out->opts->dump_opts.before_size + out->opts->dump_opts.after_size + 2;
+        size_t      sep_len   = out->opts->dump_opts.before_size + out->opts->dump_opts.after_size + 2;
 
         size = d2 * out->indent + 10 + clen + out->opts->create_id_len + sep_len;
         assure_size(out, size);
         fill_indent(out, d2);
         *out->cur++ = '"';
-        memcpy(out->cur, out->opts->create_id, out->opts->create_id_len);
-        out->cur += out->opts->create_id_len;
+        APPEND_CHARS(out->cur, out->opts->create_id, out->opts->create_id_len);
         *out->cur++ = '"';
         if (0 < out->opts->dump_opts.before_size) {
-            strcpy(out->cur, out->opts->dump_opts.before_sep);
-            out->cur += out->opts->dump_opts.before_size;
+            APPEND_CHARS(out->cur, out->opts->dump_opts.before_sep, out->opts->dump_opts.before_size);
         }
         *out->cur++ = ':';
         if (0 < out->opts->dump_opts.after_size) {
-            strcpy(out->cur, out->opts->dump_opts.after_sep);
-            out->cur += out->opts->dump_opts.after_size;
+            APPEND_CHARS(out->cur, out->opts->dump_opts.after_sep, out->opts->dump_opts.after_size);
         }
         *out->cur++ = '"';
-        memcpy(out->cur, classname, clen);
-        out->cur += clen;
-        *out->cur++ = '"';
-        *out->cur++ = ',';
+        APPEND_CHARS(out->cur, classname, clen);
+        APPEND_CHARS(out->cur, "\",", 2);
     }
     if (odd->raw) {
         v = rb_funcall(obj, *odd->attrs, 0);
@@ -429,12 +412,9 @@ static void dump_odd(VALUE obj, Odd odd, VALUE clas, int depth, Out out) {
             assure_size(out, size);
             fill_indent(out, d2);
             *out->cur++ = '"';
-            memcpy(out->cur, name, nlen);
-            out->cur += nlen;
-            *out->cur++ = '"';
-            *out->cur++ = ':';
-            memcpy(out->cur, s, len);
-            out->cur += len;
+            APPEND_CHARS(out->cur, name, nlen);
+            APPEND_CHARS(out->cur, "\":", 2);
+            APPEND_CHARS(out->cur, s, len);
             *out->cur = '\0';
         }
     } else {
@@ -496,10 +476,10 @@ static VALUE dump_common(VALUE obj, int depth, Out out) {
         oj_dump_raw_json(obj, depth, out);
     } else if (Yes == out->opts->to_json && rb_respond_to(obj, oj_to_json_id)) {
         volatile VALUE rs;
-        const char *   s;
+        const char    *s;
         int            len;
 
-        if (Yes == out->opts->trace) {
+        if (RB_UNLIKELY(Yes == out->opts->trace)) {
             oj_trace("to_json", obj, __FILE__, __LINE__, depth + 1, TraceRubyIn);
         }
         if (0 == rb_obj_method_arity(obj, oj_to_json_id)) {
@@ -507,20 +487,19 @@ static VALUE dump_common(VALUE obj, int depth, Out out) {
         } else {
             rs = rb_funcall2(obj, oj_to_json_id, out->argc, out->argv);
         }
-        if (Yes == out->opts->trace) {
+        if (RB_UNLIKELY(Yes == out->opts->trace)) {
             oj_trace("to_json", obj, __FILE__, __LINE__, depth + 1, TraceRubyOut);
         }
         s   = RSTRING_PTR(rs);
         len = (int)RSTRING_LEN(rs);
 
         assure_size(out, len + 1);
-        memcpy(out->cur, s, len);
-        out->cur += len;
+        APPEND_CHARS(out->cur, s, len);
         *out->cur = '\0';
     } else if (Yes == out->opts->as_json && rb_respond_to(obj, oj_as_json_id)) {
         volatile VALUE aj;
 
-        if (Yes == out->opts->trace) {
+        if (RB_UNLIKELY(Yes == out->opts->trace)) {
             oj_trace("as_json", obj, __FILE__, __LINE__, depth + 1, TraceRubyIn);
         }
         // Some classes elect to not take an options argument so check the arity
@@ -530,18 +509,14 @@ static VALUE dump_common(VALUE obj, int depth, Out out) {
         } else {
             aj = rb_funcall2(obj, oj_as_json_id, out->argc, out->argv);
         }
-        if (Yes == out->opts->trace) {
+        if (RB_UNLIKELY(Yes == out->opts->trace)) {
             oj_trace("as_json", obj, __FILE__, __LINE__, depth + 1, TraceRubyOut);
         }
         // Catch the obvious brain damaged recursive dumping.
         if (aj == obj) {
             volatile VALUE rstr = rb_funcall(obj, oj_to_s_id, 0);
 
-            oj_dump_cstr(RSTRING_PTR(rstr),
-                         (int)RSTRING_LEN(rstr),
-                         false,
-                         false,
-                         out);
+            oj_dump_cstr(RSTRING_PTR(rstr), (int)RSTRING_LEN(rstr), false, false, out);
         } else {
             oj_dump_custom_val(aj, depth, out, true);
         }
@@ -625,7 +600,7 @@ static void dump_obj_attrs(VALUE obj, VALUE clas, slot_t id, int depth, Out out)
     assure_size(out, 2);
     *out->cur++ = '{';
     if (Qundef != clas && NULL != out->opts->create_id && Yes == out->opts->create_ok) {
-        size_t sep_len = out->opts->dump_opts.before_size + out->opts->dump_opts.after_size + 2;
+        size_t      sep_len   = out->opts->dump_opts.before_size + out->opts->dump_opts.after_size + 2;
         const char *classname = rb_obj_classname(obj);
         size_t      len       = strlen(classname);
 
@@ -633,21 +608,17 @@ static void dump_obj_attrs(VALUE obj, VALUE clas, slot_t id, int depth, Out out)
         assure_size(out, size);
         fill_indent(out, d2);
         *out->cur++ = '"';
-        memcpy(out->cur, out->opts->create_id, out->opts->create_id_len);
-        out->cur += out->opts->create_id_len;
+        APPEND_CHARS(out->cur, out->opts->create_id, out->opts->create_id_len);
         *out->cur++ = '"';
         if (0 < out->opts->dump_opts.before_size) {
-            strcpy(out->cur, out->opts->dump_opts.before_sep);
-            out->cur += out->opts->dump_opts.before_size;
+            APPEND_CHARS(out->cur, out->opts->dump_opts.before_sep, out->opts->dump_opts.before_size);
         }
         *out->cur++ = ':';
         if (0 < out->opts->dump_opts.after_size) {
-            strcpy(out->cur, out->opts->dump_opts.after_sep);
-            out->cur += out->opts->dump_opts.after_size;
+            APPEND_CHARS(out->cur, out->opts->dump_opts.after_sep, out->opts->dump_opts.after_size);
         }
         *out->cur++ = '"';
-        memcpy(out->cur, classname, len);
-        out->cur += len;
+        APPEND_CHARS(out->cur, classname, len);
         *out->cur++   = '"';
         class_written = true;
     }
@@ -731,19 +702,17 @@ static void dump_array(VALUE a, int depth, Out out, bool as_ok) {
         } else {
             size = d2 * out->indent + 2;
         }
+        assure_size(out, size * cnt);
         cnt--;
         for (i = 0; i <= cnt; i++) {
-            assure_size(out, size);
             if (out->opts->dump_opts.use) {
                 if (0 < out->opts->dump_opts.array_size) {
-                    strcpy(out->cur, out->opts->dump_opts.array_nl);
-                    out->cur += out->opts->dump_opts.array_size;
+                    APPEND_CHARS(out->cur, out->opts->dump_opts.array_nl, out->opts->dump_opts.array_size);
                 }
                 if (0 < out->opts->dump_opts.indent_size) {
                     int i;
                     for (i = d2; 0 < i; i--) {
-                        strcpy(out->cur, out->opts->dump_opts.indent_str);
-                        out->cur += out->opts->dump_opts.indent_size;
+                        APPEND_CHARS(out->cur, out->opts->dump_opts.indent_str, out->opts->dump_opts.indent_size);
                     }
                 }
             } else {
@@ -758,15 +727,13 @@ static void dump_array(VALUE a, int depth, Out out, bool as_ok) {
         assure_size(out, size);
         if (out->opts->dump_opts.use) {
             if (0 < out->opts->dump_opts.array_size) {
-                strcpy(out->cur, out->opts->dump_opts.array_nl);
-                out->cur += out->opts->dump_opts.array_size;
+                APPEND_CHARS(out->cur, out->opts->dump_opts.array_nl, out->opts->dump_opts.array_size);
             }
             if (0 < out->opts->dump_opts.indent_size) {
                 int i;
 
                 for (i = depth; 0 < i; i--) {
-                    strcpy(out->cur, out->opts->dump_opts.indent_str);
-                    out->cur += out->opts->dump_opts.indent_size;
+                    APPEND_CHARS(out->cur, out->opts->dump_opts.indent_str, out->opts->dump_opts.indent_size);
                 }
             }
         } else {
@@ -800,8 +767,7 @@ static void dump_struct(VALUE obj, int depth, Out out, bool as_ok) {
             *out->cur++ = '"';
             oj_dump_custom_val(rb_funcall(obj, oj_begin_id, 0), d3, out, false);
             assure_size(out, 3);
-            *out->cur++ = '.';
-            *out->cur++ = '.';
+            APPEND_CHARS(out->cur, "..", 2);
             if (Qtrue == rb_funcall(obj, oj_exclude_end_id, 0)) {
                 *out->cur++ = '.';
             }
@@ -844,10 +810,8 @@ static void dump_struct(VALUE obj, int depth, Out out, bool as_ok) {
             assure_size(out, size + len + 3);
             fill_indent(out, d3);
             *out->cur++ = '"';
-            memcpy(out->cur, name, len);
-            out->cur += len;
-            *out->cur++ = '"';
-            *out->cur++ = ':';
+            APPEND_CHARS(out->cur, name, len);
+            APPEND_CHARS(out->cur, "\":", 2);
             oj_dump_custom_val(v, d3, out, true);
             *out->cur++ = ',';
         }
@@ -912,7 +876,7 @@ static DumpFunc custom_funcs[] = {
 void oj_dump_custom_val(VALUE obj, int depth, Out out, bool as_ok) {
     int type = rb_type(obj);
 
-    if (Yes == out->opts->trace) {
+    if (RB_UNLIKELY(Yes == out->opts->trace)) {
         oj_trace("dump", obj, __FILE__, __LINE__, depth, TraceIn);
     }
     if (MAX_DEPTH < depth) {
@@ -923,14 +887,14 @@ void oj_dump_custom_val(VALUE obj, int depth, Out out, bool as_ok) {
 
         if (NULL != f) {
             f(obj, depth, out, true);
-            if (Yes == out->opts->trace) {
+            if (RB_UNLIKELY(Yes == out->opts->trace)) {
                 oj_trace("dump", obj, __FILE__, __LINE__, depth, TraceOut);
             }
             return;
         }
     }
     oj_dump_nil(Qnil, depth, out, false);
-    if (Yes == out->opts->trace) {
+    if (RB_UNLIKELY(Yes == out->opts->trace)) {
         oj_trace("dump", Qnil, __FILE__, __LINE__, depth, TraceOut);
     }
 }
@@ -938,7 +902,7 @@ void oj_dump_custom_val(VALUE obj, int depth, Out out, bool as_ok) {
 ///// load functions /////
 
 static void hash_set_cstr(ParseInfo pi, Val kval, const char *str, size_t len, const char *orig) {
-    const char *   key    = kval->key;
+    const char    *key    = kval->key;
     int            klen   = kval->klen;
     Val            parent = stack_peek(&pi->stack);
     volatile VALUE rkey   = kval->key_val;
@@ -955,14 +919,14 @@ static void hash_set_cstr(ParseInfo pi, Val kval, const char *str, size_t len, c
             }
         }
     } else {
-	volatile VALUE rstr = oj_cstr_to_value(str, len, (size_t)pi->options.cache_str);
-        //volatile VALUE rstr = rb_utf8_str_new(str, len);
+        volatile VALUE rstr = oj_cstr_to_value(str, len, (size_t)pi->options.cache_str);
+        // volatile VALUE rstr = rb_utf8_str_new(str, len);
 
         if (Qundef == rkey) {
             if (Yes == pi->options.sym_key) {
                 rkey = ID2SYM(rb_intern3(key, klen, oj_utf8_encoding));
             } else {
-		rkey = rb_utf8_str_new(key, klen);
+                rkey = rb_utf8_str_new(key, klen);
             }
         }
         if (Yes == pi->options.create_ok && NULL != pi->options.str_rx.head) {
@@ -986,7 +950,7 @@ static void hash_set_cstr(ParseInfo pi, Val kval, const char *str, size_t len, c
             break;
         default: break;
         }
-        if (Yes == pi->options.trace) {
+        if (RB_UNLIKELY(Yes == pi->options.trace)) {
             oj_trace_parse_call("set_string", pi, __FILE__, __LINE__, rstr);
         }
     }
@@ -1005,7 +969,7 @@ static void end_hash(struct _parseInfo *pi) {
         }
         parent->clas = Qundef;
     }
-    if (Yes == pi->options.trace) {
+    if (RB_UNLIKELY(Yes == pi->options.trace)) {
         oj_trace_parse_hash_end(pi, __FILE__, __LINE__);
     }
 }
@@ -1035,20 +999,10 @@ static void hash_set_num(struct _parseInfo *pi, Val kval, NumInfo ni) {
                 // match the expected value.
                 parent->val = rb_funcall2(parent->val, oj_utc_id, 0, 0);
             } else if (ni->has_exp) {
-                int64_t          t = (int64_t)(ni->i + ni->exp);
-                struct _timeInfo ti;
-                VALUE            args[8];
-
-                sec_as_time(t, &ti);
-
-                args[0]     = LONG2NUM(ti.year);
-                args[1]     = LONG2NUM(ti.mon);
-                args[2]     = LONG2NUM(ti.day);
-                args[3]     = LONG2NUM(ti.hour);
-                args[4]     = LONG2NUM(ti.min);
-                args[5]     = rb_float_new((double)ti.sec + ((double)nsec + 0.5) / 1000000000.0);
-                args[6]     = LONG2NUM(ni->exp);
-                parent->val = rb_funcall2(rb_cTime, oj_new_id, 7, args);
+                struct timespec ts;
+                ts.tv_sec   = ni->i;
+                ts.tv_nsec  = nsec;
+                parent->val = rb_time_timespec_new(&ts, (int)ni->exp);
             } else {
                 parent->val = rb_time_nano_new(ni->i, (long)nsec);
             }
@@ -1059,7 +1013,7 @@ static void hash_set_num(struct _parseInfo *pi, Val kval, NumInfo ni) {
         break;
     default: break;
     }
-    if (Yes == pi->options.trace) {
+    if (RB_UNLIKELY(Yes == pi->options.trace)) {
         oj_trace_parse_call("set_string", pi, __FILE__, __LINE__, rval);
     }
 }
@@ -1072,7 +1026,7 @@ static void hash_set_value(ParseInfo pi, Val kval, VALUE value) {
     case T_HASH: rb_hash_aset(parent->val, oj_calc_hash_key(pi, kval), value); break;
     default: break;
     }
-    if (Yes == pi->options.trace) {
+    if (RB_UNLIKELY(Yes == pi->options.trace)) {
         oj_trace_parse_call("set_value", pi, __FILE__, __LINE__, value);
     }
 }
@@ -1082,7 +1036,7 @@ static void array_append_num(ParseInfo pi, NumInfo ni) {
     volatile VALUE rval   = oj_num_as_value(ni);
 
     rb_ary_push(parent->val, rval);
-    if (Yes == pi->options.trace) {
+    if (RB_UNLIKELY(Yes == pi->options.trace)) {
         oj_trace_parse_call("append_number", pi, __FILE__, __LINE__, rval);
     }
 }
@@ -1099,7 +1053,7 @@ static void array_append_cstr(ParseInfo pi, const char *str, size_t len, const c
         }
     }
     rb_ary_push(stack_peek(&pi->stack)->val, rstr);
-    if (Yes == pi->options.trace) {
+    if (RB_UNLIKELY(Yes == pi->options.trace)) {
         oj_trace_parse_call("append_string", pi, __FILE__, __LINE__, rstr);
     }
 }

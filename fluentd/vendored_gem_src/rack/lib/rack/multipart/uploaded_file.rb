@@ -1,8 +1,12 @@
 # frozen_string_literal: true
 
+require 'tempfile'
+require 'fileutils'
+
 module Rack
   module Multipart
     class UploadedFile
+
       # The filename, *not* including the path, of the "uploaded" file
       attr_reader :original_filename
 

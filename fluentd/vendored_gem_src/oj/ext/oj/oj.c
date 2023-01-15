@@ -32,6 +32,7 @@ ID oj_array_append_id;
 ID oj_array_end_id;
 ID oj_array_start_id;
 ID oj_as_json_id;
+ID oj_at_id;
 ID oj_begin_id;
 ID oj_bigdecimal_id;
 ID oj_end_id;
@@ -45,7 +46,6 @@ ID oj_hash_key_id;
 ID oj_hash_set_id;
 ID oj_hash_start_id;
 ID oj_iconv_id;
-ID oj_instance_variables_id;
 ID oj_json_create_id;
 ID oj_length_id;
 ID oj_new_id;
@@ -90,7 +90,9 @@ VALUE oj_array_class_sym;
 VALUE oj_create_additions_sym;
 VALUE oj_decimal_class_sym;
 VALUE oj_hash_class_sym;
+VALUE oj_in_sym;
 VALUE oj_indent_sym;
+VALUE oj_nanosecond_sym;
 VALUE oj_object_class_sym;
 VALUE oj_quirks_mode_sym;
 VALUE oj_safe_sym;
@@ -137,6 +139,7 @@ static VALUE rails_sym;
 static VALUE raise_sym;
 static VALUE ruby_sym;
 static VALUE sec_prec_sym;
+static VALUE slash_sym;
 static VALUE strict_sym;
 static VALUE symbol_keys_sym;
 static VALUE time_format_sym;
@@ -153,6 +156,7 @@ static VALUE xmlschema_sym;
 static VALUE xss_safe_sym;
 
 rb_encoding *oj_utf8_encoding = 0;
+int oj_utf8_encoding_index = 0;
 
 #ifdef HAVE_PTHREAD_MUTEX_INIT
 pthread_mutex_t oj_cache_mutex;
@@ -239,7 +243,7 @@ struct _options oj_default_options = {
  *references
  * - *:auto_define* [_Boolean_|_nil_] automatically define classes if they do not exist
  * - *:symbol_keys* [_Boolean_|_nil_] use symbols instead of strings for hash keys
- * - *:escape_mode* [_:newline_|_:json_|_:xss_safe_|_:ascii_|_unicode_xss_|_nil_] determines the
+ * - *:escape_mode* [_:newline_|_:json_|_:slash_|_:xss_safe_|_:ascii_|_:unicode_xss_|_nil_] determines the
  *characters to escape
  * - *:class_cache* [_Boolean_|_nil_] cache classes for faster parsing (if dynamically modifying
  *classes or reloading classes then don't use this)
@@ -247,7 +251,7 @@ struct _options oj_default_options = {
  *to use for JSON
  * - *:time_format* [_:unix_|_:unix_zone_|_:xmlschema_|_:ruby_] time format when dumping
  * - *:bigdecimal_as_decimal* [_Boolean_|_nil_] dump BigDecimal as a decimal number or as a String
- * - *:bigdecimal_load* [_:bigdecimal_|_:float_|_:auto_|_:fast_] load decimals as BigDecimal instead
+ * - *:bigdecimal_load* [_:bigdecimal_|_:float_|_:auto_|_:fast_|_:ruby_] load decimals as BigDecimal instead
  *of as a Float. :auto pick the most precise for the number of digits. :float should be the same as
  *ruby. :fast may require rounding but is must faster.
  * - *:compat_bigdecimal* [_true_|_false_] load decimals as BigDecimal instead of as a Float when in
@@ -404,6 +408,7 @@ static VALUE get_def_opts(VALUE self) {
     switch (oj_default_options.escape_mode) {
     case NLEsc: rb_hash_aset(opts, escape_mode_sym, newline_sym); break;
     case JSONEsc: rb_hash_aset(opts, escape_mode_sym, json_sym); break;
+    case SlashEsc: rb_hash_aset(opts, escape_mode_sym, slash_sym); break;
     case XSSEsc: rb_hash_aset(opts, escape_mode_sym, xss_safe_sym); break;
     case ASCIIEsc: rb_hash_aset(opts, escape_mode_sym, ascii_sym); break;
     case JXEsc: rb_hash_aset(opts, escape_mode_sym, unicode_xss_sym); break;
@@ -733,6 +738,8 @@ static int parse_options_cb(VALUE k, VALUE v, VALUE opts) {
             copts->escape_mode = NLEsc;
         } else if (json_sym == v) {
             copts->escape_mode = JSONEsc;
+        } else if (slash_sym == v) {
+            copts->escape_mode = SlashEsc;
         } else if (xss_safe_sym == v) {
             copts->escape_mode = XSSEsc;
         } else if (ascii_sym == v) {
@@ -925,7 +932,7 @@ static int parse_options_cb(VALUE k, VALUE v, VALUE opts) {
         if (Qnil == v) {
             return ST_CONTINUE;
         }
-        if (TYPE(v) == T_STRUCT && rb_obj_class(v) == rb_cRange) {
+        if (rb_obj_class(v) == rb_cRange) {
             VALUE min = rb_funcall(v, oj_begin_id, 0);
             VALUE max = rb_funcall(v, oj_end_id, 0);
 
@@ -1147,7 +1154,17 @@ static VALUE load_file(int argc, VALUE *argv, VALUE self) {
         }
     }
     path = StringValuePtr(*argv);
-    if (0 == (fd = open(path, O_RDONLY))) {
+#ifdef _WIN32
+    {
+        WCHAR *wide_path;
+        wide_path = rb_w32_mbstr_to_wstr(CP_UTF8, path, -1, NULL);
+        fd = rb_w32_wopen(wide_path, O_RDONLY);
+        free(wide_path);
+    }
+#else
+    fd = open(path, O_RDONLY);
+#endif
+    if (0 == fd) {
         rb_raise(rb_eIOError, "%s", strerror(errno));
     }
     switch (mode) {
@@ -1243,9 +1260,8 @@ static VALUE dump_body(VALUE a) {
 static VALUE dump_ensure(VALUE a) {
     volatile struct dump_arg *arg = (void *)a;
 
-    if (arg->out->allocated) {
-        xfree(arg->out->buf);
-    }
+    oj_out_free(arg->out);
+
     return Qnil;
 }
 
@@ -1257,7 +1273,6 @@ static VALUE dump_ensure(VALUE a) {
  * - *options* [_Hash_] same as default_options
  */
 static VALUE dump(int argc, VALUE *argv, VALUE self) {
-    char            buf[4096];
     struct dump_arg arg;
     struct _out     out;
     struct _options copts = oj_default_options;
@@ -1279,9 +1294,8 @@ static VALUE dump(int argc, VALUE *argv, VALUE self) {
     arg.argc  = argc;
     arg.argv  = argv;
 
-    arg.out->buf       = buf;
-    arg.out->end       = buf + sizeof(buf) - 10;
-    arg.out->allocated = false;
+    oj_out_init(arg.out);
+
     arg.out->omit_nil  = copts.dump_opts.omit_nil;
     arg.out->caller    = CALLER_DUMP;
 
@@ -1313,7 +1327,6 @@ static VALUE dump(int argc, VALUE *argv, VALUE self) {
  * Returns [_String_] the encoded JSON.
  */
 static VALUE to_json(int argc, VALUE *argv, VALUE self) {
-    char            buf[4096];
     struct _out     out;
     struct _options copts = oj_default_options;
     VALUE           rstr;
@@ -1328,9 +1341,9 @@ static VALUE to_json(int argc, VALUE *argv, VALUE self) {
     }
     copts.mode    = CompatMode;
     copts.to_json = Yes;
-    out.buf       = buf;
-    out.end       = buf + sizeof(buf) - 10;
-    out.allocated = false;
+
+    oj_out_init(&out);
+
     out.omit_nil  = copts.dump_opts.omit_nil;
     // For obj.to_json or generate nan is not allowed but if called from dump
     // it is.
@@ -1341,9 +1354,9 @@ static VALUE to_json(int argc, VALUE *argv, VALUE self) {
     }
     rstr = rb_str_new2(out.buf);
     rstr = oj_encode(rstr);
-    if (out.allocated) {
-        xfree(out.buf);
-    }
+
+    oj_out_free(&out);
+
     return rstr;
 }
 
@@ -1703,6 +1716,15 @@ static VALUE protect_require(VALUE x) {
     return Qnil;
 }
 
+extern void print_all_odds(const char *label);
+
+static VALUE
+debug_odd(VALUE self, VALUE label) {
+    print_all_odds(RSTRING_PTR(label));
+    return Qnil;
+}
+
+
 /* Document-module: Oj
  *
  * Optimized JSON (Oj), as the name implies was written to provide speed
@@ -1731,15 +1753,19 @@ static VALUE protect_require(VALUE x) {
  *
  * - *:wab* specifically for WAB data exchange.
  */
-void Init_oj() {
+void Init_oj(void) {
     int err = 0;
 
 #if HAVE_RB_EXT_RACTOR_SAFE
     rb_ext_ractor_safe(true);
 #endif
     Oj = rb_define_module("Oj");
+    rb_gc_register_address(&Oj);
 
     oj_cstack_class = rb_define_class_under(Oj, "CStack", rb_cObject);
+    rb_gc_register_address(&oj_cstack_class);
+
+    rb_undef_alloc_func(oj_cstack_class);
 
     oj_string_writer_init();
     oj_stream_writer_init();
@@ -1748,9 +1774,11 @@ void Init_oj() {
     // On Rubinius the require fails but can be done from a ruby file.
     rb_protect(protect_require, Qnil, &err);
     rb_require("stringio");
-    oj_utf8_encoding = rb_enc_find("UTF-8");
+    oj_utf8_encoding_index = rb_enc_find_index("UTF-8");
+    oj_utf8_encoding = rb_enc_from_index(oj_utf8_encoding_index);
 
     // rb_define_module_function(Oj, "hash_test", hash_test, 0);
+    rb_define_module_function(Oj, "debug_odd", debug_odd, 1);
 
     rb_define_module_function(Oj, "default_options", get_def_opts, 0);
     rb_define_module_function(Oj, "default_options=", set_def_opts, 1);
@@ -1789,6 +1817,7 @@ void Init_oj() {
     oj_array_end_id          = rb_intern("array_end");
     oj_array_start_id        = rb_intern("array_start");
     oj_as_json_id            = rb_intern("as_json");
+    oj_at_id                 = rb_intern("at");
     oj_begin_id              = rb_intern("begin");
     oj_bigdecimal_id         = rb_intern("BigDecimal");
     oj_end_id                = rb_intern("end");
@@ -1802,7 +1831,6 @@ void Init_oj() {
     oj_hash_set_id           = rb_intern("hash_set");
     oj_hash_start_id         = rb_intern("hash_start");
     oj_iconv_id              = rb_intern("iconv");
-    oj_instance_variables_id = rb_intern("instance_variables");
     oj_json_create_id        = rb_intern("json_create");
     oj_length_id             = rb_intern("length");
     oj_new_id                = rb_intern("new");
@@ -1937,10 +1965,14 @@ void Init_oj() {
     rb_gc_register_address(&oj_decimal_class_sym);
     oj_hash_class_sym = ID2SYM(rb_intern("hash_class"));
     rb_gc_register_address(&oj_hash_class_sym);
+    oj_in_sym = ID2SYM(rb_intern("in"));
+    rb_gc_register_address(&oj_in_sym);
     oj_indent_sym = ID2SYM(rb_intern("indent"));
     rb_gc_register_address(&oj_indent_sym);
     oj_max_nesting_sym = ID2SYM(rb_intern("max_nesting"));
     rb_gc_register_address(&oj_max_nesting_sym);
+    oj_nanosecond_sym = ID2SYM(rb_intern("nanosecond"));
+    rb_gc_register_address(&oj_nanosecond_sym);
     oj_object_class_sym = ID2SYM(rb_intern("object_class"));
     rb_gc_register_address(&oj_object_class_sym);
     oj_object_nl_sym = ID2SYM(rb_intern("object_nl"));
@@ -1965,6 +1997,8 @@ void Init_oj() {
     rb_gc_register_address(&ruby_sym);
     sec_prec_sym = ID2SYM(rb_intern("second_precision"));
     rb_gc_register_address(&sec_prec_sym);
+    slash_sym = ID2SYM(rb_intern("slash"));
+    rb_gc_register_address(&slash_sym);
     strict_sym = ID2SYM(rb_intern("strict"));
     rb_gc_register_address(&strict_sym);
     symbol_keys_sym = ID2SYM(rb_intern("symbol_keys"));
@@ -2017,4 +2051,5 @@ void Init_oj() {
     oj_init_doc();
 
     oj_parser_init();
+    oj_scanner_init();
 }

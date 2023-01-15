@@ -80,11 +80,23 @@ typedef struct _ojParser {
 
     char     token[8];
     long     line;
+    long     cur;  // only set before call to a function
     long     col;
     int      ri;
     uint32_t ucode;
     ojType   type;  // valType
     bool     just_one;
 } * ojParser;
+
+// Create a new parser without setting the delegate. The parser is
+// wrapped. The parser is (ojParser)DATA_PTR(value) where value is the return
+// from this function. A delegate must be added before the parser can be
+// used. Optionally oj_parser_set_options can be called if the options are not
+// set directly.
+extern VALUE oj_parser_new();
+
+// Set set the options from a hash (ropts).
+extern void oj_parser_set_option(ojParser p, VALUE ropts);
+
 
 #endif /* OJ_PARSER_H */

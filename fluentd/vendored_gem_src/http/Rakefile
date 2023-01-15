@@ -35,7 +35,7 @@ task :generate_status_codes do
   end
 
   File.open("./lib/http/response/status/reasons.rb", "w") do |io|
-    io.puts <<-TPL.gsub(/^[ ]{6}/, "")
+    io.puts <<~TPL
       # AUTO-GENERATED FILE, DO NOT CHANGE IT MANUALLY
 
       require "delegate"
@@ -61,12 +61,4 @@ task :generate_status_codes do
   end
 end
 
-if ENV["CI"].nil?
-  task :default => %i[spec rubocop verify_measurements]
-else
-  case ENV["SUITE"]
-  when "rubocop"   then task :default => :rubocop
-  when "yardstick" then task :default => :verify_measurements
-  else                  task :default => :spec
-  end
-end
+task :default => %i[spec rubocop verify_measurements]

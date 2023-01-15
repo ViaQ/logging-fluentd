@@ -345,6 +345,12 @@ class Juice < Minitest::Test
     out = Oj.dump hash
     assert_equal(%{{"key":"I \\u003c3 this"}}, out)
   end
+  def test_escapes_slashes_by_default_when_configured_to_do_so
+    hash = {'key' => "I <3 this </script>"}
+    Oj.default_options = {:escape_mode => :slash}
+    out = Oj.dump hash
+    assert_equal(%{{"key":"I <3 this <\\/script>"}}, out)
+  end
   def test_escapes_entities_when_asked_to
     hash = {'key' => "I <3 this"}
     out = Oj.dump(hash, :escape_mode => :xss_safe)
@@ -553,9 +559,6 @@ class Juice < Minitest::Test
   end
 
   def test_io_file
-    # Windows does not support fork
-    return if RbConfig::CONFIG['host_os'] =~ /(mingw|mswin)/
-
     src = { 'x' => true, 'y' => 58, 'z' => [1, 2, 3]}
     filename = File.join(File.dirname(__FILE__), 'open_file_test.json')
     File.open(filename, "w") { |f|
@@ -568,6 +571,8 @@ class Juice < Minitest::Test
   end
 
   def test_io_stream
+    skip 'needs fork' unless Process.respond_to?(:fork)
+
     IO.pipe do |r, w|
       if fork
 	r.close

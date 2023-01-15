@@ -1,5 +1,5 @@
-# frozen_string_literal: true
 # coding: utf-8
+# frozen_string_literal: true
 
 RSpec.describe HTTP::Request do
   let(:proxy)       { {} }
@@ -8,10 +8,10 @@ RSpec.describe HTTP::Request do
 
   subject :request do
     HTTP::Request.new(
-      :verb     => :get,
-      :uri      => request_uri,
-      :headers  => headers,
-      :proxy    => proxy
+      :verb    => :get,
+      :uri     => request_uri,
+      :headers => headers,
+      :proxy   => proxy
     )
   end
 

@@ -7,7 +7,6 @@ require "http/content_type"
 require "http/mime_type"
 require "http/response/status"
 require "http/response/inflater"
-require "http/uri"
 require "http/cookie_jar"
 require "time"
 
@@ -26,8 +25,8 @@ module HTTP
     # @return [Body]
     attr_reader :body
 
-    # @return [URI, nil]
-    attr_reader :uri
+    # @return [Request]
+    attr_reader :request
 
     # @return [Hash]
     attr_reader :proxy_headers
@@ -41,10 +40,11 @@ module HTTP
     # @option opts [HTTP::Connection] :connection
     # @option opts [String] :encoding Encoding to use when reading body
     # @option opts [String] :body
-    # @option opts [String] :uri
+    # @option opts [HTTP::Request] request The request this is in response to.
+    # @option opts [String] :uri (DEPRECATED) used to populate a missing request
     def initialize(opts)
       @version       = opts.fetch(:version)
-      @uri           = HTTP::URI.parse(opts.fetch(:uri)) if opts.include? :uri
+      @request       = init_request(opts)
       @status        = HTTP::Response::Status.new(opts.fetch(:status))
       @headers       = HTTP::Headers.coerce(opts[:headers] || {})
       @proxy_headers = HTTP::Headers.coerce(opts[:proxy_headers] || {})
@@ -53,7 +53,7 @@ module HTTP
         @body = opts.fetch(:body)
       else
         connection = opts.fetch(:connection)
-        encoding   = opts[:encoding] || charset || Encoding::BINARY
+        encoding = opts[:encoding] || charset || default_encoding
 
         @body = Response::Body.new(connection, :encoding => encoding)
       end
@@ -61,24 +61,28 @@ module HTTP
 
     # @!method reason
     #   @return (see HTTP::Response::Status#reason)
-    def_delegator :status, :reason
+    def_delegator :@status, :reason
 
     # @!method code
     #   @return (see HTTP::Response::Status#code)
-    def_delegator :status, :code
+    def_delegator :@status, :code
 
     # @!method to_s
     #   (see HTTP::Response::Body#to_s)
-    def_delegator :body, :to_s
+    def_delegator :@body, :to_s
     alias to_str to_s
 
     # @!method readpartial
     #   (see HTTP::Response::Body#readpartial)
-    def_delegator :body, :readpartial
+    def_delegator :@body, :readpartial
 
     # @!method connection
     #   (see HTTP::Response::Body#connection)
-    def_delegator :body, :connection
+    def_delegator :@body, :connection
+
+    # @!method uri
+    #   @return (see HTTP::Request#uri)
+    def_delegator :@request, :uri
 
     # Returns an Array ala Rack: `[status, headers, body]`
     #
@@ -134,8 +138,8 @@ module HTTP
     def_delegator :content_type, :charset
 
     def cookies
-      @cookies ||= headers.each_with_object CookieJar.new do |(k, v), jar|
-        jar.parse(v, uri) if k == Headers::SET_COOKIE
+      @cookies ||= headers.get(Headers::SET_COOKIE).each_with_object CookieJar.new do |v, jar|
+        jar.parse(v, uri)
       end
     end
 
@@ -150,17 +154,39 @@ module HTTP
 
     # Parse response body with corresponding MIME type adapter.
     #
-    # @param [#to_s] as Parse as given MIME type
-    #   instead of the one determined from headers
-    # @raise [HTTP::Error] if adapter not found
+    # @param type [#to_s] Parse as given MIME type.
+    # @raise (see MimeType.[])
     # @return [Object]
-    def parse(as = nil)
-      MimeType[as || mime_type].decode to_s
+    def parse(type = nil)
+      MimeType[type || mime_type].decode to_s
     end
 
     # Inspect a response
     def inspect
       "#<#{self.class}/#{@version} #{code} #{reason} #{headers.to_h.inspect}>"
+    end
+
+    private
+
+    def default_encoding
+      return Encoding::UTF_8 if mime_type == "application/json"
+
+      Encoding::BINARY
+    end
+
+    # Initialize an HTTP::Request from options.
+    #
+    # @return [HTTP::Request]
+    def init_request(opts)
+      raise ArgumentError, ":uri is for backwards compatibilty and conflicts with :request" \
+        if opts[:request] && opts[:uri]
+
+      # For backwards compatibilty
+      if opts[:uri]
+        HTTP::Request.new(:uri => opts[:uri], :verb => :get)
+      else
+        opts.fetch(:request)
+      end
     end
   end
 end

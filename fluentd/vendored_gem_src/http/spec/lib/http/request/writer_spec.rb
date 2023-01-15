@@ -1,5 +1,5 @@
-# frozen_string_literal: true
 # coding: utf-8
+# frozen_string_literal: true
 
 RSpec.describe HTTP::Request::Writer do
   let(:io)          { StringIO.new }
@@ -22,6 +22,18 @@ RSpec.describe HTTP::Request::Writer do
       end
     end
 
+    context "when headers are specified as strings with mixed case" do
+      let(:headers) { HTTP::Headers.coerce "content-Type" => "text", "X_MAX" => "200" }
+
+      it "writes the headers with the same casing" do
+        writer.stream
+        expect(io.string).to eq [
+          "#{headerstart}\r\n",
+          "content-Type: text\r\nX_MAX: 200\r\nContent-Length: 0\r\n\r\n"
+        ].join
+      end
+    end
+
     context "when body is nonempty" do
       let(:body) { HTTP::Request::Body.new("content") }
 
@@ -35,8 +47,19 @@ RSpec.describe HTTP::Request::Writer do
       end
     end
 
-    context "when body is empty" do
+    context "when body is not set" do
       let(:body) { HTTP::Request::Body.new(nil) }
+
+      it "doesn't write anything to the socket and doesn't set Content-Length" do
+        writer.stream
+        expect(io.string).to eq [
+          "#{headerstart}\r\n\r\n"
+        ].join
+      end
+    end
+
+    context "when body is empty" do
+      let(:body) { HTTP::Request::Body.new("") }
 
       it "doesn't write anything to the socket and sets Content-Length" do
         writer.stream

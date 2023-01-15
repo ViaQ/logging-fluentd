@@ -19,11 +19,11 @@ Gem::Specification.new do |spec|
   spec.executables   = spec.files.grep(%r{^bin/}) { |f| File.basename(f) }
   spec.test_files    = []
   spec.require_paths = ['lib']
-  spec.required_ruby_version = '>= 2.2.0'
+  spec.required_ruby_version = '>= 2.7.0'
 
   spec.add_development_dependency 'bundler', '>= 1.6'
-  spec.add_development_dependency 'rake', '~> 12.0'
-  spec.add_development_dependency 'minitest'
+  spec.add_development_dependency 'rake', '~> 13.0'
+  spec.add_development_dependency 'minitest', '~> 5.15.0'
   spec.add_development_dependency 'minitest-rg'
   spec.add_development_dependency 'webmock', '~> 3.0'
   spec.add_development_dependency 'vcr'
@@ -32,9 +32,11 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency('mocha', '~> 1.5')
   spec.add_development_dependency 'openid_connect', '~> 1.1'
   spec.add_development_dependency 'net-smtp'
+  # needed on Windows, at least for openid_connect
+  spec.add_development_dependency 'tzinfo-data'
 
   spec.add_dependency 'jsonpath', '~> 1.0'
   spec.add_dependency 'rest-client', '~> 2.0'
   spec.add_dependency 'recursive-open-struct', '~> 1.1', '>= 1.1.1'
-  spec.add_dependency 'http', '>= 3.0', '< 5.0'
+  spec.add_dependency 'http', '>= 3.0', '< 6.0'
 end

@@ -307,6 +307,7 @@ module Ethon
       option :easy, :port, :int, 3
       option :easy, :tcp_nodelay, :bool, 121
       option :easy, :address_scope, :int, 171
+      option :easy, :tcp_fastopen, :bool, 212
       option :easy, :tcp_keepalive, :bool, 213
       option :easy, :tcp_keepidle, :int, 214
       option :easy, :tcp_keepintvl, :int, 215
@@ -352,7 +353,7 @@ module Ethon
       option :easy, :cookiesession, :bool, 96
       option :easy, :cookielist, :string, 135
       option :easy, :httpget, :bool, 80
-      option :easy, :http_version, :enum, 84, [:none, :httpv1_0, :httpv1_1, :httpv2_0]
+      option :easy, :http_version, :enum, 84, [:none, :httpv1_0, :httpv1_1, :httpv2_0, :httpv2_tls, :httpv2_prior_knowledge]
       option :easy, :ignore_content_length, :bool, 136
       option :easy, :http_content_decoding, :bool, 158
       option :easy, :http_transfer_decoding, :bool, 157
@@ -440,7 +441,7 @@ module Ethon
       option_alias :easy, :keypasswd, :sslkeypasswd
       option :easy, :sslengine, :string, 89
       option :easy, :sslengine_default, :none, 90
-      option :easy, :sslversion, :enum, 32, [:default, :tlsv1, :sslv2, :sslv3, :tlsv1_0, :tlsv1_1, :tlsv1_2]
+      option :easy, :sslversion, :enum, 32, [:default, :tlsv1, :sslv2, :sslv3, :tlsv1_0, :tlsv1_1, :tlsv1_2, :tlsv1_3]
       option :easy, :ssl_verifypeer, :bool, 64
       option :easy, :cainfo, :string, 65
       option :easy, :issuercert, :string, 170
@@ -463,7 +464,7 @@ module Ethon
       option :easy, :proxy_capath, :string, 247
       option :easy, :proxy_ssl_verifypeer, :bool, 248
       option :easy, :proxy_ssl_verifyhost, :int, 249
-      option :easy, :proxy_sslversion, :enum, 250, [:default, :tlsv1, :sslv2, :sslv3, :tlsv1_0, :tlsv1_1, :tlsv1_2]
+      option :easy, :proxy_sslversion, :enum, 250, [:default, :tlsv1, :sslv2, :sslv3, :tlsv1_0, :tlsv1_1, :tlsv1_2, :tlsv1_3]
       option :easy, :proxy_tlsauth_username, :string, 251
       option :easy, :proxy_tlsauth_password, :string, 252
       option :easy, :proxy_tlsauth_type, :enum, 253, [:none, :srp]

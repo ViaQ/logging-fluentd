@@ -7,22 +7,22 @@ Excon was designed to be simple, fast and performant. It works great as a genera
 [![Build Status](https://github.com/excon/excon/actions/workflows/ruby.yml/badge.svg)](https://github.com/excon/excon/actions/workflows/ruby.yml)
 [![Gem Version](https://badge.fury.io/rb/excon.svg)](https://badge.fury.io/rb/excon)
 
-* [Getting Started](#getting-started)
-* [Options](#options)
-* [Chunked Requests](#chunked-requests)
-* [Pipelining Requests](#pipelining-requests)
-* [Streaming Responses](#streaming-responses)
-* [Proxy Support](#proxy-support)
-* [Reusable ports](#reusable-ports)
-* [Unix Socket Support](#unix-socket-support)
-* [Stubs](#stubs)
-* [Instrumentation](#instrumentation)
-* [HTTPS client certificate](#https-client-certificate)
-* [HTTPS/SSL Issues](#httpsssl-issues)
-* [Getting Help](#getting-help)
-* [Contributing](#contributing)
-* [Plugins and Middlewares](#plugins-and-middlewares)
-* [License](#license)
+- [Getting Started](#getting-started)
+- [Options](#options)
+- [Chunked Requests](#chunked-requests)
+- [Pipelining Requests](#pipelining-requests)
+- [Streaming Responses](#streaming-responses)
+- [Proxy Support](#proxy-support)
+- [Reusable ports](#reusable-ports)
+- [Unix Socket Support](#unix-socket-support)
+- [Stubs](#stubs)
+- [Instrumentation](#instrumentation)
+- [HTTPS client certificate](#https-client-certificate)
+- [HTTPS/SSL Issues](#httpsssl-issues)
+- [Getting Help](#getting-help)
+- [Contributing](#contributing)
+- [Plugins and Middlewares](#plugins-and-middlewares)
+- [License](#license)
 
 ## Getting Started
 
@@ -92,7 +92,6 @@ connection.get # socket reused
 Note that sending a request with `:persistent => false` to close the socket will also send `Connection: close` to inform
 the server the connection is no longer needed. `Connection#reset` will simply close our end of the socket.
 
-
 ## Options
 
 Both one-off and persistent connections support many other options. The final options for a request are built up by starting with `Excon.defaults`, then merging in options from the connection and finally merging in any request options. In this way you have plenty of options on where and how to set options and can easily setup connections or defaults to match common options for a particular endpoint.
@@ -128,35 +127,6 @@ connection.request(:method => 'GET')
 # expect one or more status codes, or raise an error
 connection.request(:expects => [200, 201], :method => :get)
 
-# this request can be repeated safely, so retry on errors up to 4 times
-connection.request(:idempotent => true)
-
-# this request can be repeated safely, retry up to 6 times
-connection.request(:idempotent => true, :retry_limit => 6)
-
-# this request can be repeated safely, retry up to 6 times and sleep 5 seconds
-# in between each retry
-connection.request(:idempotent => true, :retry_limit => 6, :retry_interval => 5)
-
-# set longer read_timeout (default is 60 seconds)
-connection.request(:read_timeout => 360)
-
-# set longer write_timeout (default is 60 seconds)
-connection.request(:write_timeout => 360)
-
-# Enable the socket option TCP_NODELAY on the underlying socket.
-#
-# This can improve response time when sending frequent short
-# requests in time-sensitive scenarios.
-#
-connection = Excon.new('http://geemus.com/', :tcp_nodelay => true)
-
-# set longer connect_timeout (default is 60 seconds)
-connection = Excon.new('http://geemus.com/', :connect_timeout => 360)
-
-# opt-out of nonblocking operations for performance and/or as a workaround
-connection = Excon.new('http://geemus.com/', :nonblock => false)
-
 # use basic authentication by supplying credentials in the URL or as parameters
 connection = Excon.new('http://username:password@secure.geemus.com')
 # Note: username & password is unescaped for request, so you should provide escaped values here
@@ -182,6 +152,45 @@ connection = Excon.new('http://geemus.com/', :headers => { "Accept-Encoding" => 
 # turn off peer verification (less secure)
 Excon.defaults[:ssl_verify_peer] = false
 connection = Excon.new('https://...')
+```
+
+## Timeouts and Retries
+
+You can modify timeouts and define whether and how many (blocking) retries Excon should attempt if errors occur.
+
+```ruby
+# this request can be repeated safely, so retry on errors up to 4 times
+connection.request(:idempotent => true)
+
+# this request can be repeated safely, retry up to 6 times
+connection.request(:idempotent => true, :retry_limit => 6)
+
+# this request can be repeated safely, retry up to 6 times and sleep 5 seconds
+# in between each retry
+connection.request(:idempotent => true, :retry_limit => 6, :retry_interval => 5)
+
+# specify the errors on which to retry (default Timeout, Socket, HTTPStatus)
+# only retry on timeouts
+connection.request(:idempotent => true, :retry_limit => 6, :retry_interval => 5, :retry_errors => [Excon::Error::Timeout] )
+
+# set longer read_timeout (default is 60 seconds)
+connection.request(:read_timeout => 360)
+
+# set longer write_timeout (default is 60 seconds)
+connection.request(:write_timeout => 360)
+
+# Enable the socket option TCP_NODELAY on the underlying socket.
+#
+# This can improve response time when sending frequent short
+# requests in time-sensitive scenarios.
+#
+connection = Excon.new('http://geemus.com/', :tcp_nodelay => true)
+
+# set longer connect_timeout (default is 60 seconds)
+connection = Excon.new('http://geemus.com/', :connect_timeout => 360)
+
+# opt-out of nonblocking operations for performance and/or as a workaround
+connection = Excon.new('http://geemus.com/', :nonblock => false)
 ```
 
 ## Chunked Requests
@@ -277,7 +286,7 @@ s.close
 
 ## Unix Socket Support
 
-The Unix socket will work for one-off requests and multiuse connections.  A Unix socket path must be provided separate from the resource path.
+The Unix socket will work for one-off requests and multiuse connections. A Unix socket path must be provided separate from the resource path.
 
 ```ruby
 connection = Excon.new('unix:///', :socket => '/tmp/unicorn.sock')
@@ -309,7 +318,19 @@ Excon.stub({}, {:body => 'body', :status => 200})
 Excon.stub({}, lambda {|request_params| {:body => request_params[:body], :status => 200}})
 ```
 
-Omitted attributes are assumed to match, so this stub will match *any* request and return an Excon::Response with a body of 'body' and status of 200.  You can add whatever stubs you might like this way and they will be checked against in the order they were added, if none of them match then excon will raise an `Excon::Errors::StubNotFound` error to let you know.
+Omitted attributes are assumed to match, so this stub will match _any_ request and return an Excon::Response with a body of 'body' and status of 200.
+
+```ruby
+Excon.stub({ :scheme => 'https', :host => 'example.com', :path => /\/examples\/\d+/, :port => 443 }, { body: 'body', status: 200 })
+```
+
+The above code will stub this:
+
+```ruby
+Excon.get('https://example.com/examples/123', mock: true)
+```
+
+You can add whatever stubs you might like this way and they will be checked against in the order they were added, if none of them match then excon will raise an `Excon::Errors::StubNotFound` error to let you know.
 
 If you want to allow unstubbed requests without raising `StubNotFound`, set the `allow_unstubbed_requests` option either globally or per request.
 
@@ -356,7 +377,7 @@ connection = Excon.new(
 )
 ```
 
-Excon will then instrument each request, retry, and error.  The corresponding events are named `excon.request`, `excon.retry`, and `excon.error` respectively.
+Excon will then instrument each request, retry, and error. The corresponding events are named `excon.request`, `excon.retry`, and `excon.error` respectively.
 
 ```ruby
 ActiveSupport::Notifications.subscribe(/excon/) do |*args|
@@ -410,7 +431,7 @@ The #instrument method will be called for each HTTP request, response, retry, an
 
 For debugging purposes you can also use `Excon::StandardInstrumentor` to output all events to stderr. This can also be specified by setting the `EXCON_DEBUG` ENV var.
 
-See [the documentation for ActiveSupport::Notifications](http://api.rubyonrails.org/classes/ActiveSupport/Notifications.html) for more detail on using the subscription interface.  See excon's [instrumentation_test.rb](https://github.com/excon/excon/blob/master/tests/middlewares/instrumentation_tests.rb) for more examples of instrumenting excon.
+See [the documentation for ActiveSupport::Notifications](http://api.rubyonrails.org/classes/ActiveSupport/Notifications.html) for more detail on using the subscription interface. See excon's [instrumentation_test.rb](https://github.com/excon/excon/blob/master/tests/middlewares/instrumentation_tests.rb) for more examples of instrumenting excon.
 
 ## HTTPS client certificate
 
@@ -459,8 +480,8 @@ Either of these should allow you to work around the socket error and continue wi
 
 ## Getting Help
 
-* Ask specific questions on [Stack Overflow](http://stackoverflow.com/questions/tagged/excon).
-* Report bugs and discuss potential features in [Github issues](https://github.com/excon/excon/issues).
+- Ask specific questions on [Stack Overflow](http://stackoverflow.com/questions/tagged/excon).
+- Report bugs and discuss potential features in [Github issues](https://github.com/excon/excon/issues).
 
 ## Contributing
 
@@ -472,12 +493,12 @@ Using Excon's [Middleware system][middleware], you can easily extend Excon's
 functionality with your own. The following plugins extend Excon in their own
 way:
 
-* [excon-addressable](https://github.com/JeanMertz/excon-addressable)
+- [excon-addressable](https://github.com/JeanMertz/excon-addressable)
 
   Set [addressable](https://github.com/sporkmonger/addressable) as the default
   URI parser, and add support for [URI templating][templating].
 
-* [excon-hypermedia](https://github.com/JeanMertz/excon-hypermedia)
+- [excon-hypermedia](https://github.com/JeanMertz/excon-hypermedia)
 
   Teaches Excon to talk with [HyperMedia APIs][hypermedia]. Allowing you to use
   all of Excon's functionality, while traversing APIs in an easy and

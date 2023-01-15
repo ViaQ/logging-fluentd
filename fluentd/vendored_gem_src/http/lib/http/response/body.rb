@@ -28,7 +28,8 @@ module HTTP
       def readpartial(*args)
         stream!
         chunk = @stream.readpartial(*args)
-        chunk.force_encoding(@encoding) if chunk
+
+        String.new(chunk, :encoding => @encoding) if chunk
       end
 
       # Iterate over the body, allowing it to be enumerable
@@ -46,11 +47,11 @@ module HTTP
 
         begin
           @streaming  = false
-          @contents   = String.new("").force_encoding(@encoding)
+          @contents   = String.new("", :encoding => @encoding)
 
           while (chunk = @stream.readpartial)
-            @contents << chunk.force_encoding(@encoding)
-            chunk.clear # deallocate string
+            @contents << String.new(chunk, :encoding => @encoding)
+            chunk = nil # deallocate string
           end
         rescue
           @contents = nil
@@ -64,6 +65,7 @@ module HTTP
       # Assert that the body is actively being streamed
       def stream!
         raise StateError, "body has already been consumed" if @streaming == false
+
         @streaming = true
       end
 

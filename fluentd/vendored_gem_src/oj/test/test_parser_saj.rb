@@ -5,7 +5,7 @@ $: << File.dirname(__FILE__)
 
 require 'helper'
 
-$json = %{{
+$json = %|{
   "array": [
     {
       "num"   : 3,
@@ -18,7 +18,7 @@ $json = %{{
     }
   ],
   "boolean" : true
-}}
+}|
 
 class AllSaj < Oj::Saj
   attr_accessor :calls
@@ -52,6 +52,35 @@ class AllSaj < Oj::Saj
   end
 
 end # AllSaj
+
+class LocSaj
+  attr_accessor :calls
+
+  def initialize()
+    @calls = []
+  end
+
+  def hash_start(key, line, column)
+    @calls << [:hash_start, key, line, column]
+  end
+
+  def hash_end(key, line, column)
+    @calls << [:hash_end, key, line, column]
+  end
+
+  def array_start(key, line, column)
+    @calls << [:array_start, key, line, column]
+  end
+
+  def array_end(key, line, column)
+    @calls << [:array_end, key, line, column]
+  end
+
+  def add_value(value, key, line, column)
+    @calls << [:add_value, value, key, line, column]
+  end
+
+end # LocSaj
 
 class SajTest < Minitest::Test
 
@@ -118,6 +147,43 @@ class SajTest < Minitest::Test
     assert_equal(1, handler.calls.size)
     assert_equal(:add_value, handler.calls[0][0])
     assert_equal((12345.6789e7 * 10000).to_i, (handler.calls[0][1] * 10000).to_i)
+  end
+
+  def test_bignum
+    handler = AllSaj.new()
+    json = %{-11.899999999999999}
+    p = Oj::Parser.new(:saj)
+    p.handler = handler
+    p.parse(json)
+    assert_equal(1, handler.calls.size)
+    assert_equal(:add_value, handler.calls[0][0])
+    assert_equal(-118999, (handler.calls[0][1] * 10000).to_i)
+  end
+
+  def test_bignum_loc
+    handler = LocSaj.new()
+    json = <<~JSON
+      {
+        "width": 192.33800000000002,
+        "xaxis": {
+          "anchor": "y"
+        }
+      }
+    JSON
+
+    p = Oj::Parser.new(:saj)
+    p.handler = handler
+    p.parse(json)
+    assert_equal(6, handler.calls.size)
+    assert_equal(1_923_380, (handler.calls[1][1] * 10000).to_i)
+    handler.calls[1][1] = 1_923_380
+    assert_equal([[:hash_start, nil, 1, 1],
+                  [:add_value, 1923380, 'width', 2, 30],
+                  [:hash_start, 'xaxis', 3, 12],
+                  [:add_value, 'y', 'anchor', 4, 17],
+                  [:hash_end, 'xaxis', 5, 3],
+                  [:hash_end, nil, 6, 1]],
+                 handler.calls)
   end
 
   def test_array_empty
@@ -240,6 +306,30 @@ class SajTest < Minitest::Test
                    [:add_value, true, nil],
                    [:array_end, nil],
 		 ], handler.calls)
+  end
+
+  def test_loc
+    handler = LocSaj.new()
+    Oj::Parser.saj.handler = handler
+    Oj::Parser.saj.parse($json)
+    assert_equal([[:hash_start, nil, 1, 1],
+                  [:array_start, 'array', 2, 12],
+                  [:hash_start, nil, 3, 5],
+                  [:add_value, 3, 'num', 4, 18],
+                  [:add_value, 'message', 'string', 5, 25],
+                  [:hash_start, 'hash', 6, 17],
+                  [:hash_start, 'h2', 7, 17],
+                  [:array_start, 'a', 8, 17],
+                  [:add_value, 1, nil, 8, 20],
+                  [:add_value, 2, nil, 8, 23],
+                  [:add_value, 3, nil, 8, 26],
+                  [:array_end, 'a', 8, 27],
+                  [:hash_end, 'h2', 9, 9],
+                  [:hash_end, 'hash', 10, 7],
+                  [:hash_end, nil, 11, 5],
+                  [:array_end, 'array', 12, 3],
+                  [:add_value, true, 'boolean', 13, 18],
+                  [:hash_end, nil, 14, 1]], handler.calls)
   end
 
 end

@@ -130,8 +130,8 @@ class FileJuice < Minitest::Test
     dump_and_load(t, false)
   end
   def test_time_object_early
-    # Windows does not support dates before 1970.
-    return if RbConfig::CONFIG['host_os'] =~ /(mingw|mswin)/
+    skip 'Windows does not support dates before 1970.' if RbConfig::CONFIG['host_os'] =~ /(mingw|mswin)/
+
     t = Time.xmlschema("1954-01-05T00:00:00.123456")
     Oj.default_options = { :mode => :object, :time_format => :unix_zone }
     dump_and_load(t, false)
@@ -162,12 +162,10 @@ class FileJuice < Minitest::Test
   def test_range_object
     Oj.default_options = { :mode => :object }
     json = Oj.dump(1..7, :mode => :object, :indent => 0)
-    if 'rubinius' == $ruby
-      assert(%{{"^O":"Range","begin":1,"end":7,"exclude_end?":false}} == json)
-    elsif 'jruby' == $ruby
-      assert(%{{"^O":"Range","begin":1,"end":7,"exclude_end?":false}} == json)
-    else
+    if $ruby == 'ruby'
       assert_equal(%{{"^u":["Range",1,7,false]}}, json)
+    else
+      assert(%{{"^O":"Range","begin":1,"end":7,"exclude_end?":false}} == json)
     end
     dump_and_load(1..7, false)
     dump_and_load(1..1, false)
@@ -210,6 +208,24 @@ class FileJuice < Minitest::Test
   def test_datetime_object
     Oj.default_options = { :mode => :object }
     dump_and_load(DateTime.new(2012, 6, 19), false)
+  end
+
+  def test_load_unicode_path
+    json =<<~JSON
+    {
+      "x":true,
+      "y":58,
+      "z": [1,2,3]
+    }
+    JSON
+
+    Tempfile.create('file_test_conceição1.json') do |f|
+      f.write(json)
+      f.close
+
+      objects = Oj.load_file(f.path)
+      assert_equal(Oj.load(json), objects)
+    end
   end
 
   def dump_and_load(obj, trace=false)

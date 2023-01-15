@@ -3,9 +3,9 @@
 RSpec.describe HTTP::Connection do
   let(:req) do
     HTTP::Request.new(
-      :verb     => :get,
-      :uri      => "http://example.com/",
-      :headers  => {}
+      :verb    => :get,
+      :uri     => "http://example.com/",
+      :headers => {}
     )
   end
   let(:socket) { double(:connect => nil) }
@@ -20,14 +20,17 @@ RSpec.describe HTTP::Connection do
         <<-RESPONSE.gsub(/^\s*\| */, "").gsub(/\n/, "\r\n")
         | HTTP/1.1 200 OK
         | Content-Type: text
+        | foo_bar: 123
         |
         RESPONSE
       end
     end
 
-    it "reads data in parts" do
+    it "populates headers collection, preserving casing" do
       connection.read_headers!
-      expect(connection.headers).to eq("Content-Type" => "text")
+      expect(connection.headers).to eq("Content-Type" => "text", "foo_bar" => "123")
+      expect(connection.headers["Foo-Bar"]).to eq("123")
+      expect(connection.headers["foo_bar"]).to eq("123")
     end
   end
 

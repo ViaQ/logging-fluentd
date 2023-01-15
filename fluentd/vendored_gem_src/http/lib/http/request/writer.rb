@@ -47,7 +47,11 @@ module HTTP
       # Adds the headers to the header array for the given request body we are working
       # with
       def add_body_type_headers
-        return if @headers[Headers::CONTENT_LENGTH] || chunked?
+        return if @headers[Headers::CONTENT_LENGTH] || chunked? || (
+          @body.source.nil? && %w[GET HEAD DELETE CONNECT].any? do |method|
+            @request_header[0].start_with?("#{method} ")
+          end
+        )
 
         @request_header << "#{Headers::CONTENT_LENGTH}: #{@body.size}"
       end
@@ -57,7 +61,7 @@ module HTTP
       def join_headers
         # join the headers array with crlfs, stick two on the end because
         # that ends the request header
-        @request_header.join(CRLF) + CRLF * 2
+        @request_header.join(CRLF) + (CRLF * 2)
       end
 
       # Writes HTTP request data into the socket.
@@ -108,12 +112,13 @@ module HTTP
         until data.empty?
           length = @socket.write(data)
           break unless data.bytesize > length
+
           data = data.byteslice(length..-1)
         end
       rescue Errno::EPIPE
         raise
-      rescue IOError, SocketError, SystemCallError => ex
-        raise ConnectionError, "error writing to socket: #{ex}", ex.backtrace
+      rescue IOError, SocketError, SystemCallError => e
+        raise ConnectionError, "error writing to socket: #{e}", e.backtrace
       end
     end
   end

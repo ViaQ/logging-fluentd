@@ -58,7 +58,7 @@ module HTTP
       #   SYMBOLS[418] # => :im_a_teapot
       #
       # @return [Hash<Fixnum => Symbol>]
-      SYMBOLS = Hash[REASONS.map { |k, v| [k, symbolize(v)] }].freeze
+      SYMBOLS = REASONS.transform_values { |v| symbolize(v) }.freeze
 
       # Reversed {SYMBOLS} map.
       #
@@ -69,7 +69,7 @@ module HTTP
       #   SYMBOL_CODES[:im_a_teapot]           # => 418
       #
       # @return [Hash<Symbol => Fixnum>]
-      SYMBOL_CODES = Hash[SYMBOLS.map { |k, v| [v, k] }].freeze
+      SYMBOL_CODES = SYMBOLS.to_h { |k, v| [v, k] }.freeze
 
       # @return [Fixnum] status code
       attr_reader :code
@@ -132,7 +132,7 @@ module HTTP
       end
 
       SYMBOLS.each do |code, symbol|
-        class_eval <<-RUBY, __FILE__, __LINE__
+        class_eval <<-RUBY, __FILE__, __LINE__ + 1
           def #{symbol}?      # def bad_request?
             #{code} == code   #   400 == code
           end                 # end
@@ -141,6 +141,7 @@ module HTTP
 
       def __setobj__(obj)
         raise TypeError, "Expected #{obj.inspect} to respond to #to_i" unless obj.respond_to? :to_i
+
         @code = obj.to_i
       end
 

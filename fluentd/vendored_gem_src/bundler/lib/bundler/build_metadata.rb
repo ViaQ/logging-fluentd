@@ -4,8 +4,8 @@ module Bundler
   # Represents metadata from when the Bundler gem was built.
   module BuildMetadata
     # begin ivars
-    @built_at = "2018-12-27".freeze
-    @git_commit_sha = "d7089abb6".freeze
+    @built_at = "2023-01-06".freeze
+    @git_commit_sha = "ed1f27f75c".freeze
     @release = true
     # end ivars
 
@@ -25,21 +25,13 @@ module Bundler
 
     # The SHA for the git commit the bundler gem was built from.
     def self.git_commit_sha
-      return @git_commit_sha if @git_commit_sha
+      return @git_commit_sha if instance_variable_defined? :@git_commit_sha
 
       # If Bundler has been installed without its .git directory and without a
       # commit instance variable then we can't determine its commits SHA.
-      git_dir = File.join(File.expand_path("../../..", __FILE__), ".git")
+      git_dir = File.expand_path("../../../.git", __dir__)
       if File.directory?(git_dir)
         return @git_commit_sha = Dir.chdir(git_dir) { `git rev-parse --short HEAD`.strip.freeze }
-      end
-
-      # If Bundler is a submodule in RubyGems, get the submodule commit
-      git_sub_dir = File.join(File.expand_path("../../../..", __FILE__), ".git")
-      if File.directory?(git_sub_dir)
-        return @git_commit_sha = Dir.chdir(git_sub_dir) do
-          `git ls-tree --abbrev=8 HEAD bundler`.split(/\s/).fetch(2, "").strip.freeze
-        end
       end
 
       @git_commit_sha ||= "unknown"

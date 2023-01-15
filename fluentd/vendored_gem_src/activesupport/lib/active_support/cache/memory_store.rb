@@ -11,7 +11,7 @@ module ActiveSupport
     # to share cache data with each other and this may not be the most
     # appropriate cache in that scenario.
     #
-    # This cache has a bounded size specified by the :size options to the
+    # This cache has a bounded size specified by the +:size+ options to the
     # initializer (default is 32Mb). When the cache exceeds the allotted size,
     # a cleanup will occur which tries to prune the cache down to three quarters
     # of the maximum size by removing the least recently used entries.
@@ -25,21 +25,25 @@ module ActiveSupport
     # MemoryStore is thread-safe.
     class MemoryStore < Store
       module DupCoder # :nodoc:
-        class << self
-          def load(entry)
-            entry = entry.dup
-            entry.dup_value!
-            entry
-          end
+        extend self
 
-          def dump(entry)
-            entry.dup_value!
-            entry
-          end
+        def dump(entry)
+          entry.dup_value! unless entry.compressed?
+          entry
+        end
+
+        def dump_compressed(entry, threshold)
+          entry = entry.compressed(threshold)
+          entry.dup_value! unless entry.compressed?
+          entry
+        end
+
+        def load(entry)
+          entry = entry.dup
+          entry.dup_value!
+          entry
         end
       end
-
-      DEFAULT_CODER = DupCoder
 
       def initialize(options = nil)
         options ||= {}
@@ -85,13 +89,13 @@ module ActiveSupport
         return if pruning?
         @pruning = true
         begin
-          start_time = Concurrent.monotonic_time
+          start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
           cleanup
           instrument(:prune, target_size, from: @cache_size) do
             keys = synchronize { @data.keys }
             keys.each do |key|
               delete_entry(key, **options)
-              return if @cache_size <= target_size || (max_time && Concurrent.monotonic_time - start_time > max_time)
+              return if @cache_size <= target_size || (max_time && Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time > max_time)
             end
           end
         ensure
@@ -139,6 +143,10 @@ module ActiveSupport
       private
         PER_ENTRY_OVERHEAD = 240
 
+        def default_coder
+          DupCoder
+        end
+
         def cached_size(key, payload)
           key.to_s.bytesize + payload.bytesize + PER_ENTRY_OVERHEAD
         end
@@ -156,7 +164,7 @@ module ActiveSupport
         end
 
         def write_entry(key, entry, **options)
-          payload = serialize_entry(entry)
+          payload = serialize_entry(entry, **options)
           synchronize do
             return false if options[:unless_exist] && @data.key?(key)
 
