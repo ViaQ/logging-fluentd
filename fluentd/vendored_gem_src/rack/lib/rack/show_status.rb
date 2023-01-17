@@ -2,6 +2,11 @@
 
 require 'erb'
 
+require_relative 'constants'
+require_relative 'utils'
+require_relative 'request'
+require_relative 'body_proxy'
+
 module Rack
   # Rack::ShowStatus catches all empty responses and replaces them
   # with a site explaining the error.
@@ -17,8 +22,7 @@ module Rack
     end
 
     def call(env)
-      status, headers, body = @app.call(env)
-      headers = Utils::HeaderHash[headers]
+      status, headers, body = response = @app.call(env)
       empty = headers[CONTENT_LENGTH].to_i <= 0
 
       # client or server error, or explicit message
@@ -33,12 +37,18 @@ module Rack
         # Yes, it is dumb, but I don't like Ruby yelling at me.
         detail = detail = env[RACK_SHOWSTATUS_DETAIL] || message
 
-        body = @template.result(binding)
-        size = body.bytesize
-        [status, headers.merge(CONTENT_TYPE => "text/html", CONTENT_LENGTH => size.to_s), [body]]
-      else
-        [status, headers, body]
+        html = @template.result(binding)
+        size = html.bytesize
+
+        response[2] = Rack::BodyProxy.new([html]) do
+          body.close if body.respond_to?(:close)
+        end
+
+        headers[CONTENT_TYPE] = "text/html"
+        headers[CONTENT_LENGTH] = size.to_s
       end
+
+      response
     end
 
     def h(obj)                  # :nodoc:

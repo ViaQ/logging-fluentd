@@ -1,8 +1,11 @@
 # frozen_string_literal: true
 
+require_relative 'constants'
+require_relative 'utils'
+
 module Rack
 
-  # Sets the Content-Type header on responses which don't have one.
+  # Sets the content-type header on responses which don't have one.
   #
   # Builder Usage:
   #   use Rack::ContentType, "text/plain"
@@ -13,18 +16,18 @@ module Rack
     include Rack::Utils
 
     def initialize(app, content_type = "text/html")
-      @app, @content_type = app, content_type
+      @app = app
+      @content_type = content_type
     end
 
     def call(env)
-      status, headers, body = @app.call(env)
-      headers = Utils::HeaderHash[headers]
+      status, headers, _ = response = @app.call(env)
 
       unless STATUS_WITH_NO_ENTITY_BODY.key?(status.to_i)
         headers[CONTENT_TYPE] ||= @content_type
       end
 
-      [status, headers, body]
+      response
     end
   end
 end

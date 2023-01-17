@@ -13,7 +13,7 @@ Gem::Specification.new do |s|
   s.files = ["lib/traces.rb".freeze, "lib/traces/backend.rb".freeze, "lib/traces/backend/console.rb".freeze, "lib/traces/backend/test.rb".freeze, "lib/traces/context.rb".freeze, "lib/traces/provider.rb".freeze, "lib/traces/version.rb".freeze]
   s.homepage = "https://github.com/socketry/traces".freeze
   s.licenses = ["MIT".freeze]
-  s.rubygems_version = "3.1.4".freeze
+  s.rubygems_version = "3.1.6".freeze
   s.summary = "Application instrumentation and tracing.".freeze
 
   if s.respond_to? :specification_version then

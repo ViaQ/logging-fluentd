@@ -3,17 +3,29 @@
 
 require 'tempfile'
 
+require_relative 'constants'
+
 module Rack
   # Class which can make any IO object rewindable, including non-rewindable ones. It does
   # this by buffering the data into a tempfile, which is rewindable.
   #
-  # rack.input is required to be rewindable, so if your input stream IO is non-rewindable
-  # by nature (e.g. a pipe or a socket) then you can wrap it in an object of this class
-  # to easily make it rewindable.
-  #
   # Don't forget to call #close when you're done. This frees up temporary resources that
   # RewindableInput uses, though it does *not* close the original IO object.
   class RewindableInput
+    # Makes rack.input rewindable, for compatibility with applications and middleware
+    # designed for earlier versions of Rack (where rack.input was required to be
+    # rewindable).
+    class Middleware
+      def initialize(app)
+        @app = app
+      end
+
+      def call(env)
+        env[RACK_INPUT] = RewindableInput.new(env[RACK_INPUT])
+        @app.call(env)
+      end
+    end
+
     def initialize(io)
       @io = io
       @rewindable_io = nil
@@ -38,6 +50,11 @@ module Rack
     def rewind
       make_rewindable unless @rewindable_io
       @rewindable_io.rewind
+    end
+
+    def size
+      make_rewindable unless @rewindable_io
+      @rewindable_io.size
     end
 
     # Closes this RewindableInput object without closing the originally
@@ -66,12 +83,14 @@ module Rack
       # access it because we have the file handle open.
       @rewindable_io = Tempfile.new('RackRewindableInput')
       @rewindable_io.chmod(0000)
-      @rewindable_io.set_encoding(Encoding::BINARY) if @rewindable_io.respond_to?(:set_encoding)
+      @rewindable_io.set_encoding(Encoding::BINARY)
       @rewindable_io.binmode
+      # :nocov:
       if filesystem_has_posix_semantics?
         raise 'Unlink failed. IO closed.' if @rewindable_io.closed?
         @unlinked = true
       end
+      # :nocov:
 
       buffer = "".dup
       while @io.read(1024 * 4, buffer)
