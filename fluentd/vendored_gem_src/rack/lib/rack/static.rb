@@ -1,5 +1,9 @@
 # frozen_string_literal: true
 
+require_relative 'constants'
+require_relative 'files'
+require_relative 'mime'
+
 module Rack
 
   # The Rack::Static middleware intercepts requests for static files
@@ -78,16 +82,14 @@ module Rack
   #         :header_rules => [
   #           # Cache all static files in public caches (e.g. Rack::Cache)
   #           #  as well as in the browser
-  #           [:all, {'Cache-Control' => 'public, max-age=31536000'}],
+  #           [:all, {'cache-control' => 'public, max-age=31536000'}],
   #
   #           # Provide web fonts with cross-origin access-control-headers
   #           #  Firefox requires this when serving assets using a Content Delivery Network
-  #           [:fonts, {'Access-Control-Allow-Origin' => '*'}]
+  #           [:fonts, {'access-control-allow-origin' => '*'}]
   #         ]
   #
   class Static
-    (require_relative 'core_ext/regexp'; using ::Rack::RegexpExtensions) if RUBY_VERSION < '2.4'
-
     def initialize(app, options = {})
       @app = app
       @urls = options[:urls] || ["/favicon.ico"]
@@ -137,10 +139,8 @@ module Rack
           elsif response[0] == 304
             # Do nothing, leave headers as is
           else
-            if mime_type = Mime.mime_type(::File.extname(path), 'text/plain')
-              response[1][CONTENT_TYPE] = mime_type
-            end
-            response[1]['Content-Encoding'] = 'gzip'
+            response[1][CONTENT_TYPE] = Mime.mime_type(::File.extname(path), 'text/plain')
+            response[1]['content-encoding'] = 'gzip'
           end
         end
 

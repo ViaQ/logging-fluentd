@@ -13,7 +13,7 @@ Gem::Specification.new do |s|
   s.files = [".editorconfig".freeze, ".gitignore".freeze, ".gitmodules".freeze, ".rspec".freeze, ".travis.yml".freeze, "Gemfile".freeze, "README.md".freeze, "Rakefile".freeze, "http-hpack.gemspec".freeze, "lib/protocol/hpack.rb".freeze, "lib/protocol/hpack/compressor.rb".freeze, "lib/protocol/hpack/context.rb".freeze, "lib/protocol/hpack/decompressor.rb".freeze, "lib/protocol/hpack/error.rb".freeze, "lib/protocol/hpack/huffman.rb".freeze, "lib/protocol/hpack/huffman/machine.rb".freeze, "lib/protocol/hpack/version.rb".freeze, "tasks/huffman.rake".freeze, "tasks/huffman.rb".freeze]
   s.homepage = "https://github.com/socketry/http-hpack".freeze
   s.licenses = ["MIT".freeze]
-  s.rubygems_version = "3.2.3".freeze
+  s.rubygems_version = "3.1.6".freeze
   s.summary = "A compresssor and decompressor for HTTP 2.0 HPACK.".freeze
 
   if s.respond_to? :specification_version then
