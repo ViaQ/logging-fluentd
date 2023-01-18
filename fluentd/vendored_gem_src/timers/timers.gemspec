@@ -12,7 +12,7 @@ Gem::Specification.new do |s|
   s.files = ["lib/timers.rb".freeze, "lib/timers/events.rb".freeze, "lib/timers/group.rb".freeze, "lib/timers/interval.rb".freeze, "lib/timers/priority_heap.rb".freeze, "lib/timers/timer.rb".freeze, "lib/timers/version.rb".freeze, "lib/timers/wait.rb".freeze]
   s.homepage = "https://github.com/socketry/timers".freeze
   s.licenses = ["MIT".freeze]
-  s.rubygems_version = "3.2.3".freeze
+  s.rubygems_version = "3.1.6".freeze
   s.summary = "Pure Ruby one-shot and periodic timers.".freeze
 
   if s.respond_to? :specification_version then

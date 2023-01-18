@@ -14,7 +14,7 @@ Gem::Specification.new do |s|
   s.homepage = "https://github.com/socketry/protocol-http1".freeze
   s.licenses = ["MIT".freeze]
   s.required_ruby_version = Gem::Requirement.new(">= 2.4".freeze)
-  s.rubygems_version = "3.2.3".freeze
+  s.rubygems_version = "3.1.6".freeze
   s.summary = "A low level implementation of the HTTP/1 protocol.".freeze
 
   if s.respond_to? :specification_version then

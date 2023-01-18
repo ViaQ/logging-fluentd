@@ -2,6 +2,11 @@
 
 require 'time'
 
+require_relative 'constants'
+require_relative 'utils'
+require_relative 'media_type'
+require_relative 'headers'
+
 module Rack
   # Rack::Response provides a convenient interface to create a Rack
   # response.
@@ -26,22 +31,45 @@ module Rack
     attr_accessor :length, :status, :body
     attr_reader :headers
 
-    # @deprecated Use {#headers} instead.
-    alias header headers
+    # Deprecated, use headers instead.
+    def header
+      warn 'Rack::Response#header is deprecated and will be removed in Rack 3.1', uplevel: 1
 
-    # Initialize the response object with the specified body, status
-    # and headers.
+      headers
+    end
+
+    # Initialize the response object with the specified +body+, +status+
+    # and +headers+.
     #
-    # @param body [nil, #each, #to_str] the response body.
-    # @param status [Integer] the integer status as defined by the
-    # HTTP protocol RFCs.
-    # @param headers [#each] a list of key-value header pairs which
-    # conform to the HTTP protocol RFCs.
+    # If the +body+ is +nil+, construct an empty response object with internal
+    # buffering.
     #
-    # Providing a body which responds to #to_str is legacy behaviour.
+    # If the +body+ responds to +to_str+, assume it's a string-like object and
+    # construct a buffered response object containing using that string as the
+    # initial contents of the buffer.
+    #
+    # Otherwise it is expected +body+ conforms to the normal requirements of a
+    # Rack response body, typically implementing one of +each+ (enumerable
+    # body) or +call+ (streaming body).
+    #
+    # The +status+ defaults to +200+ which is the "OK" HTTP status code. You
+    # can provide any other valid status code.
+    #
+    # The +headers+ must be a +Hash+ of key-value header pairs which conform to
+    # the Rack specification for response headers. The key must be a +String+
+    # instance and the value can be either a +String+ or +Array+ instance.
     def initialize(body = nil, status = 200, headers = {})
       @status = status.to_i
-      @headers = Utils::HeaderHash[headers]
+
+      unless headers.is_a?(Hash)
+        warn "Providing non-hash headers to Rack::Response is deprecated and will be removed in Rack 3.1", uplevel: 1
+      end
+
+      @headers = Headers.new
+      # Convert headers input to a plain hash with lowercase keys.
+      headers.each do |k, v|
+        @headers[k] = v
+      end
 
       @writer = self.method(:append)
 
@@ -58,7 +86,7 @@ module Rack
         @length = body.to_str.bytesize
       else
         @body = body
-        @buffered = false
+        @buffered = nil # undetermined as of yet.
         @length = 0
       end
 
@@ -74,11 +102,16 @@ module Rack
       CHUNKED == get_header(TRANSFER_ENCODING)
     end
 
+    def no_entity_body?
+      # The response body is an enumerable body and it is not allowed to have an entity body.
+      @body.respond_to?(:each) && STATUS_WITH_NO_ENTITY_BODY[@status]
+    end
+    
     # Generate a response array consistent with the requirements of the SPEC.
     # @return [Array] a 3-tuple suitable of `[status, headers, body]`
     # which is suitable to be returned from the middleware `#call(env)` method.
     def finish(&block)
-      if STATUS_WITH_NO_ENTITY_BODY[status.to_i]
+      if no_entity_body?
         delete_header CONTENT_TYPE
         delete_header CONTENT_LENGTH
         close
@@ -105,7 +138,7 @@ module Rack
       end
     end
 
-    # Append to body and update Content-Length.
+    # Append to body and update content-length.
     #
     # NOTE: Do not mix #write and direct #body access!
     #
@@ -123,10 +156,22 @@ module Rack
       @block == nil && @body.empty?
     end
 
-    def has_header?(key);   headers.key? key;   end
-    def get_header(key);    headers[key];       end
-    def set_header(key, v); headers[key] = v;   end
-    def delete_header(key); headers.delete key; end
+    def has_header?(key)
+      raise ArgumentError unless key.is_a?(String)
+      @headers.key?(key)
+    end
+    def get_header(key)
+      raise ArgumentError unless key.is_a?(String)
+      @headers[key]
+    end
+    def set_header(key, value)
+      raise ArgumentError unless key.is_a?(String)
+      @headers[key] = value
+    end
+    def delete_header(key)
+      raise ArgumentError unless key.is_a?(String)
+      @headers.delete key
+    end
 
     alias :[] :get_header
     alias :[]= :set_header
@@ -150,31 +195,43 @@ module Rack
       def forbidden?;           status == 403;                        end
       def not_found?;           status == 404;                        end
       def method_not_allowed?;  status == 405;                        end
+      def not_acceptable?;      status == 406;                        end
+      def request_timeout?;     status == 408;                        end
       def precondition_failed?; status == 412;                        end
       def unprocessable?;       status == 422;                        end
 
       def redirect?;            [301, 302, 303, 307, 308].include? status; end
 
       def include?(header)
-        has_header? header
+        has_header?(header)
       end
 
       # Add a header that may have multiple values.
       #
       # Example:
-      #   response.add_header 'Vary', 'Accept-Encoding'
-      #   response.add_header 'Vary', 'Cookie'
+      #   response.add_header 'vary', 'accept-encoding'
+      #   response.add_header 'vary', 'cookie'
       #
-      #   assert_equal 'Accept-Encoding,Cookie', response.get_header('Vary')
+      #   assert_equal 'accept-encoding,cookie', response.get_header('vary')
       #
       # http://www.w3.org/Protocols/rfc2616/rfc2616-sec4.html#sec4.2
-      def add_header(key, v)
-        if v.nil?
-          get_header key
-        elsif has_header? key
-          set_header key, "#{get_header key},#{v}"
+      def add_header(key, value)
+        raise ArgumentError unless key.is_a?(String)
+
+        if value.nil?
+          return get_header(key)
+        end
+
+        value = value.to_s
+
+        if header = get_header(key)
+          if header.is_a?(Array)
+            header << value
+          else
+            set_header(key, [header, value])
+          end
         else
-          set_header key, v
+          set_header(key, value)
         end
       end
 
@@ -202,36 +259,39 @@ module Rack
       end
 
       def location
-        get_header "Location"
+        get_header "location"
       end
 
       def location=(location)
-        set_header "Location", location
+        set_header "location", location
       end
 
       def set_cookie(key, value)
-        cookie_header = get_header SET_COOKIE
-        set_header SET_COOKIE, ::Rack::Utils.add_cookie_to_header(cookie_header, key, value)
+        add_header SET_COOKIE, Utils.set_cookie_header(key, value)
       end
 
       def delete_cookie(key, value = {})
-        set_header SET_COOKIE, ::Rack::Utils.add_remove_cookie_to_header(get_header(SET_COOKIE), key, value)
+        set_header(SET_COOKIE,
+          Utils.delete_set_cookie_header!(
+            get_header(SET_COOKIE), key, value
+          )
+        )
       end
 
       def set_cookie_header
         get_header SET_COOKIE
       end
 
-      def set_cookie_header=(v)
-        set_header SET_COOKIE, v
+      def set_cookie_header=(value)
+        set_header SET_COOKIE, value
       end
 
       def cache_control
         get_header CACHE_CONTROL
       end
 
-      def cache_control=(v)
-        set_header CACHE_CONTROL, v
+      def cache_control=(value)
+        set_header CACHE_CONTROL, value
       end
 
       # Specifies that the content shouldn't be cached. Overrides `cache!` if already called.
@@ -254,34 +314,38 @@ module Rack
         get_header ETAG
       end
 
-      def etag=(v)
-        set_header ETAG, v
+      def etag=(value)
+        set_header ETAG, value
       end
 
     protected
 
       def buffered_body!
-        return if @buffered
+        if @buffered.nil?
+          if @body.is_a?(Array)
+            # The user supplied body was an array:
+            @body = @body.compact
+            @body.each do |part|
+              @length += part.to_s.bytesize
+            end
+          elsif @body.respond_to?(:each)
+            # Turn the user supplied body into a buffered array:
+            body = @body
+            @body = Array.new
 
-        if @body.is_a?(Array)
-          # The user supplied body was an array:
-          @body = @body.compact
-          @body.each do |part|
-            @length += part.to_s.bytesize
+            body.each do |part|
+              @writer.call(part.to_s)
+            end
+
+            body.close if body.respond_to?(:close)
+
+            @buffered = true
+          else
+            @buffered = false
           end
-        else
-          # Turn the user supplied body into a buffered array:
-          body = @body
-          @body = Array.new
-
-          body.each do |part|
-            @writer.call(part.to_s)
-          end
-
-          body.close if body.respond_to?(:close)
         end
 
-        @buffered = true
+        return @buffered
       end
 
       def append(chunk)
@@ -309,10 +373,21 @@ module Rack
         @headers = headers
       end
 
-      def has_header?(key);   headers.key? key;   end
-      def get_header(key);    headers[key];       end
-      def set_header(key, v); headers[key] = v;   end
-      def delete_header(key); headers.delete key; end
+      def has_header?(key)
+        headers.key?(key)
+      end
+
+      def get_header(key)
+        headers[key]
+      end
+
+      def set_header(key, value)
+        headers[key] = value
+      end
+
+      def delete_header(key)
+        headers.delete(key)
+      end
     end
   end
 end
