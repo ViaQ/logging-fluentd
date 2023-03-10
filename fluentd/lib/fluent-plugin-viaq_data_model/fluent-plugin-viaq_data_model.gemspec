@@ -13,7 +13,7 @@ Gem::Specification.new do |gem|
   gem.license       = "Apache-2.0"
   gem.files         = Dir['lib/**/*']
   gem.required_ruby_version = '>= 2.0.0'
-  gem.add_runtime_dependency("fluentd",  ">= 1.14.0")
+  gem.add_runtime_dependency "fluentd", "=1.14.6"
 
   gem.add_development_dependency "bundler"
   gem.add_development_dependency("rake", ["~> 11.0"])

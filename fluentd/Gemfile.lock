@@ -2,21 +2,25 @@ PATH
   remote: lib
   specs:
     filter_elasticsearch_genid_ext (0.0.2)
-      fluentd (~> 1.14.6)
+      fluentd (= 1.14.6)
     filter_parse_json_field (0.0.2)
-      fluentd (~> 1.14.6)
+      fluentd (= 1.14.6)
     fluent-plugin-collected (1.1.0)
-      fluentd (~> 1.14.6)
+      fluentd (= 1.14.6)
       prometheus-client (>= 2.1.0)
-    fluent-plugin-remote_syslog (1.0.0)
+    fluent-plugin-remote-syslog (1.2)
+      fluent-mixin-config-placeholders
       fluentd
-      remote_syslog_sender (>= 1.1.1)
+      syslog_protocol
+    fluent-plugin-remote_syslog (1.0.0)
+      fluentd (= 1.14.6)
+      remote_syslog_sender (= 1.2.1)
     fluent-plugin-viaq_data_model (0.0.23)
-      fluentd (>= 1.14.0)
+      fluentd (= 1.14.6)
     formatter-single-json-value (0.0.1)
-      fluentd (~> 1.14.6)
+      fluentd (= 1.14.6)
     parser_viaq_host_audit (0.0.2)
-      fluentd (~> 1.14.6)
+      fluentd (= 1.14.6)
     remote_syslog_sender (1.2.1)
       syslog_protocol
     syslog_protocol (0.9.2)
@@ -150,10 +154,6 @@ GEM
       prometheus-client (>= 2.1.0)
     fluent-plugin-record-modifier (2.1.0)
       fluentd (>= 1.0, < 2)
-    fluent-plugin-remote-syslog (1.1)
-      fluent-mixin-config-placeholders
-      fluentd
-      syslog_protocol
     fluent-plugin-rewrite-tag-filter (2.4.0)
       fluent-config-regexp-type
       fluentd (>= 0.14.2, < 2)
@@ -316,13 +316,13 @@ DEPENDENCIES
   fluent-plugin-multi-format-parser
   fluent-plugin-prometheus
   fluent-plugin-record-modifier
-  fluent-plugin-remote-syslog
+  fluent-plugin-remote-syslog!
   fluent-plugin-remote_syslog!
   fluent-plugin-rewrite-tag-filter
   fluent-plugin-splunk-hec
   fluent-plugin-systemd
   fluent-plugin-viaq_data_model (= 0.0.23)!
-  fluentd (= 1.14.6)!
+  fluentd!
   formatter-single-json-value!
   kubeclient
   oj
@@ -334,4 +334,4 @@ DEPENDENCIES
   uuidtools
 
 BUNDLED WITH
-   1.17.3
+   2.1.4

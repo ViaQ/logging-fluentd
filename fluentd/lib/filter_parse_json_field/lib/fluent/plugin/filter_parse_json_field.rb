@@ -21,8 +21,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+require 'fluent/filter'
+
 module Fluent::Plugin
-  class ParseJSONFieldFilter < Fluent::Plugin::Filter
+  class ParseJSONFieldFilter < Filter
 
     Fluent::Plugin.register_filter('parse_json_field', self)
 

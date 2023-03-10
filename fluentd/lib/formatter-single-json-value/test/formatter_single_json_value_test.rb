@@ -1,6 +1,6 @@
 require_relative 'test_helper'
 require 'fluent/test/driver/formatter'
-require File.join(File.dirname(__FILE__), '..', 'lib/formatter_single_json_value')
+require_relative '../lib/fluent/plugin/formatter_single_json_value'
 
 class SingleValueFormatterTest < ::Test::Unit::TestCase
   def create_driver(conf = "")

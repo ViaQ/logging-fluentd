@@ -1,17 +1,19 @@
 PATH
   remote: .
   specs:
-    filter_elasticsearch_genid_ext (0.0.2)
+    fluent-plugin-remote-syslog (1.2)
+      fluent-mixin-config-placeholders
       fluentd (= 1.14.6)
+      syslog_protocol
 
 GEM
-  remote: https://rubygems.org/
+  remote: http://rubygems.org/
   specs:
-    codeclimate-test-reporter (1.0.9)
-      simplecov (<= 0.13)
-    concurrent-ruby (1.2.0)
+    concurrent-ruby (1.2.2)
     cool.io (1.7.1)
-    docile (1.1.5)
+    fluent-mixin-config-placeholders (0.4.0)
+      fluentd
+      uuidtools (>= 2.1.5)
     fluentd (1.14.6)
       bundler
       cool.io (>= 1.4.5, < 2.0.0)
@@ -25,43 +27,31 @@ GEM
       webrick (>= 1.4.2, < 1.8.0)
       yajl-ruby (~> 1.0)
     http_parser.rb (0.8.0)
-    json (2.6.1)
-    msgpack (1.6.0)
-    power_assert (2.0.1)
-    rake (11.3.0)
-    rr (1.2.1)
+    msgpack (1.6.1)
+    power_assert (1.1.7)
+    rake (13.0.6)
     serverengine (2.3.1)
       sigdump (~> 0.2.2)
     sigdump (0.2.4)
-    simplecov (0.13.0)
-      docile (~> 1.1.0)
-      json (>= 1.8, < 3)
-      simplecov-html (~> 0.10.0)
-    simplecov-html (0.10.2)
     strptime (0.2.5)
-    test-unit (3.5.7)
+    syslog_protocol (0.9.2)
+    test-unit (3.3.4)
       power_assert
-    test-unit-rr (1.0.5)
-      rr (>= 1.1.1)
-      test-unit (>= 2.5.2)
     tzinfo (2.0.6)
       concurrent-ruby (~> 1.0)
     tzinfo-data (1.2022.7)
       tzinfo (>= 1.0.0)
+    uuidtools (2.2.0)
     webrick (1.7.0)
     yajl-ruby (1.4.3)
 
 PLATFORMS
-  x86_64-linux
+  ruby
 
 DEPENDENCIES
-  bundler
-  codeclimate-test-reporter
-  filter_elasticsearch_genid_ext!
-  rake (~> 11.0)
-  rr (~> 1.0)
+  fluent-plugin-remote-syslog!
+  rake (>= 0.9.2)
   test-unit (~> 3.2)
-  test-unit-rr (~> 1.0)
 
 BUNDLED WITH
-   2.3.16
+   2.1.4

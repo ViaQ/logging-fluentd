@@ -1,5 +1,5 @@
-REGISTRY?=127.0.0.1/openshift-logging
-FLUENTD_VERSION=$$(grep BUILD_VERSION fluentd/Dockerfile.in| cut -d "=" -f2)
+REGISTRY?=127.0.0.1:5000/openshift-logging
+FLUENTD_VERSION=$(shell grep BUILD_VERSION fluentd/Dockerfile.in| cut -d "=" -f2)
 FLUENTD_IMAGE?=$(REGISTRY)/logging-fluentd:$(FLUENTD_VERSION)
 CONTAINER_ENGINE?=podman
 CONTAINER_BUILDER?=podman
@@ -20,17 +20,22 @@ gen-dockerfiles:
 .PHONY: gen-dockerfiles
 
 test-unit:
-	$(CONTAINER_BUILDER) -t logging-fluentd-unit-tests -f Dockerfile.unit .
+	$(CONTAINER_BUILDER) $(BUILD_ARGS) -t logging-fluentd-unit-tests -f Dockerfile.unit .
 	# podman run logging-fluentd-unit-tests
 .PHONY: test-unit
 
-update-vendor:
-	FLUENTD_VERSION=$(FLUENTD_VERSION) ./hack/update-fluentd-vendor-gems.sh
-.PHONY: update-vendor
-
-install-gems:
-	FLUENTD_VERSION=$(FLUENTD_VERSION); \
+install-gems: 
+	FLUENTD_VERSION=$(FLUENTD_VERSION) ; \
 	for d in $$(ls fluentd/lib); do pushd fluentd/lib/$$d; rm *.gem; gem build *.gemspec; gem install -N *.gem; popd; done && \
 	gem install bundler:$$(grep -r -C 1 'BUNDLED WITH' fluentd/Gemfile.lock | grep -o '[0-9\.]*') && \
 	pushd fluentd && bundler install && popd
 .PHONY: install-gems
+
+update-libs-for-fluentd:
+	FLUENTD_VERSION=$(FLUENTD_VERSION) ; \
+	for d in $$(ls fluentd/lib); do pushd fluentd/lib/$$d ; \
+		sed -i "s/add_runtime_dependency.*\"fluentd\".*/add_runtime_dependency \"fluentd\", \"=$$FLUENTD_VERSION\"/" $$(ls *.gemspec) ; \
+		bundle update fluentd --conservative --bundler ; \
+		popd ; \
+	done
+.PHONY: update-libs-for-fluentd

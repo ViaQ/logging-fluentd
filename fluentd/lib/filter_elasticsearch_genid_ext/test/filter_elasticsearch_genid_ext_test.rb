@@ -2,7 +2,7 @@ require 'fluent/test'
 require 'test/unit/rr'
 require 'json'
 
-require File.join(File.dirname(__FILE__), '..', 'lib/filter_elasticsearch_genid_ext')
+require_relative '../lib/fluent/plugin/filter_elasticsearch_genid_ext'
 
 class ElasticsearchGenidExtFilterTest < Test::Unit::TestCase
   include Fluent
