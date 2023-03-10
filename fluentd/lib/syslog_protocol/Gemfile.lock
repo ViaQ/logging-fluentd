@@ -10,7 +10,7 @@ GEM
     psych (4.0.3)
       stringio
     rake (12.3.3)
-    rdoc (6.4.0)
+    rdoc (6.5.0)
       psych (>= 4.0.0)
     stringio (3.0.1)
 
@@ -24,4 +24,4 @@ DEPENDENCIES
   syslog_protocol!
 
 BUNDLED WITH
-   2.2.3
+   2.3.16

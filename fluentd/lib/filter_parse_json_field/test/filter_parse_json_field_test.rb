@@ -1,5 +1,5 @@
 require_relative 'test_helper'
-require File.join(File.dirname(__FILE__), '..', 'lib/filter_parse_json_field') 
+require_relative '../lib/fluent/plugin/filter_parse_json_field'
 
 class ParseJsonFieldFilterTest < Test::Unit::TestCase
 

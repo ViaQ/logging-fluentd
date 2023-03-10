@@ -3,7 +3,7 @@ require 'test/unit/rr'
 require 'fluent/test/driver/parser'
 require 'json'
 
-require File.join(File.dirname(__FILE__), '..', 'lib/parser_viaq_host_audit')
+require_relative '../lib/fluent/plugin/parser_viaq_host_audit'
 
 class ParserViaqHostAuditTest < Test::Unit::TestCase
   include Fluent

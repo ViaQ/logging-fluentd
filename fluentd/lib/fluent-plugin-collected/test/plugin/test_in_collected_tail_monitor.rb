@@ -139,7 +139,7 @@ class CollectedTailMonitorInputTest < Test::Unit::TestCase
   end
 
   def spawn_fluentd(dir, args)
-    cmdname = File.expand_path(File.dirname(__FILE__) + "../../../../../vendored_gem_src/fluentd/bin/fluentd")
+    cmdname = "fluentd"
     gemfile = File.expand_path(File.dirname(__FILE__) + "../../../Gemfile")
     env = { "BUNDLE_GEMFILE" => gemfile }
     pid = spawn(env, "bundle", "exec", cmdname, *args, :chdir=>dir, )
