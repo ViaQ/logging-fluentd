@@ -8,6 +8,8 @@ module Rack
   module Multipart
     class MultipartPartLimitError < Errno::EMFILE; end
 
+    class MultipartTotalPartLimitError < StandardError; end
+
     # Use specific error class when parsing multipart request
     # that ends early.
     class EmptyContentError < ::EOFError; end
@@ -23,10 +25,10 @@ module Rack
     VALUE = /"(?:\\"|[^"])*"|#{TOKEN}/
     BROKEN = /^#{CONDISP}.*;\s*filename=(#{VALUE})/i
     MULTIPART_CONTENT_TYPE = /Content-Type: (.*)#{EOL}/ni
-    MULTIPART_CONTENT_DISPOSITION = /Content-Disposition:.*;\s*name=(#{VALUE})/ni
+    MULTIPART_CONTENT_DISPOSITION = /Content-Disposition:[^:]*;\s*name=(#{VALUE})/ni
     MULTIPART_CONTENT_ID = /Content-ID:\s*([^#{EOL}]*)/ni
     # Updated definitions from RFC 2231
-    ATTRIBUTE_CHAR = %r{[^ \t\v\n\r)(><@,;:\\"/\[\]?='*%]}
+    ATTRIBUTE_CHAR = %r{[^ \x00-\x1f\x7f)(><@,;:\\"/\[\]?='*%]}
     ATTRIBUTE = /#{ATTRIBUTE_CHAR}+/
     SECTION = /\*[0-9]+/
     REGULAR_PARAMETER_NAME = /#{ATTRIBUTE}#{SECTION}?/
@@ -166,7 +168,7 @@ module Rack
 
           @mime_parts[mime_index] = klass.new(body, head, filename, content_type, name)
 
-          check_open_files
+          check_part_limits
         end
 
         def on_mime_body(mime_index, content)
@@ -178,11 +180,21 @@ module Rack
 
         private
 
-        def check_open_files
-          if Utils.multipart_part_limit > 0
-            if @open_files >= Utils.multipart_part_limit
+        def check_part_limits
+          file_limit = Utils.multipart_file_limit
+          part_limit = Utils.multipart_total_part_limit
+
+          if file_limit && file_limit > 0
+            if @open_files >= file_limit
               @mime_parts.each(&:close)
               raise MultipartPartLimitError, 'Maximum file multiparts in content reached'
+            end
+          end
+
+          if part_limit && part_limit > 0
+            if @mime_parts.size >= part_limit
+              @mime_parts.each(&:close)
+              raise MultipartTotalPartLimitError, 'Maximum total multiparts in content reached'
             end
           end
         end

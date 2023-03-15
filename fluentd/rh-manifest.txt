@@ -93,7 +93,7 @@ rubygem-nio4r 2.5.8 https://github.com/socketry/nio4r
 rubygem-oj 3.13.11 http://www.ohler.com/oj
 rubygem-prometheus-client 4.0.0 https://github.com/prometheus/client_ruby
 rubygem-public_suffix 4.0.7 https://simonecarletti.com/code/publicsuffix-ruby
-rubygem-rack 3.0.4 https://github.com/rack/rack
+rubygem-rack 3.0.4.2 https://github.com/rack/rack
 rubygem-rake 13.0.6 https://github.com/ruby/rake
 rubygem-recursive-open-struct 1.1.3 https://github.com/aetherknight/recursive-open-struct
 rubygem-rest-client 2.1.0 https://github.com/rest-client/rest-client
