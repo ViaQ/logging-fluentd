@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file. For info on how to format all future additions to this file please reference [Keep A Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [3.0.6.1] - 2023-03-13
+
+- [CVE-2023-27539] Avoid ReDoS in header parsing
+
 ## [3.0.4.1] - 2023-03-02
 
 - [CVE-2023-27530] Introduce multipart_total_part_limit to limit total parts
@@ -12,7 +16,7 @@ All notable changes to this project will be documented in this file. For info on
 - [CVE-2022-44570] Fix ReDoS in Rack::Utils.get_byte_ranges
 - [CVE-2022-44572] Forbid control characters in attributes (also ReDoS)
 
-## [3.0.4] - 2022-01-17
+## [3.0.4] - 2023-01-17
 
 - `Rack::Request#POST` should consistently raise errors. Cache errors that occur when invoking `Rack::Request#POST` so they can be raised again later. ([#2010](https://github.com/rack/rack/pull/2010), [@ioquatix])
 - Fix `Rack::Lint` error message for `HTTP_CONTENT_TYPE` and `HTTP_CONTENT_LENGTH`. ([#2007](https://github.com/rack/rack/pull/2007), [@byroot](https://github.com/byroot))
