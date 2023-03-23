@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../../constants'
+
 module Rack
   module Auth
     # Rack::Auth::AbstractHandler implements common authentication functionality.
@@ -21,7 +23,7 @@ module Rack
         return [ 401,
           { CONTENT_TYPE => 'text/plain',
             CONTENT_LENGTH => '0',
-            'WWW-Authenticate' => www_authenticate.to_s },
+            'www-authenticate' => www_authenticate.to_s },
           []
         ]
       end

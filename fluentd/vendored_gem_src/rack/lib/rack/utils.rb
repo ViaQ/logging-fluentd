@@ -8,16 +8,18 @@ require 'tempfile'
 require 'time'
 
 require_relative 'query_parser'
+require_relative 'mime'
+require_relative 'headers'
+require_relative 'constants'
 
 module Rack
   # Rack::Utils contains a grab-bag of useful methods for writing web
   # applications adopted from all kinds of Ruby libraries.
 
   module Utils
-    (require_relative 'core_ext/regexp'; using ::Rack::RegexpExtensions) if RUBY_VERSION < '2.4'
-
     ParameterTypeError = QueryParser::ParameterTypeError
     InvalidParameterError = QueryParser::InvalidParameterError
+    ParamsTooDeepError = QueryParser::ParamsTooDeepError
     DEFAULT_SEP = QueryParser::DEFAULT_SEP
     COMMON_SEP = QueryParser::COMMON_SEP
     KeySpaceConstrainedParams = QueryParser::Params
@@ -25,9 +27,10 @@ module Rack
     class << self
       attr_accessor :default_query_parser
     end
-    # The default number of bytes to allow parameter keys to take up.
-    # This helps prevent a rogue client from flooding a Request.
-    self.default_query_parser = QueryParser.make_default(65536, 100)
+    # The default amount of nesting to allowed by hash parameters.
+    # This helps prevent a rogue client from triggering a possible stack overflow
+    # when parsing parameters.
+    self.default_query_parser = QueryParser.make_default(32)
 
     module_function
 
@@ -55,13 +58,24 @@ module Rack
     end
 
     class << self
-      attr_accessor :multipart_part_limit
+      attr_accessor :multipart_total_part_limit
+
+      attr_accessor :multipart_file_limit
+
+      # multipart_part_limit is the original name of multipart_file_limit, but
+      # the limit only counts parts with filenames.
+      alias multipart_part_limit multipart_file_limit
+      alias multipart_part_limit= multipart_file_limit=
     end
 
-    # The maximum number of parts a request can contain. Accepting too many part
-    # can lead to the server running out of file handles.
+    # The maximum number of file parts a request can contain. Accepting too
+    # many parts can lead to the server running out of file handles.
     # Set to `0` for no limit.
-    self.multipart_part_limit = (ENV['RACK_MULTIPART_PART_LIMIT'] || 128).to_i
+    self.multipart_file_limit = (ENV['RACK_MULTIPART_PART_LIMIT'] || ENV['RACK_MULTIPART_FILE_LIMIT'] || 128).to_i
+
+    # The maximum total number of parts a request can contain. Accepting too
+    # many can lead to excessive memory use and parsing time.
+    self.multipart_total_part_limit = (ENV['RACK_MULTIPART_TOTAL_PART_LIMIT'] || 4096).to_i
 
     def self.param_depth_limit
       default_query_parser.param_depth_limit
@@ -72,11 +86,12 @@ module Rack
     end
 
     def self.key_space_limit
-      default_query_parser.key_space_limit
+      warn("`Rack::Utils.key_space_limit` is deprecated as this value no longer has an effect. It will be removed in Rack 3.1", uplevel: 1)
+      65536
     end
 
     def self.key_space_limit=(v)
-      self.default_query_parser = self.default_query_parser.new_space_limit(v)
+      warn("`Rack::Utils.key_space_limit=` is deprecated and no longer has an effect. It will be removed in Rack 3.1", uplevel: 1)
     end
 
     if defined?(Process::CLOCK_MONOTONIC)
@@ -117,13 +132,13 @@ module Rack
         }.join("&")
       when Hash
         value.map { |k, v|
-          build_nested_query(v, prefix ? "#{prefix}[#{escape(k)}]" : escape(k))
+          build_nested_query(v, prefix ? "#{prefix}[#{k}]" : k)
         }.delete_if(&:empty?).join('&')
       when nil
-        prefix
+        escape(prefix)
       else
         raise ArgumentError, "value must be a Hash" if prefix.nil?
-        "#{prefix}=#{escape(value)}"
+        "#{escape(prefix)}=#{escape(value)}"
       end
     end
 
@@ -137,6 +152,19 @@ module Rack
         [value, quality]
       end
     end
+
+    def forwarded_values(forwarded_header)
+      return nil unless forwarded_header
+      forwarded_header = forwarded_header.to_s.gsub("\n", ";")
+
+      forwarded_header.split(/\s*;\s*/).each_with_object({}) do |field, values|
+        field.split(/\s*,\s*/).each do |pair|
+          return nil unless pair =~ /\A\s*(by|for|host|proto)\s*=\s*"?([^"]+)"?\s*\Z/i
+          (values[$1.downcase.to_sym] ||= []) << $2
+        end
+      end
+    end
+    module_function :forwarded_values
 
     # Return best accept value to use, based on the algorithm
     # in RFC 2616 Section 14.  If there are multiple best
@@ -152,7 +180,7 @@ module Rack
       end.compact.sort_by do |match, quality|
         (match.split('/', 2).count('*') * -10) + quality
       end.last
-      matches && matches.first
+      matches&.first
     end
 
     ESCAPE_HTML = {
@@ -203,17 +231,20 @@ module Rack
       (encoding_candidates & available_encodings)[0]
     end
 
-    def parse_cookies(env)
-      parse_cookies_header env[HTTP_COOKIE]
-    end
+    # :call-seq:
+    #   parse_cookies_header(value) -> hash
+    #
+    # Parse cookies from the provided header +value+ according to RFC6265. The
+    # syntax for cookie headers only supports semicolons. Returns a map of
+    # cookie +key+ to cookie +value+.
+    #
+    #   parse_cookies_header('myname=myvalue; max-age=0')
+    #   # => {"myname"=>"myvalue", "max-age"=>"0"}
+    #
+    def parse_cookies_header(value)
+      return {} unless value
 
-    def parse_cookies_header(header)
-      # According to RFC 6265:
-      # The syntax for cookie headers only supports semicolons
-      # User Agent -> Server ==
-      # Cookie: SID=31d4d96e407aad42; lang=en-US
-      return {} unless header
-      header.split(/[;] */n).each_with_object({}) do |cookie, cookies|
+      value.split(/; */n).each_with_object({}) do |cookie, cookies|
         next if cookie.empty?
         key, value = cookie.split('=', 2)
         cookies[key] = (unescape(value) rescue value) unless cookies.key?(key)
@@ -221,14 +252,66 @@ module Rack
     end
 
     def add_cookie_to_header(header, key, value)
+      warn("add_cookie_to_header is deprecated and will be removed in Rack 3.1", uplevel: 1)
+
+      case header
+      when nil, ''
+        return set_cookie_header(key, value)
+      when String
+        [header, set_cookie_header(key, value)]
+      when Array
+        header + [set_cookie_header(key, value)]
+      else
+        raise ArgumentError, "Unrecognized cookie header value. Expected String, Array, or nil, got #{header.inspect}"
+      end
+    end
+
+    # :call-seq:
+    #   parse_cookies(env) -> hash
+    #
+    # Parse cookies from the provided request environment using
+    # parse_cookies_header. Returns a map of cookie +key+ to cookie +value+.
+    #
+    #   parse_cookies({'HTTP_COOKIE' => 'myname=myvalue'})
+    #   # => {'myname' => 'myvalue'}
+    #
+    def parse_cookies(env)
+      parse_cookies_header env[HTTP_COOKIE]
+    end
+
+    # :call-seq:
+    #   set_cookie_header(key, value) -> encoded string
+    #
+    # Generate an encoded string using the provided +key+ and +value+ suitable
+    # for the +set-cookie+ header according to RFC6265. The +value+ may be an
+    # instance of either +String+ or +Hash+.
+    #
+    # If the cookie +value+ is an instance of +Hash+, it considers the following
+    # cookie attribute keys: +domain+, +max_age+, +expires+ (must be instance
+    # of +Time+), +secure+, +http_only+, +same_site+ and +value+. For more
+    # details about the interpretation of these fields, consult
+    # [RFC6265 Section 5.2](https://datatracker.ietf.org/doc/html/rfc6265#section-5.2).
+    #
+    # An extra cookie attribute +escape_key+ can be provided to control whether
+    # or not the cookie key is URL encoded. If explicitly set to +false+, the
+    # cookie key name will not be url encoded (escaped). The default is +true+.
+    #
+    #   set_cookie_header("myname", "myvalue")
+    #   # => "myname=myvalue"
+    #
+    #   set_cookie_header("myname", {value: "myvalue", max_age: 10})
+    #   # => "myname=myvalue; max-age=10"
+    #
+    def set_cookie_header(key, value)
       case value
       when Hash
+        key = escape(key) unless value[:escape_key] == false
         domain  = "; domain=#{value[:domain]}"   if value[:domain]
         path    = "; path=#{value[:path]}"       if value[:path]
         max_age = "; max-age=#{value[:max_age]}" if value[:max_age]
         expires = "; expires=#{value[:expires].httpdate}" if value[:expires]
         secure = "; secure"  if value[:secure]
-        httponly = "; HttpOnly" if (value.key?(:httponly) ? value[:httponly] : value[:http_only])
+        httponly = "; httponly" if (value.key?(:httponly) ? value[:httponly] : value[:http_only])
         same_site =
           case value[:same_site]
           when false, nil
@@ -243,100 +326,109 @@ module Rack
             raise ArgumentError, "Invalid SameSite value: #{value[:same_site].inspect}"
           end
         value = value[:value]
+      else
+        key = escape(key)
       end
+
       value = [value] unless Array === value
 
-      cookie = "#{escape(key)}=#{value.map { |v| escape v }.join('&')}#{domain}" \
+      return "#{key}=#{value.map { |v| escape v }.join('&')}#{domain}" \
         "#{path}#{max_age}#{expires}#{secure}#{httponly}#{same_site}"
+    end
 
-      case header
-      when nil, ''
-        cookie
-      when String
-        [header, cookie].join("\n")
-      when Array
-        (header + [cookie]).join("\n")
+    # :call-seq:
+    #   set_cookie_header!(headers, key, value) -> header value
+    #
+    # Append a cookie in the specified headers with the given cookie +key+ and
+    # +value+ using set_cookie_header.
+    #
+    # If the headers already contains a +set-cookie+ key, it will be converted
+    # to an +Array+ if not already, and appended to.
+    def set_cookie_header!(headers, key, value)
+      if header = headers[SET_COOKIE]
+        if header.is_a?(Array)
+          header << set_cookie_header(key, value)
+        else
+          headers[SET_COOKIE] = [header, set_cookie_header(key, value)]
+        end
       else
-        raise ArgumentError, "Unrecognized cookie header value. Expected String, Array, or nil, got #{header.inspect}"
+        headers[SET_COOKIE] = set_cookie_header(key, value)
       end
     end
 
-    def set_cookie_header!(header, key, value)
-      header[SET_COOKIE] = add_cookie_to_header(header[SET_COOKIE], key, value)
-      nil
+    # :call-seq:
+    #   delete_set_cookie_header(key, value = {}) -> encoded string
+    #
+    # Generate an encoded string based on the given +key+ and +value+ using
+    # set_cookie_header for the purpose of causing the specified cookie to be
+    # deleted. The +value+ may be an instance of +Hash+ and can include
+    # attributes as outlined by set_cookie_header. The encoded cookie will have
+    # a +max_age+ of 0 seconds, an +expires+ date in the past and an empty
+    # +value+. When used with the +set-cookie+ header, it will cause the client
+    # to *remove* any matching cookie.
+    #
+    #   delete_set_cookie_header("myname")
+    #   # => "myname=; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    #
+    def delete_set_cookie_header(key, value = {})
+      set_cookie_header(key, value.merge(max_age: '0', expires: Time.at(0), value: ''))
     end
 
     def make_delete_cookie_header(header, key, value)
-      case header
-      when nil, ''
-        cookies = []
-      when String
-        cookies = header.split("\n")
-      when Array
-        cookies = header
+      warn("make_delete_cookie_header is deprecated and will be removed in Rack 3.1, use delete_set_cookie_header! instead", uplevel: 1)
+
+      delete_set_cookie_header!(header, key, value)
+    end
+
+    def delete_cookie_header!(headers, key, value = {})
+      headers[SET_COOKIE] = delete_set_cookie_header!(headers[SET_COOKIE], key, value)
+
+      return nil
+    end
+
+    def add_remove_cookie_to_header(header, key, value = {})
+      warn("add_remove_cookie_to_header is deprecated and will be removed in Rack 3.1, use delete_set_cookie_header! instead", uplevel: 1)
+
+      delete_set_cookie_header!(header, key, value)
+    end
+
+    # :call-seq:
+    #   delete_set_cookie_header!(header, key, value = {}) -> header value
+    #
+    # Set an expired cookie in the specified headers with the given cookie
+    # +key+ and +value+ using delete_set_cookie_header. This causes
+    # the client to immediately delete the specified cookie.
+    #
+    #   delete_set_cookie_header!(nil, "mycookie")
+    #   # => "mycookie=; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    #
+    # If the header is non-nil, it will be modified in place.
+    #
+    #   header = []
+    #   delete_set_cookie_header!(header, "mycookie")
+    #   # => ["mycookie=; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT"]
+    #   header
+    #   # => ["mycookie=; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT"]
+    #
+    def delete_set_cookie_header!(header, key, value = {})
+      if header
+        header = Array(header)
+        header << delete_set_cookie_header(key, value)
+      else
+        header = delete_set_cookie_header(key, value)
       end
 
-      key = escape(key)
-      domain = value[:domain]
-      path = value[:path]
-      regexp = if domain
-                 if path
-                   /\A#{key}=.*(?:domain=#{domain}(?:;|$).*path=#{path}(?:;|$)|path=#{path}(?:;|$).*domain=#{domain}(?:;|$))/
-                 else
-                   /\A#{key}=.*domain=#{domain}(?:;|$)/
-                 end
-               elsif path
-                 /\A#{key}=.*path=#{path}(?:;|$)/
-               else
-                 /\A#{key}=/
-               end
-
-      cookies.reject! { |cookie| regexp.match? cookie }
-
-      cookies.join("\n")
-    end
-
-    def delete_cookie_header!(header, key, value = {})
-      header[SET_COOKIE] = add_remove_cookie_to_header(header[SET_COOKIE], key, value)
-      nil
-    end
-
-    # Adds a cookie that will *remove* a cookie from the client.  Hence the
-    # strange method name.
-    def add_remove_cookie_to_header(header, key, value = {})
-      new_header = make_delete_cookie_header(header, key, value)
-
-      add_cookie_to_header(new_header, key,
-                 { value: '', path: nil, domain: nil,
-                   max_age: '0',
-                   expires: Time.at(0) }.merge(value))
-
+      return header
     end
 
     def rfc2822(time)
       time.rfc2822
     end
 
-    # Modified version of stdlib time.rb Time#rfc2822 to use '%d-%b-%Y' instead
-    # of '% %b %Y'.
-    # It assumes that the time is in GMT to comply to the RFC 2109.
-    #
-    # NOTE: I'm not sure the RFC says it requires GMT, but is ambiguous enough
-    # that I'm certain someone implemented only that option.
-    # Do not use %a and %b from Time.strptime, it would use localized names for
-    # weekday and month.
-    #
-    def rfc2109(time)
-      wday = Time::RFC2822_DAY_NAME[time.wday]
-      mon = Time::RFC2822_MONTH_NAME[time.mon - 1]
-      time.strftime("#{wday}, %d-#{mon}-%Y %H:%M:%S GMT")
-    end
-
     # Parses the "Range:" header, if present, into an array of Range objects.
     # Returns nil if the header is missing or syntactically invalid.
     # Returns an empty array if none of the ranges are satisfiable.
     def byte_ranges(env, size)
-      warn "`byte_ranges` is deprecated, please use `get_byte_ranges`" if $VERBOSE
       get_byte_ranges env['HTTP_RANGE'], size
     end
 
@@ -345,17 +437,18 @@ module Rack
       return nil unless http_range && http_range =~ /bytes=([^;]+)/
       ranges = []
       $1.split(/,\s*/).each do |range_spec|
-        return nil  unless range_spec =~ /(\d*)-(\d*)/
-        r0, r1 = $1, $2
-        if r0.empty?
-          return nil  if r1.empty?
+        return nil unless range_spec.include?('-')
+        range = range_spec.split('-')
+        r0, r1 = range[0], range[1]
+        if r0.nil? || r0.empty?
+          return nil if r1.nil?
           # suffix-byte-range-spec, represents trailing suffix of file
           r0 = size - r1.to_i
           r0 = 0  if r0 < 0
           r1 = size - 1
         else
           r0 = r0.to_i
-          if r1.empty?
+          if r1.nil?
             r1 = size - 1
           else
             r1 = r1.to_i
@@ -368,20 +461,30 @@ module Rack
       ranges
     end
 
-    # Constant time string comparison.
-    #
-    # NOTE: the values compared should be of fixed length, such as strings
-    # that have already been processed by HMAC. This should not be used
-    # on variable length plaintext strings because it could leak length info
-    # via timing attacks.
-    def secure_compare(a, b)
-      return false unless a.bytesize == b.bytesize
+    # :nocov:
+    if defined?(OpenSSL.fixed_length_secure_compare)
+      # Constant time string comparison.
+      #
+      # NOTE: the values compared should be of fixed length, such as strings
+      # that have already been processed by HMAC. This should not be used
+      # on variable length plaintext strings because it could leak length info
+      # via timing attacks.
+      def secure_compare(a, b)
+        return false unless a.bytesize == b.bytesize
 
-      l = a.unpack("C*")
+        OpenSSL.fixed_length_secure_compare(a, b)
+      end
+    # :nocov:
+    else
+      def secure_compare(a, b)
+        return false unless a.bytesize == b.bytesize
 
-      r, i = 0, -1
-      b.each_byte { |v| r |= v ^ l[i += 1] }
-      r == 0
+        l = a.unpack("C*")
+
+        r, i = 0, -1
+        b.each_byte { |v| r |= v ^ l[i += 1] }
+        r == 0
+      end
     end
 
     # Context allows the use of a compatible middleware at different points
@@ -410,94 +513,32 @@ module Rack
       end
     end
 
-    # A case-insensitive Hash that preserves the original case of a
+    # A wrapper around Headers
     # header when set.
     #
     # @api private
     class HeaderHash < Hash # :nodoc:
       def self.[](headers)
-        if headers.is_a?(HeaderHash) && !headers.frozen?
+        warn "Rack::Utils::HeaderHash is deprecated and will be removed in Rack 3.1, switch to Rack::Headers", uplevel: 1
+        if headers.is_a?(Headers) && !headers.frozen?
           return headers
-        else
-          return self.new(headers)
         end
+
+        new_headers = Headers.new
+        headers.each{|k,v| new_headers[k] = v}
+        new_headers
       end
 
-      def initialize(hash = {})
-        super()
-        @names = {}
-        hash.each { |k, v| self[k] = v }
+      def self.new(hash = {})
+        warn "Rack::Utils::HeaderHash is deprecated and will be removed in Rack 3.1, switch to Rack::Headers", uplevel: 1
+        headers = Headers.new
+        hash.each{|k,v| headers[k] = v}
+        headers
       end
 
-      # on dup/clone, we need to duplicate @names hash
-      def initialize_copy(other)
-        super
-        @names = other.names.dup
+      def self.allocate
+        raise TypeError, "cannot allocate HeaderHash"
       end
-
-      # on clear, we need to clear @names hash
-      def clear
-        super
-        @names.clear
-      end
-
-      def each
-        super do |k, v|
-          yield(k, v.respond_to?(:to_ary) ? v.to_ary.join("\n") : v)
-        end
-      end
-
-      def to_hash
-        hash = {}
-        each { |k, v| hash[k] = v }
-        hash
-      end
-
-      def [](k)
-        super(k) || super(@names[k.downcase])
-      end
-
-      def []=(k, v)
-        canonical = k.downcase.freeze
-        delete k if @names[canonical] && @names[canonical] != k # .delete is expensive, don't invoke it unless necessary
-        @names[canonical] = k
-        super k, v
-      end
-
-      def delete(k)
-        canonical = k.downcase
-        result = super @names.delete(canonical)
-        result
-      end
-
-      def include?(k)
-        super || @names.include?(k.downcase)
-      end
-
-      alias_method :has_key?, :include?
-      alias_method :member?, :include?
-      alias_method :key?, :include?
-
-      def merge!(other)
-        other.each { |k, v| self[k] = v }
-        self
-      end
-
-      def merge(other)
-        hash = dup
-        hash.merge! other
-      end
-
-      def replace(other)
-        clear
-        other.each { |k, v| self[k] = v }
-        self
-      end
-
-      protected
-        def names
-          @names
-        end
     end
 
     # Every standard HTTP code mapped to the appropriate message.

@@ -13,14 +13,19 @@
 
 module Rack
   # The Rack protocol version number implemented.
-  VERSION = [1, 3]
+  VERSION = [1, 3].freeze
+  deprecate_constant :VERSION
 
-  # Return the Rack protocol version as a dotted string.
+  VERSION_STRING = "1.3".freeze
+  deprecate_constant :VERSION_STRING
+
+  # The Rack protocol version number implemented.
   def self.version
-    VERSION.join(".")
+    warn "Rack.version is deprecated and will be removed in Rack 3.1!", uplevel: 1
+    VERSION
   end
 
-  RELEASE = "2.2.3"
+  RELEASE = "3.0.6.1"
 
   # Return the Rack release as a dotted string.
   def self.release

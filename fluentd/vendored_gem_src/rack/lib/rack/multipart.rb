@@ -1,65 +1,69 @@
 # frozen_string_literal: true
 
+require_relative 'constants'
+require_relative 'utils'
+
 require_relative 'multipart/parser'
+require_relative 'multipart/generator'
 
 module Rack
   # A multipart form data parser, adapted from IOWA.
   #
   # Usually, Rack::Request#POST takes care of calling this.
   module Multipart
-    autoload :UploadedFile, 'rack/multipart/uploaded_file'
-    autoload :Generator, 'rack/multipart/generator'
-
-    EOL = "\r\n"
     MULTIPART_BOUNDARY = "AaB03x"
-    MULTIPART = %r|\Amultipart/.*boundary=\"?([^\";,]+)\"?|ni
-    TOKEN = /[^\s()<>,;:\\"\/\[\]?=]+/
-    CONDISP = /Content-Disposition:\s*#{TOKEN}\s*/i
-    VALUE = /"(?:\\"|[^"])*"|#{TOKEN}/
-    BROKEN_QUOTED = /^#{CONDISP}.*;\s*filename="(.*?)"(?:\s*$|\s*;\s*#{TOKEN}=)/i
-    BROKEN_UNQUOTED = /^#{CONDISP}.*;\s*filename=(#{TOKEN})/i
-    MULTIPART_CONTENT_TYPE = /Content-Type: (.*)#{EOL}/ni
-    MULTIPART_CONTENT_DISPOSITION = /Content-Disposition:.*;\s*name=(#{VALUE})/ni
-    MULTIPART_CONTENT_ID = /Content-ID:\s*([^#{EOL}]*)/ni
-    # Updated definitions from RFC 2231
-    ATTRIBUTE_CHAR = %r{[^ \t\v\n\r)(><@,;:\\"/\[\]?='*%]}
-    ATTRIBUTE = /#{ATTRIBUTE_CHAR}+/
-    SECTION = /\*[0-9]+/
-    REGULAR_PARAMETER_NAME = /#{ATTRIBUTE}#{SECTION}?/
-    REGULAR_PARAMETER = /(#{REGULAR_PARAMETER_NAME})=(#{VALUE})/
-    EXTENDED_OTHER_NAME = /#{ATTRIBUTE}\*[1-9][0-9]*\*/
-    EXTENDED_OTHER_VALUE = /%[0-9a-fA-F]{2}|#{ATTRIBUTE_CHAR}/
-    EXTENDED_OTHER_PARAMETER = /(#{EXTENDED_OTHER_NAME})=(#{EXTENDED_OTHER_VALUE}*)/
-    EXTENDED_INITIAL_NAME = /#{ATTRIBUTE}(?:\*0)?\*/
-    EXTENDED_INITIAL_VALUE = /[a-zA-Z0-9\-]*'[a-zA-Z0-9\-]*'#{EXTENDED_OTHER_VALUE}*/
-    EXTENDED_INITIAL_PARAMETER = /(#{EXTENDED_INITIAL_NAME})=(#{EXTENDED_INITIAL_VALUE})/
-    EXTENDED_PARAMETER = /#{EXTENDED_INITIAL_PARAMETER}|#{EXTENDED_OTHER_PARAMETER}/
-    DISPPARM = /;\s*(?:#{REGULAR_PARAMETER}|#{EXTENDED_PARAMETER})\s*/
-    RFC2183 = /^#{CONDISP}(#{DISPPARM})+$/i
+
+    # Accumulator for multipart form data, conforming to the QueryParser API.
+    # In future, the Parser could return the pair list directly, but that would
+    # change its API.
+    class ParamList # :nodoc:
+      def self.make_params
+        new
+      end
+
+      def self.normalize_params(params, key, value)
+        params << [key, value]
+      end
+
+      def initialize
+        @pairs = []
+      end
+
+      def <<(pair)
+        @pairs << pair
+      end
+
+      def to_params_hash
+        @pairs
+      end
+    end
 
     class << self
       def parse_multipart(env, params = Rack::Utils.default_query_parser)
-        extract_multipart Rack::Request.new(env), params
+        io = env[RACK_INPUT]
+
+        if content_length = env['CONTENT_LENGTH']
+          content_length = content_length.to_i
+        end
+
+        content_type = env['CONTENT_TYPE']
+
+        tempfile = env[RACK_MULTIPART_TEMPFILE_FACTORY] || Parser::TEMPFILE_FACTORY
+        bufsize = env[RACK_MULTIPART_BUFFER_SIZE] || Parser::BUFSIZE
+
+        info = Parser.parse(io, content_length, content_type, tempfile, bufsize, params)
+        env[RACK_TEMPFILES] = info.tmp_files
+
+        return info.params
       end
 
-      def extract_multipart(req, params = Rack::Utils.default_query_parser)
-        io = req.get_header(RACK_INPUT)
-        io.rewind
-        content_length = req.content_length
-        content_length = content_length.to_i if content_length
-
-        tempfile = req.get_header(RACK_MULTIPART_TEMPFILE_FACTORY) || Parser::TEMPFILE_FACTORY
-        bufsize = req.get_header(RACK_MULTIPART_BUFFER_SIZE) || Parser::BUFSIZE
-
-        info = Parser.parse io, content_length, req.get_header('CONTENT_TYPE'), tempfile, bufsize, params
-        req.set_header(RACK_TEMPFILES, info.tmp_files)
-        info.params
+      def extract_multipart(request, params = Rack::Utils.default_query_parser)
+        parse_multipart(request.env)
       end
 
       def build_multipart(params, first = true)
         Generator.new(params, first).dump
       end
     end
-
   end
 end

@@ -2,6 +2,12 @@
 
 require 'time'
 
+require_relative 'constants'
+require_relative 'utils'
+require_relative 'head'
+require_relative 'mime'
+require_relative 'files'
+
 module Rack
   # Rack::Directory serves entries below the +root+ given, according to the
   # path info of the Rack request. If a directory is found, the file's contents
@@ -106,7 +112,7 @@ table { width:100%%; }
       body = "Bad Request\n"
       [400, { CONTENT_TYPE => "text/plain",
         CONTENT_LENGTH => body.bytesize.to_s,
-        "X-Cascade" => "pass" }, [body]]
+        "x-cascade" => "pass" }, [body]]
     end
 
     # Rack response to use for requests with paths outside the root, or nil if path is inside the root.
@@ -117,7 +123,7 @@ table { width:100%%; }
       body = "Forbidden\n"
       [403, { CONTENT_TYPE => "text/plain",
         CONTENT_LENGTH => body.bytesize.to_s,
-        "X-Cascade" => "pass" }, [body]]
+        "x-cascade" => "pass" }, [body]]
     end
 
     # Rack response to use for directories under the root.
@@ -176,7 +182,7 @@ table { width:100%%; }
       body = "Entity not found: #{path_info}\n"
       [404, { CONTENT_TYPE => "text/plain",
         CONTENT_LENGTH => body.bytesize.to_s,
-        "X-Cascade" => "pass" }, [body]]
+        "x-cascade" => "pass" }, [body]]
     end
 
     # Stolen from Ramaze

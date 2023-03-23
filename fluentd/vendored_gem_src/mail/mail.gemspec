@@ -16,7 +16,7 @@ Gem::Specification.new do |s|
   s.homepage = "https://github.com/mikel/mail".freeze
   s.licenses = ["MIT".freeze]
   s.rdoc_options = ["--exclude".freeze, "lib/mail/values/unicode_tables.dat".freeze]
-  s.rubygems_version = "3.1.4".freeze
+  s.rubygems_version = "3.1.6".freeze
   s.summary = "Mail provides a nice Ruby DSL for making, sending and reading emails.".freeze
 
   if s.respond_to? :specification_version then

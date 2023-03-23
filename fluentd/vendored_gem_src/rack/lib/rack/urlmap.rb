@@ -2,6 +2,8 @@
 
 require 'set'
 
+require_relative 'constants'
+
 module Rack
   # Rack::URLMap takes a hash mapping urls or paths to apps, and
   # dispatches accordingly.  Support for HTTP/1.1 host names exists if
@@ -35,7 +37,7 @@ module Rack
         end
 
         location = location.chomp('/')
-        match = Regexp.new("^#{Regexp.quote(location).gsub('/', '/+')}(.*)", nil, 'n')
+        match = Regexp.new("^#{Regexp.quote(location).gsub('/', '/+')}(.*)", Regexp::NOENCODING)
 
         [host, location, match, app]
       }.sort_by do |(host, location, _, _)|
@@ -74,7 +76,7 @@ module Rack
         return app.call(env)
       end
 
-      [404, { CONTENT_TYPE => "text/plain", "X-Cascade" => "pass" }, ["Not Found: #{path}"]]
+      [404, { CONTENT_TYPE => "text/plain", "x-cascade" => "pass" }, ["Not Found: #{path}"]]
 
     ensure
       env[PATH_INFO]   = path

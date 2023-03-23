@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
+require 'uri'
+
 module Rack
   class QueryParser
-    (require_relative 'core_ext/regexp'; using ::Rack::RegexpExtensions) if RUBY_VERSION < '2.4'
-
-    DEFAULT_SEP = /[&;] */n
+    DEFAULT_SEP = /[&] */n
     COMMON_SEP = { ";" => /[;] */n, ";," => /[;,] */n, "&" => /[&] */n }
 
     # ParameterTypeError is the error that is raised when incoming structural
@@ -16,32 +16,65 @@ module Rack
     # sequence.
     class InvalidParameterError < ArgumentError; end
 
-    def self.make_default(key_space_limit, param_depth_limit)
-      new Params, key_space_limit, param_depth_limit
+    # ParamsTooDeepError is the error that is raised when params are recursively
+    # nested over the specified limit.
+    class ParamsTooDeepError < RangeError; end
+
+    def self.make_default(_key_space_limit=(not_deprecated = true; nil), param_depth_limit)
+      unless not_deprecated
+        warn("`first argument `key_space limit` is deprecated and no longer has an effect. Please call with only one argument, which will be required in a future version of Rack", uplevel: 1)
+      end
+
+      new Params, param_depth_limit
     end
 
-    attr_reader :key_space_limit, :param_depth_limit
+    attr_reader :param_depth_limit
 
-    def initialize(params_class, key_space_limit, param_depth_limit)
+    def initialize(params_class, _key_space_limit=(not_deprecated = true; nil), param_depth_limit)
+      unless not_deprecated
+        warn("`second argument `key_space limit` is deprecated and no longer has an effect. Please call with only two arguments, which will be required in a future version of Rack", uplevel: 1)
+      end
+
       @params_class = params_class
-      @key_space_limit = key_space_limit
       @param_depth_limit = param_depth_limit
     end
 
-    # Stolen from Mongrel, with some small modifications:
-    # Parses a query string by breaking it up at the '&'
-    # and ';' characters.  You can also use this to parse
-    # cookies by changing the characters used in the second
-    # parameter (which defaults to '&;').
-    def parse_query(qs, d = nil, &unescaper)
-      unescaper ||= method(:unescape)
+    # Originally stolen from Mongrel, now with some modifications:
+    # Parses a query string by breaking it up at the '&'.  You can also use this
+    # to parse cookies by changing the characters used in the second parameter
+    # (which defaults to '&').
+    #
+    # Returns an array of 2-element arrays, where the first element is the
+    # key and the second element is the value.
+    def split_query(qs, separator = nil, &unescaper)
+      pairs = []
 
+      if qs && !qs.empty?
+        unescaper ||= method(:unescape)
+
+        qs.split(separator ? (COMMON_SEP[separator] || /[#{separator}] */n) : DEFAULT_SEP).each do |p|
+          next if p.empty?
+          pair = p.split('=', 2).map!(&unescaper)
+          pair << nil if pair.length == 1
+          pairs << pair
+        end
+      end
+
+      pairs
+    rescue ArgumentError => e
+      raise InvalidParameterError, e.message, e.backtrace
+    end
+
+    # Parses a query string by breaking it up at the '&'.  You can also use this
+    # to parse cookies by changing the characters used in the second parameter
+    # (which defaults to '&').
+    #
+    # Returns a hash where each value is a string (when a key only appears once)
+    # or an array of strings (when a key appears more than once).
+    def parse_query(qs, separator = nil, &unescaper)
       params = make_params
 
-      (qs || '').split(d ? (COMMON_SEP[d] || /[#{d}] */n) : DEFAULT_SEP).each do |p|
-        next if p.empty?
-        k, v = p.split('=', 2).map!(&unescaper)
-
+      split_query(qs, separator, &unescaper).each do |k, v|
         if cur = params[k]
           if cur.class == Array
             params[k] << v
@@ -53,7 +86,7 @@ module Rack
         end
       end
 
-      return params.to_h
+      params.to_h
     end
 
     # parse_nested_query expands a query string into structural types. Supported
@@ -61,76 +94,109 @@ module Rack
     # query strings with parameters of conflicting types, in this case a
     # ParameterTypeError is raised. Users are encouraged to return a 400 in this
     # case.
-    def parse_nested_query(qs, d = nil)
+    def parse_nested_query(qs, separator = nil)
       params = make_params
 
-      unless qs.nil? || qs.empty?
-        (qs || '').split(d ? (COMMON_SEP[d] || /[#{d}] */n) : DEFAULT_SEP).each do |p|
-          k, v = p.split('=', 2).map! { |s| unescape(s) }
-
-          normalize_params(params, k, v, param_depth_limit)
-        end
+      split_query(qs, separator).each do |k, v|
+        _normalize_params(params, k, v, 0)
       end
 
-      return params.to_h
-    rescue ArgumentError => e
-      raise InvalidParameterError, e.message, e.backtrace
+      params.to_h
     end
 
     # normalize_params recursively expands parameters into structural types. If
     # the structural types represented by two different parameter names are in
-    # conflict, a ParameterTypeError is raised.
-    def normalize_params(params, name, v, depth)
-      raise RangeError if depth <= 0
+    # conflict, a ParameterTypeError is raised.  The depth argument is deprecated
+    # and should no longer be used, it is kept for backwards compatibility with
+    # earlier versions of rack.
+    def normalize_params(params, name, v, _depth=nil)
+      _normalize_params(params, name, v, 0)
+    end
 
-      name =~ %r(\A[\[\]]*([^\[\]]+)\]*)
-      k = $1 || ''
-      after = $' || ''
+    # This value is used by default when a parameter is missing (nil). This
+    # usually happens when a parameter is specified without an `=value` part.
+    # The default value is an empty string, but this can be overridden by
+    # subclasses.
+    def missing_value
+      String.new
+    end
 
-      if k.empty?
-        if !v.nil? && name == "[]"
-          return Array(v)
+    private def _normalize_params(params, name, v, depth)
+      raise ParamsTooDeepError if depth >= param_depth_limit
+
+      if !name
+        # nil name, treat same as empty string (required by tests)
+        k = after = ''
+      elsif depth == 0
+        # Start of parsing, don't treat [] or [ at start of string specially
+        if start = name.index('[', 1)
+          # Start of parameter nesting, use part before brackets as key
+          k = name[0, start]
+          after = name[start, name.length]
         else
-          return
+          # Plain parameter with no nesting
+          k = name
+          after = ''
         end
+      elsif name.start_with?('[]')
+        # Array nesting
+        k = '[]'
+        after = name[2, name.length]
+      elsif name.start_with?('[') && (start = name.index(']', 1))
+        # Hash nesting, use the part inside brackets as the key
+        k = name[1, start-1]
+        after = name[start+1, name.length]
+      else
+        # Probably malformed input, nested but not starting with [
+        # treat full name as key for backwards compatibility.
+        k = name
+        after = ''
       end
 
+      return if k.empty?
+
+      v ||= missing_value
+
       if after == ''
-        params[k] = v
+        if k == '[]' && depth != 0
+          return [v]
+        else
+          params[k] = v
+        end
       elsif after == "["
         params[name] = v
       elsif after == "[]"
         params[k] ||= []
         raise ParameterTypeError, "expected Array (got #{params[k].class.name}) for param `#{k}'" unless params[k].is_a?(Array)
         params[k] << v
-      elsif after =~ %r(^\[\]\[([^\[\]]+)\]$) || after =~ %r(^\[\](.+)$)
-        child_key = $1
+      elsif after.start_with?('[]')
+        # Recognize x[][y] (hash inside array) parameters
+        unless after[2] == '[' && after.end_with?(']') && (child_key = after[3, after.length-4]) && !child_key.empty? && !child_key.index('[') && !child_key.index(']')
+          # Handle other nested array parameters
+          child_key = after[2, after.length]
+        end
         params[k] ||= []
         raise ParameterTypeError, "expected Array (got #{params[k].class.name}) for param `#{k}'" unless params[k].is_a?(Array)
         if params_hash_type?(params[k].last) && !params_hash_has_key?(params[k].last, child_key)
-          normalize_params(params[k].last, child_key, v, depth - 1)
+          _normalize_params(params[k].last, child_key, v, depth + 1)
         else
-          params[k] << normalize_params(make_params, child_key, v, depth - 1)
+          params[k] << _normalize_params(make_params, child_key, v, depth + 1)
         end
       else
         params[k] ||= make_params
         raise ParameterTypeError, "expected Hash (got #{params[k].class.name}) for param `#{k}'" unless params_hash_type?(params[k])
-        params[k] = normalize_params(params[k], after, v, depth - 1)
+        params[k] = _normalize_params(params[k], after, v, depth + 1)
       end
 
       params
     end
 
     def make_params
-      @params_class.new @key_space_limit
-    end
-
-    def new_space_limit(key_space_limit)
-      self.class.new @params_class, key_space_limit, param_depth_limit
+      @params_class.new
     end
 
     def new_depth_limit(param_depth_limit)
-      self.class.new @params_class, key_space_limit, param_depth_limit
+      self.class.new @params_class, param_depth_limit
     end
 
     private
@@ -151,13 +217,12 @@ module Rack
       true
     end
 
-    def unescape(s)
-      Utils.unescape(s)
+    def unescape(string, encoding = Encoding::UTF_8)
+      URI.decode_www_form_component(string, encoding)
     end
 
     class Params
-      def initialize(limit)
-        @limit  = limit
+      def initialize
         @size   = 0
         @params = {}
       end
@@ -167,8 +232,6 @@ module Rack
       end
 
       def []=(key, value)
-        @size += key.size if key && !@params.key?(key)
-        raise RangeError, 'exceeded available parameter key space' if @size > @limit
         @params[key] = value
       end
 

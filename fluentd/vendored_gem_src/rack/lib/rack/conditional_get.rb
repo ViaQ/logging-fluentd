@@ -1,10 +1,14 @@
 # frozen_string_literal: true
 
+require_relative 'constants'
+require_relative 'utils'
+require_relative 'body_proxy'
+
 module Rack
 
-  # Middleware that enables conditional GET using If-None-Match and
-  # If-Modified-Since. The application should set either or both of the
-  # Last-Modified or Etag response headers according to RFC 2616. When
+  # Middleware that enables conditional GET using if-none-match and
+  # if-modified-since. The application should set either or both of the
+  # last-modified or etag response headers according to RFC 2616. When
   # either of the conditions is met, the response body is set to be zero
   # length and the response status is set to 304 Not Modified.
   #
@@ -24,18 +28,17 @@ module Rack
     def call(env)
       case env[REQUEST_METHOD]
       when "GET", "HEAD"
-        status, headers, body = @app.call(env)
-        headers = Utils::HeaderHash[headers]
+        status, headers, body = response = @app.call(env)
+
         if status == 200 && fresh?(env, headers)
-          status = 304
+          response[0] = 304
           headers.delete(CONTENT_TYPE)
           headers.delete(CONTENT_LENGTH)
-          original_body = body
-          body = Rack::BodyProxy.new([]) do
-            original_body.close if original_body.respond_to?(:close)
+          response[2] = Rack::BodyProxy.new([]) do
+            body.close if body.respond_to?(:close)
           end
         end
-        [status, headers, body]
+        response
       else
         @app.call(env)
       end
@@ -46,7 +49,7 @@ module Rack
     # Return whether the response has not been modified since the
     # last request.
     def fresh?(env, headers)
-      # If-None-Match has priority over If-Modified-Since per RFC 7232
+      # if-none-match has priority over if-modified-since per RFC 7232
       if none_match = env['HTTP_IF_NONE_MATCH']
         etag_matches?(none_match, headers)
       elsif (modified_since = env['HTTP_IF_MODIFIED_SINCE']) && (modified_since = to_rfc2822(modified_since))
@@ -54,16 +57,16 @@ module Rack
       end
     end
 
-    # Whether the ETag response header matches the If-None-Match request header.
+    # Whether the etag response header matches the if-none-match request header.
     # If so, the request has not been modified.
     def etag_matches?(none_match, headers)
-      headers['ETag'] == none_match
+      headers[ETAG] == none_match
     end
 
-    # Whether the Last-Modified response header matches the If-Modified-Since
+    # Whether the last-modified response header matches the if-modified-since
     # request header.  If so, the request has not been modified.
     def modified_since?(modified_since, headers)
-      last_modified = to_rfc2822(headers['Last-Modified']) and
+      last_modified = to_rfc2822(headers['last-modified']) and
         modified_since >= last_modified
     end
 
