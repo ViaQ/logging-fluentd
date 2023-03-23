@@ -36,8 +36,8 @@ protocol-http 0.22.6 https://github.com/socketry/protocol-http
 protocol-http1 0.14.4 https://github.com/socketry/protocol-http1
 protocol-http2 0.14.2 https://github.com/socketry/protocol-http2
 rack-oauth2 1.19.0 http://github.com/nov/rack-oauth2
-rubygem-activemodel 6.1.6 https://rubyonrails.org
-rubygem-activesupport 6.1.6 https://rubyonrails.org
+rubygem-activemodel 6.1.7.3 https://rubyonrails.org
+rubygem-activesupport 6.1.7.3 https://rubyonrails.org
 rubygem-addressable 2.8.0 https://github.com/sporkmonger/addressable
 rubygem-bigdecimal 3.1.2 https://github.com/ruby/bigdecimal
 rubygem-bundler 1.17.3 http://bundler.io
