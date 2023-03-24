@@ -29,13 +29,12 @@ RUN pushd /tmp/jemalloc && \
 COPY ${upstream_code}/source.jemalloc /source.jemalloc
 RUN bash -c '. /source.jemalloc; echo jemalloc $JEMALLOC_VER >> /contents'
 
-COPY ${upstream_code}/vendored_gem_src/ ${HOME}/vendored_gem_src/
-COPY ${upstream_code}/lib ${HOME}/vendored_gem_src
-COPY ${upstream_code}/install-gems.sh ${HOME}/vendored_gem_src/
-COPY ${upstream_code}/*.patch.sh ${HOME}/vendored_gem_src/
-COPY ${upstream_code}/*.patch ${HOME}/vendored_gem_src/
+COPY ${upstream_code}/lib  ${HOME}/lib
+COPY ${upstream_code}/Gemfile* ${HOME}/
+WORKDIR ${HOME}
 
-RUN cd ${HOME}/vendored_gem_src/ && ./install-gems.sh
+RUN for d in $(ls lib); do pushd lib/$d; rm *.gem; gem build *.gemspec; gem install -N --install-dir /usr/share/gems --bindir /usr/bin *.gem; popd; done && \
+ CONFIGURE_ARGS="--with-cflags='$( rpm --eval %optflags )'" bundle install
 
 #@follow_tag(registry.redhat.io/ubi8/ruby-27:latest)
 FROM registry.redhat.io/ubi8/ruby-27:1-73 AS runtime
@@ -71,23 +70,25 @@ RUN RUNTIME_PKGS="hostname bc iproute" \
 
 RUN mkdir -p /etc/fluent/plugin
 
+COPY --from=builder /usr/bin/fluentd /usr/local/bin
+COPY --from=builder /usr/bin/fluent-cat /usr/local/bin
 COPY --from=builder /usr/local/lib/libjemalloc* /usr/local/lib
-COPY --from=builder /usr/local/bin/fluentd /usr/local/bin
-COPY --from=builder /usr/local/bin/fluent-cat /usr/local/bin
 COPY --from=builder /usr/local/bin/jemalloc-config /usr/local/bin
 COPY --from=builder /usr/local/bin/jemalloc.sh /usr/local/bin
 COPY --from=builder /usr/local/bin/jeprof /usr/local/bin
 
-COPY --from=builder /usr/local/share/gems /usr/local/share/gems
-COPY --from=builder /usr/local/lib64/gems/ruby /usr/local/lib64/gems/ruby
-COPY ${upstream_code}/out_syslog_buffered.rb /etc/fluent/plugin/
-COPY ${upstream_code}/out_syslog.rb /etc/fluent/plugin/
-COPY ${upstream_code}/out_rawtcp.rb /etc/fluent/plugin/
+COPY --from=builder /usr/share/gems /usr/share/gems
+COPY --from=builder /usr/lib64/gems/ruby /usr/lib64/gems/ruby
 COPY ${upstream_code}/run.sh ${HOME}/
-COPY ${upstream_code}/generate_syslog_config.rb ${HOME}/
-COPY ${upstream_code}/wait_for_es_version.rb ${HOME}/
-COPY ${upstream_code}/wait_for_es_version.sh ${HOME}/
 COPY ${upstream_code}/utils/ /usr/local/bin/
+
+# Patch gems from upstream which are no longer vendored
+COPY ${upstream_code}/*.patch /usr/share/gems
+RUN  mv /usr/share/gems/aws-sdk-core.source0001.patch /usr/share/gems/gems/aws-sdk-core-*/ && \
+     cd /usr/share/gems/gems/aws-sdk-core-*/ && patch -p1 < aws-sdk-core.source0001.patch && \
+     cd /usr/share/gems &&  \
+     mv /usr/share/gems/fluent-plugin-detect-exceptions.source0001.patch /usr/share/gems/gems/fluent-plugin-detect-exceptions-*/ && \
+     cd /usr/share/gems/gems/fluent-plugin-detect-exceptions-*/ && patch -p1 < fluent-plugin-detect-exceptions.source0001.patch
 
 RUN mkdir -p /etc/fluent/configs.d/user && \
     chmod 777 /etc/fluent/configs.d/user && \
