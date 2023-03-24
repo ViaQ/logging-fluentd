@@ -76,7 +76,7 @@ describe "a syslog packet" do
   end
 
   it "timestamp must conform to the retarded format" do
-    @p.generate_timestamp_rfc3164.should.match /(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s(\s|[1-9])\d\s\d\d:\d\d:\d\d/
+    @p.generate_timestamp_rfc3164.should.match(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s(\s|[1-9])\d\s\d\d:\d\d:\d\d/)
   end
 
   it "use the current time and assemble the packet" do

@@ -46,7 +46,13 @@ class RemoteSyslogOutputTest < Test::Unit::TestCase
     ]
 
     mock.proxy(RemoteSyslogSender::UdpSender).new("example.com", 5566, whinyerrors: true, program: "minitest") do |sender|
-      mock.proxy(sender).transmit("foo",  facility: "user", severity: "debug", program: "minitest", hostname: "foo.com", rfc: :rfc3164)
+      packet_option = {}.tap do |po|
+        {facility: "user", severity: "debug", program: "minitest", hostname: "foo.com", rfc: :rfc3164}.each do|k,v|
+          po[k.to_sym] = v
+        end
+        po
+      end
+      mock.proxy(sender).transmit("foo",  packet_option)
     end
 
     d.run do
@@ -77,8 +83,16 @@ class RemoteSyslogOutputTest < Test::Unit::TestCase
       mock(klass).connect
     end
 
-    mock.proxy(RemoteSyslogSender::TcpSender).new("example.com", 5566, whinyerrors: true, program: "minitest", tls: false, packet_size: 1024, timeout: nil, timeout_exception: false, keep_alive: false, keep_alive_cnt: nil, keep_alive_idle: nil, keep_alive_intvl: nil) do |sender|
-      mock(sender).transmit("foo",  facility: "user", severity: "debug", program: "minitest", hostname: "foo.com", rfc: :rfc3164)
+    factory_args = {}
+    {whinyerrors: true, program: "minitest", tls: false, packet_size: 1024, timeout: nil, timeout_exception: false, keep_alive: false, keep_alive_cnt: nil, keep_alive_idle: nil, keep_alive_intvl: nil}.each do |k,v|
+      factory_args[k.to_sym] = v
+    end
+    mock.proxy(RemoteSyslogSender::TcpSender).new("example.com", 5566, factory_args) do |sender|
+      packet_options = {}
+      {facility: "user", severity: "debug", program: "minitest", hostname: "foo.com", rfc: :rfc3164}.each do |k,v|
+          packet_options[k.to_sym] = v
+      end
+      mock(sender).transmit("foo",  packet_options)
     end
 
     d.run do
@@ -111,8 +125,16 @@ class RemoteSyslogOutputTest < Test::Unit::TestCase
       mock(klass).connect
     end
 
-    mock.proxy(RemoteSyslogSender::TcpSender).new("example.com", 5566, whinyerrors: true, program: "fluentd", tls: false, packet_size: 1024, timeout: nil, timeout_exception: false, keep_alive: false, keep_alive_cnt: nil, keep_alive_idle: nil, keep_alive_intvl: nil) do |sender|
-      mock(sender).transmit("foo",  facility: "user", severity: "debug", appname: "minitest", procid: "miniproc", msgid: "minimsg", program: "fluentd", hostname: "foo.com", rfc: :rfc5424)
+    factory_args = {}
+    {whinyerrors: true, program: "fluentd", tls: false, packet_size: 1024, timeout: nil, timeout_exception: false, keep_alive: false, keep_alive_cnt: nil, keep_alive_idle: nil, keep_alive_intvl: nil}.each do |k,v|
+      factory_args[k.to_sym] = v
+    end
+    mock.proxy(RemoteSyslogSender::TcpSender).new("example.com", 5566, factory_args) do |sender|
+      packet_options = {}
+      {facility: "user", severity: "debug", appname: "minitest", procid: "miniproc", msgid: "minimsg", program: "fluentd", hostname: "foo.com", rfc: :rfc5424}.each do |k,v|
+          packet_options[k.to_sym] = v
+      end
+      mock(sender).transmit("foo",  packet_options)
     end
 
     d.run do

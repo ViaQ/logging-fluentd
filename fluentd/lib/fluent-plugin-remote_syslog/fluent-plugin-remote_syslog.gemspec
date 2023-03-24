@@ -17,5 +17,4 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency "test-unit-rr"
 
   spec.add_runtime_dependency "fluentd", "=1.14.6"
-  spec.add_runtime_dependency "remote_syslog_sender", "=1.2.1"
 end
