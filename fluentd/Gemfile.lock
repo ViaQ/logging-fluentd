@@ -10,7 +10,7 @@ PATH
       prometheus-client (>= 2.1.0)
     fluent-plugin-remote-syslog (1.2)
       fluent-mixin-config-placeholders
-      fluentd
+      fluentd (= 1.14.6)
       syslog_protocol
     fluent-plugin-remote_syslog (1.0.0)
       fluentd (= 1.14.6)
@@ -205,6 +205,7 @@ GEM
       jsonpath (~> 1.0)
       recursive-open-struct (~> 1.1, >= 1.1.1)
       rest-client (~> 2.0)
+    libxml-ruby (4.0.0)
     lru_redux (1.1.0)
     ltsv (0.1.2)
     mail (2.7.1)
@@ -325,6 +326,7 @@ DEPENDENCIES
   fluentd!
   formatter-single-json-value!
   kubeclient
+  libxml-ruby
   oj
   parser_viaq_host_audit!
   rake

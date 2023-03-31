@@ -6,7 +6,7 @@ ENV REMOTE_SOURCES_DIR=${REMOTE_SOURCES_DIR:-"."}
 
 USER 0
 RUN : 'removed yum-config-manager' \
- &&   BUILD_PKGS="make gcc-c++ libffi-devel autoconf automake libtool m4 redhat-rpm-config" \
+ &&   BUILD_PKGS="make gcc-c++ libffi-devel autoconf automake libtool m4 redhat-rpm-config libxml2-devel" \
  &&   RUNTIME_PKGS="hostname bc iproute" \
  &&   yum install -y --setopt=tsflags=nodocs $BUILD_PKGS $RUNTIME_PKGS \
  &&   rpm -V $BUILD_PKGS \
@@ -19,22 +19,14 @@ ENV upstream_code=$REMOTE_SOURCES/fluentd/app/fluentd
 
 ENV upstream_code=${upstream_code:-"."} \
     HOME=/opt/app-root/src 
-COPY ${upstream_code}/jemalloc/ /tmp/jemalloc/
-RUN pushd /tmp/jemalloc && \
-        EXTRA_CFLAGS="$( rpm --eval '%{optflags}' )" ./autogen.sh && \
-        make install_lib_shared install_bin && \
-        cp COPYING /tmp/COPYING.jemalloc && \
-    popd
-
-COPY ${upstream_code}/source.jemalloc /source.jemalloc
-RUN bash -c '. /source.jemalloc; echo jemalloc $JEMALLOC_VER >> /contents'
 
 COPY ${upstream_code}/lib  ${HOME}/lib
 COPY ${upstream_code}/Gemfile* ${HOME}/
 WORKDIR ${HOME}
 
-RUN for d in $(ls lib); do pushd lib/$d; rm *.gem; gem build *.gemspec; gem install -N --install-dir /usr/share/gems --bindir /usr/bin *.gem; popd; done && \
- CONFIGURE_ARGS="--with-cflags='$( rpm --eval %optflags )'" bundle install
+RUN CONFIGURE_ARGS="--with-cflags='$( rpm --eval %optflags )'" bundle install && \
+    for d in $(ls lib); do pushd lib/$d; gem build --force -V *.gemspec; \ 
+    gem install -N -minimal-deps --local --force --install-dir /usr/share/gems --bindir /usr/bin *.gem; popd; done
 
 #@follow_tag(registry.redhat.io/ubi8/ruby-27:latest)
 FROM registry.redhat.io/ubi8/ruby-27:1-73 AS runtime
@@ -63,7 +55,7 @@ ENV DATA_VERSION=$DATA_VERSION_VALUE \
     container=$CONTAINER_VALUE
 
 USER 0
-RUN RUNTIME_PKGS="hostname bc iproute" \
+RUN RUNTIME_PKGS="hostname bc iproute libxml2" \
  &&   yum install -y --setopt=tsflags=nodocs $RUNTIME_PKGS \
  &&   rpm -V $RUNTIME_PKGS \
  &&   yum clean all
@@ -72,10 +64,6 @@ RUN mkdir -p /etc/fluent/plugin
 
 COPY --from=builder /usr/bin/fluentd /usr/local/bin
 COPY --from=builder /usr/bin/fluent-cat /usr/local/bin
-COPY --from=builder /usr/local/lib/libjemalloc* /usr/local/lib
-COPY --from=builder /usr/local/bin/jemalloc-config /usr/local/bin
-COPY --from=builder /usr/local/bin/jemalloc.sh /usr/local/bin
-COPY --from=builder /usr/local/bin/jeprof /usr/local/bin
 
 COPY --from=builder /usr/share/gems /usr/share/gems
 COPY --from=builder /usr/lib64/gems/ruby /usr/lib64/gems/ruby

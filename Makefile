@@ -34,8 +34,11 @@ install-gems:
 update-libs-for-fluentd:
 	FLUENTD_VERSION=$(FLUENTD_VERSION) ; \
 	for d in $$(ls fluentd/lib); do pushd fluentd/lib/$$d ; \
-		sed -i "s/add_runtime_dependency.*\"fluentd\".*/add_runtime_dependency \"fluentd\", \"=$$FLUENTD_VERSION\"/" $$(ls *.gemspec) ; \
+		grep fluentd $$(ls *.gemspec) ; \
+		if [ "$$?" -eq "0" ] ; then  \
+		sed -i "s/add.*dependency.*\"fluentd\".*/add_runtime_dependency \"fluentd\", \"=$$FLUENTD_VERSION\"/" $$(ls *.gemspec) ; \
 		bundle update fluentd --conservative --bundler ; \
+		fi ; \
 		popd ; \
 	done
 .PHONY: update-libs-for-fluentd
