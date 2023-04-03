@@ -52,8 +52,6 @@ for dir in * ; do
         gem build -V $gem_name.gemspec
         exit 1
     }
-    gem_ver=$( gem spec --ruby *.gem | ruby -e 'gemspec=eval($stdin.read); puts gemspec.version.version' )
-    echo $gem_name $gem_ver >> $contents
     mv *.gem ..
     popd > /dev/null
 done
