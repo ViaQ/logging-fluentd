@@ -40,3 +40,5 @@ path 'lib' do
   gem 'remote_syslog_sender'
   gem 'syslog_protocol'
 end 
+
+gem "rexml", "= 3.2.5"
