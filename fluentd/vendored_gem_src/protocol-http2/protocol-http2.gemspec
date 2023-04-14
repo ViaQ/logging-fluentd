@@ -13,7 +13,7 @@ Gem::Specification.new do |s|
   s.homepage = "https://github.com/socketry/protocol-http2".freeze
   s.licenses = ["MIT".freeze]
   s.required_ruby_version = Gem::Requirement.new(">= 2.5".freeze)
-  s.rubygems_version = "3.1.6".freeze
+  s.rubygems_version = "3.3.26".freeze
   s.summary = "A low level implementation of the HTTP/2 protocol.".freeze
 
   if s.respond_to? :specification_version then

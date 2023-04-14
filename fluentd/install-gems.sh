@@ -15,16 +15,21 @@ gem --version
 contents=$( mktemp )
 trap "rm -f $contents" EXIT
 
-for dir in * ; do
-    if [ ! -f $dir/$dir.gemspec ] ; then
-        echo directory $dir has no gemspec - assuming not a gem dir - skipping
+for dir in $(ls -d */ | cut -f1 -d'/') ; do
+    if [ ! -f ./$dir/$dir.gemspec ] ; then
+        echo directory $dir has no gemspec e.g. $dir/$dir.gemspec - assuming not a gem dir - skipping
         continue
     fi
     pushd $dir > /dev/null
     gem_name=$dir
     for file in ../$gem_name.source????.patch ; do
         if [ -f "$file" ] ; then
+            echo applying source patch $file to $gem_name.gemspec
             patch -p1 < $file
+            rc=$?
+            if [ "$rc" != "0" ] ; then
+                exit $rc
+            fi
         fi
     done
     if [ -f ../$gem_name.sources.patch.sh ] ; then

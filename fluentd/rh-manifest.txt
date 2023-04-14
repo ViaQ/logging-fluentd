@@ -31,6 +31,7 @@ json-jwt 1.13.0 https://github.com/nov/json-jwt
 jsonpath 1.1.2 https://github.com/joshbuddy/jsonpath
 ltsv 0.1.2 https://github.com/condor/ltsv
 openid_connect 1.1.8 https://github.com/nov/openid_connect
+openssl 3.1.0 https://github.com/ruby/openssl
 protocol-hpack 1.4.2 https://github.com/socketry/http-hpack
 protocol-http 0.22.6 https://github.com/socketry/protocol-http
 protocol-http1 0.14.4 https://github.com/socketry/protocol-http1

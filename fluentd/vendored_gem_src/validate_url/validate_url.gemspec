@@ -14,7 +14,7 @@ Gem::Specification.new do |s|
   s.extra_rdoc_files = ["LICENSE.md".freeze, "README.md".freeze]
   s.files = ["LICENSE.md".freeze, "README.md".freeze, "init.rb".freeze, "install.rb".freeze, "lib/locale/ar.yml".freeze, "lib/locale/de.yml".freeze, "lib/locale/en.yml".freeze, "lib/locale/es.yml".freeze, "lib/locale/fr.yml".freeze, "lib/locale/it.yml".freeze, "lib/locale/ja.yml".freeze, "lib/locale/km.yml".freeze, "lib/locale/pl.yml".freeze, "lib/locale/pt-BR.yml".freeze, "lib/locale/ro.yml".freeze, "lib/locale/ru.yml".freeze, "lib/locale/tr.yml".freeze, "lib/locale/vi.yml".freeze, "lib/locale/zh-CN.yml".freeze, "lib/locale/zh-TW.yml".freeze, "lib/validate_url.rb".freeze, "lib/validate_url/rspec_matcher.rb".freeze]
   s.homepage = "http://github.com/perfectline/validates_url/tree/master".freeze
-  s.rubygems_version = "3.1.6".freeze
+  s.rubygems_version = "3.3.26".freeze
   s.summary = "Library for validating urls in Rails.".freeze
 
   if s.respond_to? :specification_version then
