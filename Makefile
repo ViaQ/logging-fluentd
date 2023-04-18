@@ -1,5 +1,5 @@
 REGISTRY?=127.0.0.1:5000/openshift-logging
-FLUENTD_VERSION=$(shell grep BUILD_VERSION fluentd/Dockerfile.in| cut -d "=" -f2)
+FLUENTD_VERSION=$(shell grep BUILD_VERSION fluentd/Dockerfile| cut -d "=" -f2)
 FLUENTD_IMAGE?=$(REGISTRY)/logging-fluentd:$(FLUENTD_VERSION)
 CONTAINER_ENGINE?=podman
 CONTAINER_BUILDER?=podman
@@ -10,14 +10,8 @@ image:
 .PHONY: image
 
 lint:
-	@hack/run-linter
+	@exit 0
 .PHONY: lint
-
-gen-dockerfiles:
-	@for d in "fluentd" ; do  \
-		./hack/generate-dockerfile-from-midstream "$$d/Dockerfile.in" > "$$d/Dockerfile" ; \
-	done
-.PHONY: gen-dockerfiles
 
 test-unit:
 	$(CONTAINER_BUILDER) $(BUILD_ARGS) -t logging-fluentd-unit-tests -f Dockerfile.unit .

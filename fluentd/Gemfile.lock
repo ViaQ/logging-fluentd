@@ -14,7 +14,6 @@ PATH
       syslog_protocol
     fluent-plugin-remote_syslog (1.0.0)
       fluentd (= 1.14.6)
-      remote_syslog_sender (= 1.2.1)
     fluent-plugin-viaq_data_model (0.0.23)
       fluentd (= 1.14.6)
     formatter-single-json-value (0.0.1)
@@ -336,4 +335,4 @@ DEPENDENCIES
   uuidtools
 
 BUNDLED WITH
-   2.1.4
+   2.3.7

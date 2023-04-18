@@ -1,43 +1,28 @@
-### This is a generated file from Dockerfile.in ###
-#@follow_tag(registry.redhat.io/ubi8/ruby-27:latest)
 FROM registry.access.redhat.com/ubi9/ruby-31 AS builder
 
-ENV REMOTE_SOURCES=${REMOTE_SOURCES:-"."}
-ENV REMOTE_SOURCES_DIR=${REMOTE_SOURCES_DIR:-"."}
 
 USER 0
 RUN : 'removed yum-config-manager' \
  &&   BUILD_PKGS="make gcc-c++ libffi-devel autoconf automake libtool m4 redhat-rpm-config libxml2-devel" \
  &&   RUNTIME_PKGS="hostname bc iproute" \
- &&   yum install -y --setopt=tsflags=nodocs $BUILD_PKGS $RUNTIME_PKGS \
+ &&   dnf install -y --setopt=tsflags=nodocs $BUILD_PKGS $RUNTIME_PKGS \
  &&   rpm -V $BUILD_PKGS \
  &&   rpm -V $RUNTIME_PKGS \
- &&   yum clean all
+ &&   dnf clean all
+
+WORKDIR /opt/app-root/src
+COPY . .
 
 
-ENV upstream_code=${upstream_code:-"."} \
-    HOME=/opt/app-root/src 
+RUN CONFIGURE_ARGS="--with-cflags='$( rpm --eval %optflags )'" bundle install
 
-COPY ${upstream_code}/lib  ${HOME}/lib
-COPY ${upstream_code}/Gemfile* ${HOME}/
-WORKDIR ${HOME}
 
-RUN CONFIGURE_ARGS="--with-cflags='$( rpm --eval %optflags )'" bundle install && \
-    for d in $(ls lib); do pushd lib/$d; gem build --force -V *.gemspec; \ 
-    gem install -N -minimal-deps --local --force --install-dir /usr/share/gems --bindir /usr/bin *.gem; popd; done
-
-#@follow_tag(registry.redhat.io/ubi8/ruby-27:latest)
 FROM registry.access.redhat.com/ubi9/ruby-31 AS runtime
-
-ENV REMOTE_SOURCES=${REMOTE_SOURCES:-"."}
-ENV upstream_code=${upstream_code:-"."}
 
 ENV BUILD_VERSION=1.14.6
 ENV OS_GIT_MAJOR=1
 ENV OS_GIT_MINOR=14
 ENV OS_GIT_PATCH=6
-ENV SOURCE_GIT_COMMIT=${CI_LOGGING_FLUENTD_UPSTREAM_COMMIT:-}
-ENV SOURCE_GIT_URL=${CI_LOGGING_FLUENTD_UPSTREAM_URL:-}
 
 ARG DATA_VERSION_VALUE=1.6.0
 ARG FLUENTD_VERSION_VALUE=1.14.6
@@ -51,22 +36,24 @@ ENV DATA_VERSION=$DATA_VERSION_VALUE \
 
 USER 0
 RUN RUNTIME_PKGS="hostname bc iproute libxml2" \
- &&   yum install -y --setopt=tsflags=nodocs $RUNTIME_PKGS \
+ &&   dnf install -y --setopt=tsflags=nodocs $RUNTIME_PKGS \
  &&   rpm -V $RUNTIME_PKGS \
- &&   yum clean all
+ &&   dnf clean all
 
 RUN mkdir -p /etc/fluent/plugin
 
-COPY --from=builder /usr/bin/fluentd /usr/local/bin
-COPY --from=builder /usr/bin/fluent-cat /usr/local/bin
-
+COPY --from=builder /usr/bin/fluentd /usr/bin/fluentd-orig
+COPY --from=builder /usr/bin/fluent-cat /usr/bin
 COPY --from=builder /usr/share/gems /usr/share/gems
 COPY --from=builder /usr/lib64/gems/ruby /usr/lib64/gems/ruby
-COPY ${upstream_code}/run.sh ${HOME}/
-COPY ${upstream_code}/utils/ /usr/local/bin/
+COPY --from=builder ${HOME}/lib ${HOME}/lib
+
+COPY ./run.sh ${HOME}/
+COPY ./utils/ /usr/local/bin/
+COPY ./fluentd /usr/bin/
 
 # Patch gems from upstream which are no longer vendored
-COPY ${upstream_code}/*.patch /usr/share/gems
+COPY ./*.patch /usr/share/gems
 RUN  mv /usr/share/gems/aws-sdk-core.source0001.patch /usr/share/gems/gems/aws-sdk-core-*/ && \
      cd /usr/share/gems/gems/aws-sdk-core-*/ && patch -p1 < aws-sdk-core.source0001.patch && \
      cd /usr/share/gems &&  \
@@ -89,9 +76,6 @@ LABEL \
         name="openshift-logging/fluentd-rhel8" \
         com.redhat.component="logging-fluentd-container" \
         io.openshift.maintainer.product="OpenShift Container Platform" \
-        io.openshift.build.commit.id=${CI_LOGGING_FLUENTD_UPSTREAM_COMMIT} \
-        io.openshift.build.source-location=${CI_LOGGING_FLUENTD_UPSTREAM_URL} \
-        io.openshift.build.commit.url=${CI_LOGGING_FLUENTD_UPSTREAM_URL}/commit/${CI_LOGGING_FLUENTD_UPSTREAM_COMMIT} \
         version=v1.14.6
 
 

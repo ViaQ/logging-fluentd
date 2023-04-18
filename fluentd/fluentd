@@ -1,0 +1,10 @@
+#!/bin/sh
+
+cd ${HOME}/lib
+for d in $(ls -d */) ; do
+  pushd $d
+    RUBYOPT="${RUBYOPT:-} -I$(pwd)/lib"
+  popd
+done
+export RUBYOPT=$RUBYOPT
+exec fluentd-orig "$@"
