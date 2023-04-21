@@ -7,9 +7,9 @@ index d7c78b4..3eb52b3 100644
      JAVA_RULES = [
        rule([:start_state, :java_start_exception],
 -           /(?:Exception|Error|Throwable|V8 errors stack trace)[:\r\n]/,
-+           /(?:(Exception|Error|Throwable|V8 errors stack trace)[:\z\r\n]|java[x]?\..*(Exception|Error))/,
++           /(?:(Exception|Error|Throwable|V8 errors stack trace)[:\r\n]|java[x]?\..*(Exception|Error))/,
             :java_after_exception),
-+      rule([:start_state, :java_start_exception], /Error\s*$/, :java_after_exception),
++      rule([:start_state, :java_start_exception], /(Error\s*$|V8 errors stack trace\s*$)/, :java_after_exception),
        rule(:java_after_exception, /^[\t ]*nested exception is:[\t ]*/,
             :java_start_exception),
        rule(:java_after_exception, /^[\r\n]*$/, :java_after_exception),
