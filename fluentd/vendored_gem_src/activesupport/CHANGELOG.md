@@ -1,3 +1,37 @@
+## Rails 6.1.7.3 (March 13, 2023) ##
+
+*   Implement SafeBuffer#bytesplice
+
+    [CVE-2023-28120]
+
+
+## Rails 6.1.7.2 (January 24, 2023) ##
+
+*   No changes.
+
+
+## Rails 6.1.7.1 (January 17, 2023) ##
+
+*   Avoid regex backtracking in Inflector.underscore
+
+    [CVE-2023-22796]
+
+
+## Rails 6.1.7 (September 09, 2022) ##
+
+*   No changes.
+
+
+## Rails 6.1.6.1 (July 12, 2022) ##
+
+*   No changes.
+
+
+## Rails 6.1.6 (May 09, 2022) ##
+
+*   No changes.
+
+
 ## Rails 6.1.5.1 (April 26, 2022) ##
 
 *   Fix and add protections for XSS in `ActionView::Helpers` and `ERB::Util`.
