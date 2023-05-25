@@ -65,11 +65,10 @@ void* _msgpack_rmem_alloc2(msgpack_rmem_t* pm)
     /* allocate new chunk */
     c = pm->array_last++;
 
-    /* move to head */
-    msgpack_rmem_chunk_t tmp = pm->head;
-    pm->head = *c;
-    *c = tmp;
+    /* move head to array */
+    *c = pm->head;
 
+    pm->head.pages = NULL; /* make sure we don't point to another chunk's pages in case xmalloc triggers GC */
     pm->head.mask = 0xffffffff & (~1);  /* "& (~1)" means first chunk is already allocated */
     pm->head.pages = xmalloc(MSGPACK_RMEM_PAGE_SIZE * 32);
 

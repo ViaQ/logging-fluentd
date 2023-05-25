@@ -2,8 +2,16 @@
 describe ServerEngine::Daemon do
   include_context 'test server and worker'
 
+  before do
+    @log_path = "tmp/multi-worker-test-#{SecureRandom.hex(10)}.log"
+  end
+
+  after do
+    FileUtils.rm_rf(@log_path)
+  end
+
   it 'run and graceful stop by signal' do
-    pending "not supported signal base commands on Windows" if ServerEngine.windows?
+    skip "not supported signal base commands on Windows" if ServerEngine.windows?
 
     dm = Daemon.new(TestServer, TestWorker, daemonize: true, pid_path: "tmp/pid", command_sender: "signal")
     dm.main
@@ -25,7 +33,7 @@ describe ServerEngine::Daemon do
   end
 
   it 'signals' do
-    pending "not supported signal base commands on Windows" if ServerEngine.windows?
+    skip "not supported signal base commands on Windows" if ServerEngine.windows?
     dm = Daemon.new(TestServer, TestWorker, daemonize: true, pid_path: "tmp/pid", command_sender: "signal")
     dm.main
 
@@ -104,13 +112,14 @@ describe ServerEngine::Daemon do
   end
 
   it 'exits with status 0 when it was stopped normally' do
-    pending "worker type process(fork) cannot be used in Windows" if ServerEngine.windows?
+    skip "worker type process(fork) cannot be used in Windows" if ServerEngine.windows?
     dm = Daemon.new(
       TestServer,
       TestWorker,
       daemonize: false,
       supervisor: false,
       pid_path: "tmp/pid",
+      logger: ServerEngine::DaemonLogger.new(@log_path),
       log_stdout: false,
       log_stderr: false,
       unrecoverable_exit_codes: [3,4,5],
@@ -126,7 +135,7 @@ describe ServerEngine::Daemon do
   end
 
   it 'exits with status of workers if worker exits with status specified in unrecoverable_exit_codes, without supervisor' do
-    pending "worker type process(fork) cannot be used in Windows" if ServerEngine.windows?
+    skip "worker type process(fork) cannot be used in Windows" if ServerEngine.windows?
 
     dm = Daemon.new(
       TestServer,
@@ -135,6 +144,7 @@ describe ServerEngine::Daemon do
       supervisor: false,
       worker_type: 'process',
       pid_path: "tmp/pid",
+      logger: ServerEngine::DaemonLogger.new(@log_path),
       log_stdout: false,
       log_stderr: false,
       unrecoverable_exit_codes: [3,4,5],
@@ -149,7 +159,7 @@ describe ServerEngine::Daemon do
   end
 
   it 'exits with status of workers if worker exits with status specified in unrecoverable_exit_codes, with supervisor' do
-    pending "worker type process(fork) cannot be used in Windows" if ServerEngine.windows?
+    skip "worker type process(fork) cannot be used in Windows" if ServerEngine.windows?
 
     dm = Daemon.new(
       TestServer,
@@ -158,6 +168,7 @@ describe ServerEngine::Daemon do
       supervisor: true,
       worker_type: 'process',
       pid_path: "tmp/pid",
+      logger: ServerEngine::DaemonLogger.new(@log_path),
       log_stdout: false,
       log_stderr: false,
       unrecoverable_exit_codes: [3,4,5],

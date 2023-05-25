@@ -34,14 +34,20 @@ namespace :repackage do
   task :all do
     Dir.chdir(__dir__) do
       # store gems in vendor cache for docker
-      sh 'bundle package'
+      Bundler.with_original_env do
+        sh 'bundle package'
+      end
 
       # build only the jar file not the whole gem for java platform, the jar is part the concurrent-ruby-x.y.z.gem
       Rake::Task['lib/concurrent-ruby/concurrent/concurrent_ruby.jar'].invoke
 
       # build all gem files
       %w[x86-mingw32 x64-mingw32].each do |plat|
-        RakeCompilerDock.sh "bundle install --local && bundle exec rake native:#{plat} gem --trace", platform: plat
+        RakeCompilerDock.sh(
+          "bundle install --local && bundle exec rake native:#{plat} gem --trace",
+          platform: plat,
+          options: ['--privileged'], # otherwise the directory in the image is empty
+          runas: false)
       end
     end
   end
@@ -54,7 +60,10 @@ Gem::PackageTask.new(core_gemspec) {} if core_gemspec
 Gem::PackageTask.new(ext_gemspec) {} if ext_gemspec && !Concurrent.on_jruby?
 Gem::PackageTask.new(edge_gemspec) {} if edge_gemspec
 
-CLEAN.include('lib/concurrent-ruby/concurrent/2.*', 'lib/concurrent-ruby/concurrent/*.jar')
+CLEAN.include(
+  'lib/concurrent-ruby/concurrent/concurrent_ruby_ext.*',
+  'lib/concurrent-ruby/concurrent/2.*',
+  'lib/concurrent-ruby/concurrent/*.jar')
 
 begin
   require 'rspec'
@@ -74,19 +83,34 @@ begin
 
     desc '* test packaged and installed gems instead of local files'
     task :installed do
-      Dir.chdir(__dir__) do
-        sh "gem install pkg/concurrent-ruby-#{Concurrent::VERSION}.gem"
-        sh "gem install pkg/concurrent-ruby-ext-#{Concurrent::VERSION}.gem" if Concurrent.on_cruby?
-        sh "gem install pkg/concurrent-ruby-edge-#{Concurrent::EDGE_VERSION}.gem"
-        ENV['NO_PATH'] = 'true'
-        sh 'bundle update'
-        sh 'bundle exec rake spec:ci'
+      Bundler.with_original_env do
+        Dir.chdir(__dir__) do
+          sh "gem install pkg/concurrent-ruby-#{Concurrent::VERSION}.gem"
+          sh "gem install pkg/concurrent-ruby-ext-#{Concurrent::VERSION}.gem" if Concurrent.on_cruby?
+          sh "gem install pkg/concurrent-ruby-edge-#{Concurrent::EDGE_VERSION}.gem"
+          ENV['NO_PATH'] = 'true'
+          sh 'bundle update'
+          sh 'bundle exec rake spec:ci'
+        end
       end
     end
   end
 
   desc 'executed in CI'
   task :ci => [:compile, 'spec:ci']
+
+  desc 'run each spec file in a separate process to help find missing requires'
+  task 'spec:isolated' do
+    glob = "#{ENV['DIR'] || 'spec'}/**/*_spec.rb"
+    from = ENV['FROM']
+    env = { 'ISOLATED' => 'true' }
+    Dir[glob].each do |spec|
+      next if from and from != spec
+      from = nil if from == spec
+
+      sh env, 'rspec', spec
+    end
+  end
 
   task :default => [:clobber, :compile, :spec]
 rescue LoadError => e
@@ -184,34 +208,6 @@ begin
         *common_yard_options)
       yard.files = ['no-lib']
     end
-
-    define_uptodate_task = -> name do
-      namespace name do
-        desc "** ensure that #{name} generated documentation is matching the source code"
-        task :uptodate do
-          Dir.chdir(__dir__) do
-            begin
-              FileUtils.cp_r 'docs', 'docs-copy', verbose: true
-              Rake::Task["yard:#{name}"].invoke
-              sh 'diff -r docs/ docs-copy/' do |ok, res|
-                unless ok
-                  begin
-                    STDOUT.puts "yard:#{name} is not properly generated and committed.", "Continue? (y/n)"
-                    input = STDIN.gets.strip.downcase
-                  end until %w(y n).include?(input)
-                  exit 1 if input == 'n'
-                end
-              end
-            ensure
-              FileUtils.rm_rf 'docs-copy', verbose: true
-            end
-          end
-        end
-      end
-    end
-
-    define_uptodate_task.call current_yard_version_name
-    define_uptodate_task.call 'master'
   end
 
 rescue LoadError => e
@@ -224,7 +220,7 @@ task :release => ['release:checks', 'release:build', 'release:test', 'release:pu
 namespace :release do
   # Depends on environment of @pitr-ch
 
-  task :checks => "yard:#{current_yard_version_name}:uptodate" do
+  task :checks do
     Dir.chdir(__dir__) do
       sh 'test -z "$(git status --porcelain)"' do |ok, res|
         unless ok
@@ -256,25 +252,18 @@ namespace :release do
   desc '* test actual installed gems instead of cloned repository on MRI and JRuby'
   task :test do
     Dir.chdir(__dir__) do
-      old = ENV['RBENV_VERSION']
+      puts "Testing with the installed gem"
 
-      mri_version   = `ruby -e 'puts RUBY_VERSION'`.chomp
-      jruby_version = File.basename(ENV['CONCURRENT_JRUBY_HOME'])
+      Bundler.with_original_env do
+        sh 'ruby -v'
+        sh 'bundle exec rake spec:installed'
 
-      puts "Using following version:"
-      pp mri_version: mri_version, jruby_version: jruby_version
-
-      ENV['RBENV_VERSION'] = mri_version
-      sh 'rbenv version'
-      sh 'bundle exec rake spec:installed'
-
-      ENV['RBENV_VERSION'] = jruby_version
-      sh 'rbenv version'
-      sh 'bundle exec rake spec:installed'
+        env = { "PATH" => "#{ENV['CONCURRENT_JRUBY_HOME']}/bin:#{ENV['PATH']}" }
+        sh env, 'ruby -v'
+        sh env, 'bundle exec rake spec:installed'
+      end
 
       puts 'Windows build is untested'
-
-      ENV['RBENV_VERSION'] = old
     end
   end
 
@@ -282,6 +271,7 @@ namespace :release do
   task :publish => ['publish:ask', 'publish:tag', 'publish:rubygems', 'publish:post_steps']
 
   namespace :publish do
+    publish_base = true
     publish_edge = false
 
     task :ask do
@@ -300,8 +290,8 @@ namespace :release do
     desc '** tag HEAD with current version and push to github'
     task :tag => :ask do
       Dir.chdir(__dir__) do
-        sh "git tag v#{Concurrent::VERSION}"
-        sh "git push origin v#{Concurrent::VERSION}"
+        sh "git tag v#{Concurrent::VERSION}" if publish_base
+        sh "git push origin v#{Concurrent::VERSION}" if publish_base
         sh "git tag edge-v#{Concurrent::EDGE_VERSION}" if publish_edge
         sh "git push origin edge-v#{Concurrent::EDGE_VERSION}" if publish_edge
       end
@@ -310,20 +300,20 @@ namespace :release do
     desc '** push all *.gem files to rubygems'
     task :rubygems => :ask do
       Dir.chdir(__dir__) do
-        sh "gem push pkg/concurrent-ruby-#{Concurrent::VERSION}.gem"
+        sh "gem push pkg/concurrent-ruby-#{Concurrent::VERSION}.gem" if publish_base
         sh "gem push pkg/concurrent-ruby-edge-#{Concurrent::EDGE_VERSION}.gem" if publish_edge
-        sh "gem push pkg/concurrent-ruby-ext-#{Concurrent::VERSION}.gem"
-        sh "gem push pkg/concurrent-ruby-ext-#{Concurrent::VERSION}-x64-mingw32.gem"
-        sh "gem push pkg/concurrent-ruby-ext-#{Concurrent::VERSION}-x86-mingw32.gem"
+        sh "gem push pkg/concurrent-ruby-ext-#{Concurrent::VERSION}.gem" if publish_base
+        sh "gem push pkg/concurrent-ruby-ext-#{Concurrent::VERSION}-x64-mingw32.gem" if publish_base
+        sh "gem push pkg/concurrent-ruby-ext-#{Concurrent::VERSION}-x86-mingw32.gem" if publish_base
       end
     end
 
     desc '** print post release steps'
     task :post_steps do
       # TODO: (petr 05-Jun-2021) automate and renew the process
-      # puts 'Manually: create a release on GitHub with relevant changelog part'
-      # puts 'Manually: send email same as release with relevant changelog part'
-      # puts 'Manually: tweet'
+      puts 'Manually: create a release on GitHub with relevant changelog part'
+      puts 'Manually: send email same as release with relevant changelog part'
+      puts 'Manually: tweet'
     end
   end
 end

@@ -1,5 +1,10 @@
 # Changes
 
+## Version 2.0.6 - 28-Jan-2023
+
+* Eliminate `Object#untaint` deprecation warnings on JRuby 9.4.0.0. #145.
+
+
 ## Version 2.0.5 - 19-Jul-2022
 
 * Changed `DateTime` results to always use the proleptic Gregorian calendar.
@@ -192,6 +197,11 @@
 * The `us_zones` and `us_zone_identifiers` class methods of `TZInfo::Timezone`
   have been removed. `TZInfo::Country.get('US').zones` and
   `TZInfo::Country.get('US').zone_identifiers` should be used instead.
+
+
+## Version 1.2.11 - 28-Jan-2023
+
+* Eliminate `Object#untaint` deprecation warnings on JRuby 9.4.0.0. #145.
 
 
 ## Version 1.2.10 - 19-Jul-2022

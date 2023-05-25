@@ -12,19 +12,22 @@ Gem::Specification.new do |s|
   s.homepage = "http://msgpack.org/"
   s.require_paths = ["lib"]
   if /java/ =~ RUBY_PLATFORM
-    s.files = Dir['lib/**/*.rb', 'lib/**/*.jar']
+    s.files = Dir['lib/**/*.rb', 'lib/**/*.jar', 'LICENSE']
     s.platform = Gem::Platform.new('java')
   else
-    s.files = `git ls-files`.split("\n")
+    s.files = `git ls-files -z`.split("\x0").reject do |f|
+      (f == __FILE__) || f.match(%r{\A(?:(?:bin|test|spec|features|bench|doclib|msgpack.org.md|Gemfile|Rakefile)|\.(?:git|circleci|rubocop)|appveyor)})
+    end
     s.extensions = ["ext/msgpack/extconf.rb"]
   end
 
-  s.required_ruby_version = ">= 2.4"
+  s.required_ruby_version = ">= 2.5"
 
   s.add_development_dependency 'bundler'
   s.add_development_dependency 'rake'
   s.add_development_dependency 'rake-compiler', ['>= 1.1.9']
   s.add_development_dependency 'rspec', ['~> 3.3']
+  s.add_development_dependency 'ruby_memcheck'
   s.add_development_dependency 'yard'
   s.add_development_dependency 'json'
   s.add_development_dependency 'benchmark-ips', ['~> 2.10.0']

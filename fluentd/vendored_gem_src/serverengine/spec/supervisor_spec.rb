@@ -1,8 +1,12 @@
+require 'rr'
 
 describe ServerEngine::Supervisor do
   include_context 'test server and worker'
 
   def start_supervisor(worker = nil, **config)
+    config[:log] ||= @log_path
+    config[:log_stdout] ||= false
+    config[:log_stderr] ||= false
     if ServerEngine.windows?
       config[:windows_daemon_cmdline] = windows_supervisor_cmdline(nil, worker, config)
     end
@@ -13,6 +17,8 @@ describe ServerEngine::Supervisor do
   end
 
   def start_daemon(**config)
+    config[:log_stdout] ||= false
+    config[:log_stderr] ||= false
     if ServerEngine.windows?
       config[:windows_daemon_cmdline] = windows_daemon_cmdline
     end
@@ -22,9 +28,17 @@ describe ServerEngine::Supervisor do
     return daemon, t
   end
 
+  before do
+    @log_path = "tmp/supervisor-test-#{SecureRandom.hex(10)}.log"
+  end
+
+  after do
+    FileUtils.rm_rf(@log_path)
+  end
+
   context 'when :log=IO option is given' do
     it 'can start' do
-      daemon, t = start_daemon(log: STDOUT)
+      daemon, t = start_daemon(log: File.open(@log_path, "wb"))
 
       begin
         wait_for_fork
@@ -40,7 +54,7 @@ describe ServerEngine::Supervisor do
 
   context 'when :logger option is given' do
     it 'uses specified logger instance' do
-      logger = ServerEngine::DaemonLogger.new(STDOUT)
+      logger = ServerEngine::DaemonLogger.new(@log_path)
       daemon, t = start_daemon(logger: logger)
 
       begin
@@ -57,7 +71,7 @@ describe ServerEngine::Supervisor do
 
   context 'when both :logger and :log options are given' do
     it 'start ignoring :log' do
-      logger = ServerEngine::DaemonLogger.new(STDOUT)
+      logger = ServerEngine::DaemonLogger.new(@log_path)
       daemon, t = start_daemon(logger: logger, log: STDERR)
 
       begin
@@ -76,7 +90,7 @@ describe ServerEngine::Supervisor do
     context "when using #{sender} as command_sender" do
 
       it 'start and graceful stop' do
-        pending 'not supported on Windows' if ServerEngine.windows? && sender == 'signal'
+        skip 'not supported on Windows' if ServerEngine.windows? && sender == 'signal'
 
         sv, t = start_supervisor(command_sender: sender)
 
@@ -99,7 +113,7 @@ describe ServerEngine::Supervisor do
       end
 
       it 'immediate stop' do
-        pending 'not supported on Windows' if ServerEngine.windows? && sender == 'signal'
+        skip 'not supported on Windows' if ServerEngine.windows? && sender == 'signal'
 
         sv, t = start_supervisor(command_sender: sender)
 
@@ -117,7 +131,7 @@ describe ServerEngine::Supervisor do
       end
 
       it 'graceful restart' do
-        pending 'not supported on Windows' if ServerEngine.windows? && sender == 'signal'
+        skip 'not supported on Windows' if ServerEngine.windows? && sender == 'signal'
 
         sv, t = start_supervisor(command_sender: sender)
 
@@ -141,7 +155,7 @@ describe ServerEngine::Supervisor do
       end
 
       it 'immediate restart' do
-        pending 'not supported on Windows' if ServerEngine.windows? && sender == 'signal'
+        skip 'not supported on Windows' if ServerEngine.windows? && sender == 'signal'
 
         sv, t = start_supervisor(command_sender: sender)
 
@@ -165,7 +179,7 @@ describe ServerEngine::Supervisor do
       end
 
       it 'reload' do
-        pending 'not supported on Windows' if ServerEngine.windows? && sender == 'signal'
+        skip 'not supported on Windows' if ServerEngine.windows? && sender == 'signal'
 
         sv, t = start_supervisor(command_sender: sender)
 
@@ -186,7 +200,9 @@ describe ServerEngine::Supervisor do
       # TODO detach
 
       it 'auto restart in limited ratio' do
-        pending 'not supported on Windows' if ServerEngine.windows? && sender == 'signal'
+        skip 'not supported on Windows' if ServerEngine.windows? && sender == 'signal'
+
+        RR.stub(ServerEngine).dump_uncaught_error
 
         sv, t = start_supervisor(RunErrorWorker, server_restart_wait: 1, command_sender: sender)
 
