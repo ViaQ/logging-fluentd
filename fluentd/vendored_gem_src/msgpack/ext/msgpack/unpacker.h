@@ -21,12 +21,11 @@
 #include "buffer.h"
 #include "unpacker_ext_registry.h"
 
-#ifndef MSGPACK_UNPACKER_STACK_CAPACITY
 #define MSGPACK_UNPACKER_STACK_CAPACITY 128
-#endif
 
 struct msgpack_unpacker_t;
 typedef struct msgpack_unpacker_t msgpack_unpacker_t;
+typedef struct msgpack_unpacker_stack_t msgpack_unpacker_stack_t;
 
 enum stack_type_t {
     STACK_TYPE_ARRAY,
@@ -39,19 +38,21 @@ typedef struct {
     enum stack_type_t type;
     VALUE object;
     VALUE key;
-} msgpack_unpacker_stack_t;
+} msgpack_unpacker_stack_entry_t;
 
-#define MSGPACK_UNPACKER_STACK_SIZE (8+4+8+8)  /* assumes size_t <= 64bit, enum <= 32bit, VALUE <= 64bit */
+struct msgpack_unpacker_stack_t {
+    size_t depth;
+    size_t capacity;
+    msgpack_unpacker_stack_entry_t *data;
+    msgpack_unpacker_stack_t *parent;
+};
 
 struct msgpack_unpacker_t {
     msgpack_buffer_t buffer;
-
+    msgpack_unpacker_stack_t *stack;
     unsigned int head_byte;
 
-    msgpack_unpacker_stack_t* stack;
-    size_t stack_depth;
-    size_t stack_capacity;
-
+    VALUE self;
     VALUE last_object;
 
     VALUE reading_raw;
@@ -82,11 +83,11 @@ enum msgpack_unpacker_object_type {
     TYPE_MAP,
 };
 
-void msgpack_unpacker_static_init();
+void msgpack_unpacker_static_init(void);
 
-void msgpack_unpacker_static_destroy();
+void msgpack_unpacker_static_destroy(void);
 
-msgpack_unpacker_t* _msgpack_unpacker_new(void);
+void _msgpack_unpacker_init(msgpack_unpacker_t*);
 
 void _msgpack_unpacker_destroy(msgpack_unpacker_t* uk);
 

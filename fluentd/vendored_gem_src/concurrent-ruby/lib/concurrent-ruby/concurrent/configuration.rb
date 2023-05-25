@@ -1,101 +1,18 @@
 require 'thread'
 require 'concurrent/delay'
 require 'concurrent/errors'
-require 'concurrent/atomic/atomic_reference'
-require 'concurrent/concern/logging'
 require 'concurrent/concern/deprecation'
 require 'concurrent/executor/immediate_executor'
+require 'concurrent/executor/fixed_thread_pool'
 require 'concurrent/executor/cached_thread_pool'
 require 'concurrent/utility/processor_counter'
 
 module Concurrent
-  extend Concern::Logging
   extend Concern::Deprecation
 
   autoload :Options, 'concurrent/options'
   autoload :TimerSet, 'concurrent/executor/timer_set'
   autoload :ThreadPoolExecutor, 'concurrent/executor/thread_pool_executor'
-
-  # @return [Logger] Logger with provided level and output.
-  def self.create_simple_logger(level = Logger::FATAL, output = $stderr)
-    # TODO (pitr-ch 24-Dec-2016): figure out why it had to be replaced, stdlogger was deadlocking
-    lambda do |severity, progname, message = nil, &block|
-      return false if severity < level
-
-      message           = block ? block.call : message
-      formatted_message = case message
-                          when String
-                            message
-                          when Exception
-                            format "%s (%s)\n%s",
-                                   message.message, message.class, (message.backtrace || []).join("\n")
-                          else
-                            message.inspect
-                          end
-
-      output.print format "[%s] %5s -- %s: %s\n",
-                          Time.now.strftime('%Y-%m-%d %H:%M:%S.%L'),
-                          Logger::SEV_LABEL[severity],
-                          progname,
-                          formatted_message
-      true
-    end
-  end
-
-  # Use logger created by #create_simple_logger to log concurrent-ruby messages.
-  def self.use_simple_logger(level = Logger::FATAL, output = $stderr)
-    Concurrent.global_logger = create_simple_logger level, output
-  end
-
-  # @return [Logger] Logger with provided level and output.
-  # @deprecated
-  def self.create_stdlib_logger(level = Logger::FATAL, output = $stderr)
-    logger           = Logger.new(output)
-    logger.level     = level
-    logger.formatter = lambda do |severity, datetime, progname, msg|
-      formatted_message = case msg
-                          when String
-                            msg
-                          when Exception
-                            format "%s (%s)\n%s",
-                                   msg.message, msg.class, (msg.backtrace || []).join("\n")
-                          else
-                            msg.inspect
-                          end
-      format "[%s] %5s -- %s: %s\n",
-             datetime.strftime('%Y-%m-%d %H:%M:%S.%L'),
-             severity,
-             progname,
-             formatted_message
-    end
-
-    lambda do |loglevel, progname, message = nil, &block|
-      logger.add loglevel, message, progname, &block
-    end
-  end
-
-  # Use logger created by #create_stdlib_logger to log concurrent-ruby messages.
-  # @deprecated
-  def self.use_stdlib_logger(level = Logger::FATAL, output = $stderr)
-    Concurrent.global_logger = create_stdlib_logger level, output
-  end
-
-  # TODO (pitr-ch 27-Dec-2016): remove deadlocking stdlib_logger methods
-
-  # Suppresses all output when used for logging.
-  NULL_LOGGER   = lambda { |level, progname, message = nil, &block| }
-
-  # @!visibility private
-  GLOBAL_LOGGER = AtomicReference.new(create_simple_logger(Logger::WARN))
-  private_constant :GLOBAL_LOGGER
-
-  def self.global_logger
-    GLOBAL_LOGGER.value
-  end
-
-  def self.global_logger=(value)
-    GLOBAL_LOGGER.value = value
-  end
 
   # @!visibility private
   GLOBAL_FAST_EXECUTOR = Delay.new { Concurrent.new_fast_executor }
@@ -136,14 +53,14 @@ module Concurrent
   #
   # @return [ThreadPoolExecutor] the thread pool
   def self.global_fast_executor
-    GLOBAL_FAST_EXECUTOR.value
+    GLOBAL_FAST_EXECUTOR.value!
   end
 
   # Global thread pool optimized for long, blocking (IO) *tasks*.
   #
   # @return [ThreadPoolExecutor] the thread pool
   def self.global_io_executor
-    GLOBAL_IO_EXECUTOR.value
+    GLOBAL_IO_EXECUTOR.value!
   end
 
   def self.global_immediate_executor
@@ -154,7 +71,7 @@ module Concurrent
   #
   # @return [Concurrent::TimerSet] the thread pool
   def self.global_timer_set
-    GLOBAL_TIMER_SET.value
+    GLOBAL_TIMER_SET.value!
   end
 
   # General access point to global executors.

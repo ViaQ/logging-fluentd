@@ -26,8 +26,8 @@ import static org.jruby.runtime.Visibility.PRIVATE;
 @JRubyClass(name="MessagePack::Factory")
 public class Factory extends RubyObject {
   private static final long serialVersionUID = 8441284623445322492L;
-  private final Ruby runtime;
-  private ExtensionRegistry extensionRegistry;
+  private transient final Ruby runtime;
+  private transient ExtensionRegistry extensionRegistry;
   private boolean hasSymbolExtType;
   private boolean hasBigIntExtType;
 
@@ -82,6 +82,8 @@ public class Factory extends RubyObject {
 
   @JRubyMethod(name = "register_type", required = 2, optional = 1)
   public IRubyObject registerType(ThreadContext ctx, IRubyObject[] args) {
+    testFrozen("MessagePack::Factory");
+
     Ruby runtime = ctx.runtime;
     IRubyObject type = args[0];
     IRubyObject mod = args[1];
@@ -91,10 +93,6 @@ public class Factory extends RubyObject {
 
     RubyHash options = null;
 
-    if (isFrozen()) {
-        throw runtime.newRuntimeError("can't modify frozen Factory");
-    }
-
     if (args.length == 2) {
       packerArg = runtime.newSymbol("to_msgpack_ext");
       unpackerArg = runtime.newSymbol("from_msgpack_ext");
@@ -102,7 +100,13 @@ public class Factory extends RubyObject {
       if (args[args.length - 1] instanceof RubyHash) {
         options = (RubyHash) args[args.length - 1];
         packerArg = options.fastARef(runtime.newSymbol("packer"));
+        if (packerArg != null && packerArg.isNil()) {
+          packerArg = null;
+        }
         unpackerArg = options.fastARef(runtime.newSymbol("unpacker"));
+        if (unpackerArg != null && unpackerArg.isNil()) {
+          unpackerArg = null;
+        }
         IRubyObject optimizedSymbolsParsingArg = options.fastARef(runtime.newSymbol("optimized_symbols_parsing"));
         if (optimizedSymbolsParsingArg != null && optimizedSymbolsParsingArg.isTrue()) {
           throw runtime.newArgumentError("JRuby implementation does not support the optimized_symbols_parsing option");
@@ -149,7 +153,7 @@ public class Factory extends RubyObject {
 
     extensionRegistry.put(extModule, (int) typeId, recursive, packerProc, packerArg, unpackerProc, unpackerArg);
 
-    if (extModule == runtime.getSymbol()) {
+    if (extModule == runtime.getSymbol() && !packerProc.isNil()) {
       hasSymbolExtType = true;
     }
 

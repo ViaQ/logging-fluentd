@@ -1,5 +1,18 @@
 module Fluent
   module KafkaPluginUtil
+    module AwsIamSettings
+      def self.included(klass)
+        klass.instance_eval do
+          config_param :sasl_aws_msk_iam_access_key_id, :string, :default => nil, secret: true,
+                       desc: "AWS access key Id for IAM authentication to MSK."
+          config_param :sasl_aws_msk_iam_secret_key_id, :string, :default => nil, secret: true,
+                       desc: "AWS access key secret for IAM authentication to MSK."
+          config_param :sasl_aws_msk_iam_aws_region, :string, :default => nil,
+                       desc: "AWS region for IAM authentication to MSK."
+        end
+      end
+    end
+
     module SSLSettings
       def self.included(klass)
         klass.instance_eval {
@@ -10,6 +23,8 @@ module Fluent
                        :desc => "a PEM encoded client cert to use with and SSL connection. Must be used in combination with ssl_client_cert_key."
           config_param :ssl_client_cert_key, :string, :default => nil,
                        :desc => "a PEM encoded client cert key to use with and SSL connection. Must be used in combination with ssl_client_cert."
+          config_param :ssl_client_cert_key_password, :string, :default => nil, secret: true,
+                       :desc => "a PEM encoded client cert key password to use with SSL connection."
           config_param :ssl_client_cert_chain, :string, :default => nil,
                        :desc => "an extra PEM encoded cert to use with and SSL connection."
           config_param :ssl_ca_certs_from_system, :bool, :default => false,

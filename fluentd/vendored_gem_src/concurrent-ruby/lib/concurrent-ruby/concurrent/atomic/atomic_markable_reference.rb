@@ -1,3 +1,6 @@
+require 'concurrent/errors'
+require 'concurrent/synchronization/object'
+
 module Concurrent
   # An atomic reference which maintains an object reference along with a mark bit
   # that can be updated atomically.

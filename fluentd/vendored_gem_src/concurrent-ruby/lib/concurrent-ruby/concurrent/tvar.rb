@@ -1,5 +1,5 @@
 require 'set'
-require 'concurrent/synchronization'
+require 'concurrent/synchronization/object'
 
 module Concurrent
 
@@ -149,6 +149,7 @@ module Concurrent
 
   private
 
+  # @!visibility private
   class Transaction
 
     ABORTED = ::Object.new

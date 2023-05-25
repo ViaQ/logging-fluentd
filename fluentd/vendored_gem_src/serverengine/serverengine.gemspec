@@ -16,16 +16,17 @@ Gem::Specification.new do |gem|
   gem.test_files    = gem.files.grep(%r{^(test|spec|features)/})
   gem.require_paths = ["lib"]
 
-  gem.required_ruby_version = ">= 2.1.0"
+  gem.required_ruby_version = ">= 2.3.0"
 
   gem.add_dependency "sigdump", ["~> 0.2.2"]
 
   # rake v12.x doesn't work with rspec 2. rspec should be updated to 3
-  gem.add_development_dependency "rake", ["~> 11.0"]
-  gem.add_development_dependency "rspec", ["~> 2.13.0"]
+  gem.add_development_dependency "rake", ["~> 13.0"]
+  gem.add_development_dependency "rspec", ["~> 3.12.0"]
 
   gem.add_development_dependency 'rake-compiler-dock', ['~> 0.5.0']
   gem.add_development_dependency 'rake-compiler', ['~> 0.9.4']
 
   gem.add_development_dependency "timecop", ["~> 0.9.5"]
+  gem.add_development_dependency "rr", ["~> 3.1"]
 end

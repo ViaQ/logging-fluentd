@@ -1,5 +1,6 @@
+require 'concurrent/synchronization/abstract_lockable_object'
+
 module Concurrent
-  # noinspection RubyInstanceVariableNamingConvention
   module Synchronization
 
     # @!visibility private
@@ -26,8 +27,8 @@ module Concurrent
 
       safe_initialization!
 
-      def initialize(*defaults)
-        super(*defaults)
+      def initialize
+        super()
         @__Lock__      = ::Mutex.new
         @__Condition__ = ::ConditionVariable.new
       end
@@ -61,8 +62,8 @@ module Concurrent
 
       safe_initialization!
 
-      def initialize(*defaults)
-        super(*defaults)
+      def initialize
+        super()
         @__Lock__      = ::Monitor.new
         @__Condition__ = @__Lock__.new_cond
       end

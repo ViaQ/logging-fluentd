@@ -20,18 +20,16 @@
 
 static ID s_call;
 
-void msgpack_packer_static_init()
+void msgpack_packer_static_init(void)
 {
     s_call = rb_intern("call");
 }
 
-void msgpack_packer_static_destroy()
+void msgpack_packer_static_destroy(void)
 { }
 
 void msgpack_packer_init(msgpack_packer_t* pk)
 {
-    memset(pk, 0, sizeof(msgpack_packer_t));
-
     msgpack_buffer_init(PACKER_BUFFER_(pk));
 }
 
@@ -45,6 +43,7 @@ void msgpack_packer_mark(msgpack_packer_t* pk)
     /* See MessagePack_Buffer_wrap */
     /* msgpack_buffer_mark(PACKER_BUFFER_(pk)); */
     rb_gc_mark(pk->buffer_ref);
+    rb_gc_mark(pk->to_msgpack_arg);
 }
 
 void msgpack_packer_reset(msgpack_packer_t* pk)

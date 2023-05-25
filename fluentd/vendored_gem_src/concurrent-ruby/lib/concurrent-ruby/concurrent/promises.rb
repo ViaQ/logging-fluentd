@@ -1,7 +1,8 @@
-require 'concurrent/synchronization'
+require 'concurrent/synchronization/object'
 require 'concurrent/atomic/atomic_boolean'
 require 'concurrent/atomic/atomic_fixnum'
 require 'concurrent/collection/lock_free_stack'
+require 'concurrent/configuration'
 require 'concurrent/errors'
 require 'concurrent/re_include'
 
@@ -313,7 +314,7 @@ module Concurrent
       end
 
       # @!macro promises.shortcut.on
-      # @return [Future]
+      # @return [Event]
       def any_event(*futures_and_or_events)
         any_event_on default_executor, *futures_and_or_events
       end
@@ -892,7 +893,7 @@ module Concurrent
       private
 
       def rejected_resolution(raise_on_reassign, state)
-        Concurrent::MultipleAssignmentError.new('Event can be resolved only once') if raise_on_reassign
+        raise Concurrent::MultipleAssignmentError.new('Event can be resolved only once') if raise_on_reassign
         return false
       end
 
@@ -1298,7 +1299,7 @@ module Concurrent
 
       # @!macro promise.param.raise_on_reassign
       #   @param [Boolean] raise_on_reassign should method raise exception if already resolved
-      #   @return [self, false] false is returner when raise_on_reassign is false and the receiver
+      #   @return [self, false] false is returned when raise_on_reassign is false and the receiver
       #     is already resolved.
       #
 
@@ -2074,8 +2075,8 @@ module Concurrent
 
       private
 
-      def resolvable?(countdown, future, index)
-        future.fulfilled? ||
+      def resolvable?(countdown, event_or_future, index)
+        (event_or_future.is_a?(Event) ? event_or_future.resolved? : event_or_future.fulfilled?) ||
             # inlined super from BlockedPromise
             countdown.zero?
       end

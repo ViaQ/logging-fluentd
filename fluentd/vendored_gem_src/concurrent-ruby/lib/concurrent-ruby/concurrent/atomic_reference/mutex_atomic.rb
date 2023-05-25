@@ -1,8 +1,13 @@
+require 'concurrent/atomic_reference/atomic_direct_update'
+require 'concurrent/atomic_reference/numeric_cas_wrapper'
+require 'concurrent/synchronization/safe_initialization'
+
 module Concurrent
 
   # @!visibility private
   # @!macro internal_implementation_note
-  class MutexAtomicReference < Synchronization::LockableObject
+  class MutexAtomicReference
+    extend Concurrent::Synchronization::SafeInitialization
     include AtomicDirectUpdate
     include AtomicNumericCompareAndSetWrapper
     alias_method :compare_and_swap, :compare_and_set
@@ -10,7 +15,8 @@ module Concurrent
     # @!macro atomic_reference_method_initialize
     def initialize(value = nil)
       super()
-      synchronize { ns_initialize(value) }
+      @Lock = ::Mutex.new
+      @value = value
     end
 
     # @!macro atomic_reference_method_get
@@ -49,8 +55,13 @@ module Concurrent
 
     protected
 
-    def ns_initialize(value)
-      @value = value
+    # @!visibility private
+    def synchronize
+      if @Lock.owned?
+        yield
+      else
+        @Lock.synchronize { yield }
+      end
     end
   end
 end

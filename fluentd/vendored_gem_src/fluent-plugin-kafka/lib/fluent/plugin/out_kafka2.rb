@@ -27,6 +27,11 @@ DESC
     config_param :partitioner_hash_function, :enum, list: [:crc32, :murmur2], :default => :crc32,
                  :desc => "Specify kafka patrtitioner hash algorithm"
     config_param :default_partition, :integer, :default => nil
+    config_param :record_key, :string, :default => nil,
+                 :desc => <<-DESC
+A jsonpath to a record value pointing to the field which will be passed to the formatter and sent as the Kafka message payload.
+If defined, only this field in the record will be sent to Kafka as the message payload.
+DESC
     config_param :use_default_for_unknown_topic, :bool, :default => false, :desc => "If true, default_topic is used when topic not found"
     config_param :client_id, :string, :default => 'fluentd'
     config_param :idempotent, :bool, :default => false, :desc => 'Enable idempotent producer'
@@ -81,6 +86,7 @@ DESC
 Add a regular expression to capture ActiveSupport notifications from the Kafka client
 requires activesupport gem - records will be generated under fluent_kafka_stats.**
 DESC
+    config_param :share_producer, :bool, :default => false, :desc => 'share kafka producer between flush threads'
 
     config_section :buffer do
       config_set_default :chunk_keys, ["topic"]
@@ -89,6 +95,7 @@ DESC
       config_set_default :@type, 'json'
     end
 
+    include Fluent::KafkaPluginUtil::AwsIamSettings
     include Fluent::KafkaPluginUtil::SSLSettings
     include Fluent::KafkaPluginUtil::SaslSettings
 
@@ -96,30 +103,58 @@ DESC
       super
 
       @kafka = nil
+      @producers = nil
+      @producers_mutex = nil
+      @shared_producer = nil
+
+      @writing_threads_mutex = Mutex.new
+      @writing_threads = Set.new
     end
 
     def refresh_client(raise_error = true)
       begin
         logger = @get_kafka_client_log ? log : nil
+        use_long_lived_aws_credentials = @sasl_aws_msk_iam_access_key_id != nil && @sasl_aws_msk_iam_secret_key_id != nil
         if @scram_mechanism != nil && @username != nil && @password != nil
-          @kafka = Kafka.new(seed_brokers: @seed_brokers, client_id: @client_id, logger: logger, connect_timeout: @connect_timeout, socket_timeout: @socket_timeout, ssl_ca_cert_file_path: @ssl_ca_cert,
-                             ssl_client_cert: read_ssl_file(@ssl_client_cert), ssl_client_cert_key: read_ssl_file(@ssl_client_cert_key), ssl_client_cert_chain: read_ssl_file(@ssl_client_cert_chain),
-                             ssl_ca_certs_from_system: @ssl_ca_certs_from_system, sasl_scram_username: @username, sasl_scram_password: @password,
-                             sasl_scram_mechanism: @scram_mechanism, sasl_over_ssl: @sasl_over_ssl, ssl_verify_hostname: @ssl_verify_hostname, resolve_seed_brokers: @resolve_seed_brokers,
-                             partitioner: Kafka::Partitioner.new(hash_function: @partitioner_hash_function))
+          sasl_params = {
+            sasl_scram_username: @username,
+            sasl_scram_password: @password,
+            sasl_scram_mechanism: @scram_mechanism,
+          }
         elsif @username != nil && @password != nil
-          @kafka = Kafka.new(seed_brokers: @seed_brokers, client_id: @client_id, logger: logger, connect_timeout: @connect_timeout, socket_timeout: @socket_timeout, ssl_ca_cert_file_path: @ssl_ca_cert,
-                             ssl_client_cert: read_ssl_file(@ssl_client_cert), ssl_client_cert_key: read_ssl_file(@ssl_client_cert_key), ssl_client_cert_chain: read_ssl_file(@ssl_client_cert_chain),
-                             ssl_ca_certs_from_system: @ssl_ca_certs_from_system, sasl_plain_username: @username, sasl_plain_password: @password, sasl_over_ssl: @sasl_over_ssl,
-                             ssl_verify_hostname: @ssl_verify_hostname, resolve_seed_brokers: @resolve_seed_brokers,
-                             partitioner: Kafka::Partitioner.new(hash_function: @partitioner_hash_function))
+          sasl_params = {
+            sasl_plain_username: @username,
+            sasl_plain_password: @password,
+          }
+        elsif use_long_lived_aws_credentials
+          sasl_params = {
+            sasl_aws_msk_iam_access_key_id: @sasl_aws_msk_iam_access_key_id,
+            sasl_aws_msk_iam_secret_key_id: @sasl_aws_msk_iam_secret_key_id,
+            sasl_aws_msk_iam_aws_region: @sasl_aws_msk_iam_aws_region,
+          }
         else
-          @kafka = Kafka.new(seed_brokers: @seed_brokers, client_id: @client_id, logger: logger, connect_timeout: @connect_timeout, socket_timeout: @socket_timeout, ssl_ca_cert_file_path: @ssl_ca_cert,
-                             ssl_client_cert: read_ssl_file(@ssl_client_cert), ssl_client_cert_key: read_ssl_file(@ssl_client_cert_key), ssl_client_cert_chain: read_ssl_file(@ssl_client_cert_chain),
-                             ssl_ca_certs_from_system: @ssl_ca_certs_from_system, sasl_gssapi_principal: @principal, sasl_gssapi_keytab: @keytab, sasl_over_ssl: @sasl_over_ssl,
-                             ssl_verify_hostname: @ssl_verify_hostname, resolve_seed_brokers: @resolve_seed_brokers,
-                             partitioner: Kafka::Partitioner.new(hash_function: @partitioner_hash_function))
+          sasl_params = {
+            sasl_gssapi_principal: @principal,
+            sasl_gssapi_keytab: @keytab,
+          }
         end
+        @kafka = Kafka.new(
+          seed_brokers: @seed_brokers,
+          client_id: @client_id,
+          logger: logger,
+          connect_timeout: @connect_timeout,
+          socket_timeout: @socket_timeout,
+          ssl_ca_cert_file_path: @ssl_ca_cert,
+          ssl_client_cert: read_ssl_file(@ssl_client_cert),
+          ssl_client_cert_key: read_ssl_file(@ssl_client_cert_key),
+          ssl_client_cert_key_password: @ssl_client_cert_key_password,
+          ssl_client_cert_chain: read_ssl_file(@ssl_client_cert_chain),
+          ssl_ca_certs_from_system: @ssl_ca_certs_from_system,
+          ssl_verify_hostname: @ssl_verify_hostname,
+          resolve_seed_brokers: @resolve_seed_brokers,
+          partitioner: Kafka::Partitioner.new(hash_function: @partitioner_hash_function),
+          sasl_over_ssl: @sasl_over_ssl,
+          **sasl_params)
         log.info "initialized kafka producer: #{@client_id}"
       rescue Exception => e
         if raise_error # During startup, error should be reported to engine and stop its phase for safety.
@@ -185,15 +220,29 @@ DESC
       @exclude_field_accessors = @exclude_fields.map do |field|
         record_accessor_create(field)
       end
+
+      @record_field_accessor = nil
+      @record_field_accessor = record_accessor_create(@record_key) unless @record_key.nil?
     end
 
     def multi_workers_ready?
       true
     end
 
+    def create_producer
+      @kafka.custom_producer(**@producer_opts)
+    end
+
     def start
       super
       refresh_client
+
+      if @share_producer
+        @shared_producer = create_producer
+      else
+        @producers = {}
+        @producers_mutex = Mutex.new
+      end
     end
 
     def close
@@ -204,6 +253,56 @@ DESC
     def terminate
       super
       @kafka = nil
+    end
+
+    def wait_writing_threads
+      done = false
+      until done do
+        @writing_threads_mutex.synchronize do
+          done = true if @writing_threads.empty?
+        end
+        sleep(1) unless done
+      end
+    end
+
+    def shutdown
+      super
+      wait_writing_threads
+      shutdown_producers
+    end
+
+    def shutdown_producers
+      if @share_producer
+        @shared_producer.shutdown
+        @shared_producer = nil
+      else
+        @producers_mutex.synchronize {
+          shutdown_threads = @producers.map { |key, producer|
+            th = Thread.new {
+              producer.shutdown
+            }
+            th.abort_on_exception = true
+            th
+          }
+          shutdown_threads.each { |th| th.join }
+          @producers = {}
+        }
+      end
+    end
+
+    def get_producer
+      if @share_producer
+        @shared_producer
+      else
+        @producers_mutex.synchronize {
+          producer = @producers[Thread.current.object_id]
+          unless producer
+            producer = create_producer
+            @producers[Thread.current.object_id] = producer
+          end
+          producer
+        }
+      end
     end
 
     def setup_formatter(conf)
@@ -229,6 +328,8 @@ DESC
 
     # TODO: optimize write performance
     def write(chunk)
+      @writing_threads_mutex.synchronize { @writing_threads.add(Thread.current) }
+
       tag = chunk.metadata.tag
       topic = if @topic
                 extract_placeholders(@topic, chunk)
@@ -237,13 +338,12 @@ DESC
               end
 
       messages = 0
-      record_buf = nil
 
       base_headers = @headers
       mutate_headers = !@headers_from_record_accessors.empty?
 
       begin
-        producer = @kafka.topic_producer(topic, **@producer_opts)
+        producer = get_producer
         chunk.msgpack_each { |time, record|
           begin
             record = inject_values_to_record(tag, time, record)
@@ -267,6 +367,7 @@ DESC
               end
             end
 
+            record = @record_field_accessor.call(record) unless @record_field_accessor.nil?
             record_buf = @formatter_proc.call(tag, time, record)
             record_buf_bytes = record_buf.bytesize
             if @max_send_limit_bytes && record_buf_bytes > @max_send_limit_bytes
@@ -283,7 +384,7 @@ DESC
           messages += 1
 
           producer.produce(record_buf, key: message_key, partition_key: partition_key, partition: partition, headers: headers,
-                           create_time: @use_event_time ? Time.at(time) : Time.now)
+                           create_time: @use_event_time ? Time.at(time) : Time.now, topic: topic)
         }
 
         if messages > 0
@@ -301,7 +402,6 @@ DESC
         end
       rescue Kafka::UnknownTopicOrPartition
         if @use_default_for_unknown_topic && topic != @default_topic
-          producer.shutdown if producer
           log.warn "'#{topic}' topic not found. Retry with '#{default_topic}' topic"
           topic = @default_topic
           retry
@@ -321,7 +421,7 @@ DESC
       # Raise exception to retry sendind messages
       raise e unless ignore
     ensure
-      producer.shutdown if producer
+      @writing_threads_mutex.synchronize { @writing_threads.delete(Thread.current) }
     end
   end
 end

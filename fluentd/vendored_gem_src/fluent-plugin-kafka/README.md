@@ -36,6 +36,7 @@ If you want to use zookeeper related parameters, you also need to install zookee
 - ssl_ca_cert
 - ssl_client_cert
 - ssl_client_cert_key
+- ssl_client_cert_key_password
 - ssl_ca_certs_from_system
 
 Set path to SSL related files. See [Encryption and Authentication using SSL](https://github.com/zendesk/ruby-kafka#encryption-and-authentication-using-ssl) for more detail.
@@ -187,12 +188,17 @@ If `ruby-kafka` doesn't fit your kafka environment, check `rdkafka2` plugin inst
       @type kafka2
 
       brokers               <broker1_host>:<broker1_port>,<broker2_host>:<broker2_port>,.. # Set brokers directly
+
+      # Kafka topic, placerholders are supported. Chunk keys are required in the Buffer section inorder for placeholders
+      # to work.
+      topic                 (string) :default => nil
       topic_key             (string) :default => 'topic'
       partition_key         (string) :default => 'partition'
       partition_key_key     (string) :default => 'partition_key'
       message_key_key       (string) :default => 'message_key'
       default_topic         (string) :default => nil
       default_partition_key (string) :default => nil
+      record_key            (string) :default => nil
       default_message_key   (string) :default => nil
       exclude_topic_key     (bool)   :default => false
       exclude_partition_key (bool)   :default => false
@@ -205,6 +211,17 @@ If `ruby-kafka` doesn't fit your kafka environment, check `rdkafka2` plugin inst
       use_default_for_unknown_topic (bool) :default => false
       discard_kafka_delivery_failed (bool) :default => false (No discard)
       partitioner_hash_function (enum) (crc32|murmur2) :default => 'crc32'
+      share_producer        (bool)   :default => false
+
+      # If you intend to rely on AWS IAM auth to MSK with long lived credentials
+      # https://docs.aws.amazon.com/msk/latest/developerguide/iam-access-control.html
+      #
+      # For AWS STS support, see status in
+      # - https://github.com/zendesk/ruby-kafka/issues/944
+      # - https://github.com/zendesk/ruby-kafka/pull/951
+      sasl_aws_msk_iam_access_key_id (string) :default => nil
+      sasl_aws_msk_iam_secret_key_id (string) :default => nil
+      sasl_aws_msk_iam_aws_region    (string) :default => nil
 
       <format>
         @type (json|ltsv|msgpack|attr:<record name>|<formatter name>) :default => json
@@ -241,13 +258,12 @@ ruby-kafka's log is routed to fluentd log so you can see ruby-kafka's log in flu
 
 Supports following ruby-kafka's producer options.
 
-- max_send_retries - default: 1 - Number of times to retry sending of messages to a leader.
+- max_send_retries - default: 2 - Number of times to retry sending of messages to a leader.
 - required_acks - default: -1 - The number of acks required per request. If you need flush performance, set lower value, e.g. 1, 2.
 - ack_timeout - default: nil - How long the producer waits for acks. The unit is seconds.
 - compression_codec - default: nil - The codec the producer uses to compress messages.
 - max_send_limit_bytes - default: nil - Max byte size to send message to avoid MessageSizeTooLarge. For example, if you set 1000000(message.max.bytes in kafka), Message more than 1000000 byes will be dropped.
 - discard_kafka_delivery_failed - default: false - discard the record where [Kafka::DeliveryFailed](http://www.rubydoc.info/gems/ruby-kafka/Kafka/DeliveryFailed) occurred
-- monitoring_list - default: [] - library to be used to monitor. statsd and datadog are supported
 
 If you want to know about detail of monitoring, see also https://github.com/zendesk/ruby-kafka#monitoring
 
@@ -335,6 +351,40 @@ For example, `$.source.ip` can be extracted with config `headers_from_record` an
 
 > Using this config to remove unused fields is discouraged. A [filter plugin](https://docs.fluentd.org/v/0.12/filter) can be used for this purpose.
 
+#### Send only a sub field as a message payload
+
+If `record_key` is provided, the plugin sends only a sub field given by that key.
+The configuration format is jsonpath.
+
+e.g. When the following configuration and the incoming record are given:
+
+configuration:
+
+    <match **>
+      @type kafka2
+      [...]
+      record_key '$.data'
+    </match>
+
+record:
+
+    {
+        "specversion" : "1.0",
+        "type" : "com.example.someevent",
+        "id" : "C234-1234-1234",
+        "time" : "2018-04-05T17:31:00Z",
+        "datacontenttype" : "application/json",
+        "data" : {
+            "appinfoA" : "abc",
+            "appinfoB" : 123,
+            "appinfoC" : true
+        },
+        ...
+    }
+
+only the `data` field will be serialized by the formatter and sent to Kafka.
+The toplevel `data` key will be removed.
+
 ### Buffered output plugin
 
 This plugin uses ruby-kafka producer for writing data. This plugin is for v0.12. If you use v1, see `kafka2`.
@@ -383,6 +433,16 @@ Support of fluentd v0.12 has ended. `kafka_buffered` will be an alias of `kafka2
       discard_kafka_delivery_failed   (bool) :default => false (No discard)
       monitoring_list              (array)   :default => []
     </match>
+
+`kafka_buffered` supports the following `ruby-kafka` parameters:
+
+- max_send_retries - default: 2 - Number of times to retry sending of messages to a leader.
+- required_acks - default: -1 - The number of acks required per request. If you need flush performance, set lower value, e.g. 1, 2.
+- ack_timeout - default: nil - How long the producer waits for acks. The unit is seconds.
+- compression_codec - default: nil - The codec the producer uses to compress messages.
+- max_send_limit_bytes - default: nil - Max byte size to send message to avoid MessageSizeTooLarge. For example, if you set 1000000(message.max.bytes in kafka), Message more than 1000000 byes will be dropped.
+- discard_kafka_delivery_failed - default: false - discard the record where [Kafka::DeliveryFailed](http://www.rubydoc.info/gems/ruby-kafka/Kafka/DeliveryFailed) occurred
+- monitoring_list - default: [] - library to be used to monitor. statsd and datadog are supported
 
 `kafka_buffered` has two additional parameters:
 
@@ -460,6 +520,7 @@ You need to install rdkafka gem.
       # same with kafka2
       headers               (hash) :default => {}
       headers_from_record   (hash) :default => {}
+      record_key            (string) :default => nil
 
       <format>
         @type (json|ltsv|msgpack|attr:<record name>|<formatter name>) :default => json

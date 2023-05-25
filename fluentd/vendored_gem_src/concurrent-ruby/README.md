@@ -42,8 +42,8 @@ You can also get started by triaging issues which may include reproducing bug re
 ## Thread Safety
 
 *Concurrent Ruby makes one of the strongest thread safety guarantees of any Ruby concurrency 
-library, providing consistent behavior and guarantees on all four of the main Ruby interpreters 
-(MRI/CRuby, JRuby, Rubinius, TruffleRuby).*
+library, providing consistent behavior and guarantees on all three main Ruby interpreters
+(MRI/CRuby, JRuby, TruffleRuby).*
 
 Every abstraction in this library is thread safe. Specific thread safety guarantees are documented 
 with each abstraction.
@@ -58,9 +58,9 @@ other Ruby library, many of which support the mantra of
 Concurrent Ruby is also the only Ruby library which provides a full suite of thread safe and
 immutable variable types and data structures.
 
-We've also initiated discussion to document [memory model](docs-source/synchronization.md) of Ruby which 
-would provide consistent behaviour and guarantees on all four of the main Ruby interpreters 
-(MRI/CRuby, JRuby, Rubinius, TruffleRuby).
+We've also initiated discussion to document the [memory model](docs-source/synchronization.md) of Ruby which 
+would provide consistent behaviour and guarantees on all three main Ruby interpreters 
+(MRI/CRuby, JRuby, TruffleRuby).
 
 ## Features & Documentation
 
@@ -259,12 +259,9 @@ be obeyed though. Features developed in `concurrent-ruby-edge` are expected to m
 
 ## Supported Ruby versions
 
-* MRI 2.2 and above
+* MRI 2.3 and above
 * Latest JRuby 9000
 * Latest TruffleRuby
-
-The legacy support for Rubinius is kept for the moment but it is no longer maintained and is liable to be removed. If you would like to help 
-please respond to [#739](https://github.com/ruby-concurrency/concurrent-ruby/issues/739).
 
 ## Usage
 
@@ -274,7 +271,12 @@ Everything within this gem can be loaded simply by requiring it:
 require 'concurrent'
 ```
 
-*Requiring only specific abstractions from Concurrent Ruby is not yet supported.*
+You can also require a specific abstraction [part of the public documentation](https://ruby-concurrency.github.io/concurrent-ruby/master/index.html) since concurrent-ruby 1.2.0, for example:
+```ruby
+require 'concurrent/map'
+require 'concurrent/atomic/atomic_reference'
+require 'concurrent/executor/fixed_thread_pool'
+```
 
 To use the tools in the Edge gem it must be required separately:
 
@@ -362,20 +364,18 @@ best practice is to depend on `concurrent-ruby` and let users to decide if they 
 
 * Update `version.rb`
 * Update the CHANGELOG
-* Update the Yard documentation
-    - Add the new version to `docs-source/signpost.md`. Needs to be done only if there are visible changes in the
-      documentation.
-    - Run `bundle exec rake yard` to update the master documentation and signpost.
-    - Run `bundle exec rake yard:<new-version>` to add or update the documentation of the new version.
+* Add the new version to `docs-source/signpost.md`. Needs to be done only if there are visible changes in the documentation.
 * Commit (and push) the changes.
-* Use `be rake release` to release the gem. It consists
-  of `['release:checks', 'release:build', 'release:test', 'release:publish']` steps. It will ask at the end before
-  publishing anything. Steps can also be executed individually.
+* Use `bundle exec rake release` to release the gem.
+  It consists of `['release:checks', 'release:build', 'release:test', 'release:publish']` steps.
+  It will ask at the end before publishing anything. Steps can also be executed individually.
 
 ## Maintainers
 
-* [Chris Seaton](https://github.com/chrisseaton) — Lead maintainer, point-of-contact.
-* [Benoit Daloze](https://github.com/eregon) — If Chris is not available Benoit can help.
+* [Benoit Daloze](https://github.com/eregon)
+* [Matthew Draper](https://github.com/matthewd)
+* [Rafael França](https://github.com/rafaelfranca)
+* [Samuel Williams](https://github.com/ioquatix)
 
 ### Special Thanks to
 
@@ -386,6 +386,7 @@ best practice is to depend on `concurrent-ruby` and let users to decide if they 
 
 to the past maintainers
 
+* [Chris Seaton](https://github.com/chrisseaton)
 * [Petr Chalupa](https://github.com/pitr-ch)
 * [Michele Della Torre](https://github.com/mighe)
 * [Paweł Obrok](https://github.com/obrok)

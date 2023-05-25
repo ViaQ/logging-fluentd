@@ -1,3 +1,8 @@
+require 'concurrent/utility/engine'
+require 'concurrent/synchronization/abstract_lockable_object'
+require 'concurrent/synchronization/mutex_lockable_object'
+require 'concurrent/synchronization/jruby_lockable_object'
+
 module Concurrent
   module Synchronization
 
@@ -8,8 +13,6 @@ module Concurrent
                                      MutexLockableObject
                                    when Concurrent.on_jruby?
                                      JRubyLockableObject
-                                   when Concurrent.on_rbx?
-                                     RbxLockableObject
                                    when Concurrent.on_truffleruby?
                                      MutexLockableObject
                                    else

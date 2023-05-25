@@ -5,9 +5,37 @@ require 'fluent/plugin/kafka_plugin_util'
 
 require 'rdkafka'
 
+# This is required for `rdkafka` version >= 0.12.0
+# Overriding the close method in order to provide a time limit for when it should be forcibly closed
+class Rdkafka::Producer::Client
+  # return false if producer is forcefully closed, otherwise return true
+  def close(timeout=nil)
+    return unless @native
+
+    # Indicate to polling thread that we're closing
+    @polling_thread[:closing] = true
+    # Wait for the polling thread to finish up
+    thread = @polling_thread.join(timeout)
+
+    Rdkafka::Bindings.rd_kafka_destroy(@native)
+
+    @native = nil
+
+    return !thread.nil?
+  end
+end
+
 class Rdkafka::Producer
   # return false if producer is forcefully closed, otherwise return true
   def close(timeout = nil)
+    rdkafka_version = Rdkafka::VERSION || '0.0.0'
+    # Rdkafka version >= 0.12.0 changed its internals
+    if Gem::Version::create(rdkafka_version) >= Gem::Version.create('0.12.0')
+      ObjectSpace.undefine_finalizer(self)
+
+      return @client.close(timeout)
+    end
+
     @closing = true
     # Wait for the polling thread to finish up
     # If the broker isn't alive, the thread doesn't exit
@@ -74,6 +102,11 @@ DESC
 The codec the producer uses to compress messages. Used for compression.codec
 Supported codecs: (gzip|snappy)
 DESC
+    config_param :record_key, :string, :default => nil,
+                 :desc => <<-DESC
+A jsonpath to a record value pointing to the field which will be passed to the formatter and sent as the Kafka message payload.
+If defined, only this field in the record will be sent to Kafka as the message payload.
+DESC
     config_param :use_event_time, :bool, :default => false, :desc => 'Use fluentd event time for rdkafka timestamp'
     config_param :max_send_limit_bytes, :size, :default => nil
     config_param :discard_kafka_delivery_failed, :bool, :default => false
@@ -90,7 +123,6 @@ DESC
     config_param :max_enqueue_bytes_per_second, :size, :default => nil, :desc => 'The maximum number of enqueueing bytes per second'
 
     config_param :service_name, :string, :default => nil, :desc => 'Used for sasl.kerberos.service.name'
-    config_param :ssl_client_cert_key_password, :string, :default => nil, :desc => 'Used for ssl.key.password'
 
     config_section :buffer do
       config_set_default :chunk_keys, ["topic"]
@@ -230,6 +262,9 @@ DESC
       end
 
       @enqueue_rate = EnqueueRate.new(@max_enqueue_bytes_per_second) unless @max_enqueue_bytes_per_second.nil?
+
+      @record_field_accessor = nil
+      @record_field_accessor = record_accessor_create(@record_key) unless @record_key.nil?
     end
 
     def build_config
@@ -270,6 +305,8 @@ DESC
       config[:"queue.buffering.max.messages"] = @rdkafka_buffering_max_messages if @rdkafka_buffering_max_messages
       config[:"message.max.bytes"] = @rdkafka_message_max_bytes if @rdkafka_message_max_bytes
       config[:"batch.num.messages"] = @rdkafka_message_max_num if @rdkafka_message_max_num
+      config[:"sasl.username"] = @username if @username
+      config[:"sasl.password"] = @password if @password
 
       @rdkafka_options.each { |k, v|
         config[k.to_sym] = v
@@ -371,8 +408,6 @@ DESC
               end
 
       handlers = []
-      record_buf = nil
-      record_buf_bytes = nil
 
       headers = @headers.clone
 
@@ -395,6 +430,7 @@ DESC
               end
             end
 
+            record = @record_field_accessor.call(record) unless @record_field_accessor.nil?
             record_buf = @formatter_proc.call(tag, time, record)
             record_buf_bytes = record_buf.bytesize
             if @max_send_limit_bytes && record_buf_bytes > @max_send_limit_bytes
