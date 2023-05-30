@@ -1,13 +1,148 @@
 diff --git a/lib/fluent/plugin/in_tail.rb b/lib/fluent/plugin/in_tail.rb
-index 3ad5943f8..ac38f5eeb 100644
+index 3ad5943f..ce000b0f 100644
 --- a/lib/fluent/plugin/in_tail.rb
 +++ b/lib/fluent/plugin/in_tail.rb
-@@ -509,7 +509,7 @@ module Fluent::Plugin
+@@ -354,13 +354,15 @@ module Fluent::Plugin
+ 
+     def existence_path
+       hash = {}
+-      @tails.each_key {|target_info|
+-        if @follow_inodes
+-          hash[target_info.ino] = target_info
+-        else
+-          hash[target_info.path] = target_info
+-        end
+-      }
++      if @follow_inodes
++        @tails.each {|ino, tw|
++          hash[tw.ino] = TargetInfo.new(tw.path, tw.ino)
++        }
++      else
++        @tails.each {|path, tw|
++          hash[tw.path] = TargetInfo.new(tw.path, tw.ino)
++        }
++      end
+       hash
+     end
+ 
+@@ -441,8 +443,11 @@ module Fluent::Plugin
+ 
+       begin
+         target_info = TargetInfo.new(target_info.path, Fluent::FileWrapper.stat(target_info.path).ino)
+-        @tails.delete(target_info)
+-        @tails[target_info] = tw
++        if @follow_inodes
++          @tails[target_info.ino] = tw
++        else
++          @tails[target_info.path] = tw
++        end
+         tw.on_notify
+       rescue Errno::ENOENT, Errno::EACCES => e
+         $log.warn "stat() for #{target_info.path} failed with #{e.class.name}. Drop tail watcher for now."
+@@ -462,9 +467,17 @@ module Fluent::Plugin
+     def stop_watchers(targets_info, immediate: false, unwatched: false, remove_watcher: true)
+       targets_info.each_value { |target_info|
+         if remove_watcher
+-          tw = @tails.delete(target_info)
++          if @follow_inodes
++            tw = @tails.delete(target_info.ino)
++          else
++            tw = @tails.delete(target_info.path)
++          end
+         else
+-          tw = @tails[target_info]
++          if @follow_inodes
++            tw = @tails[target_info.ino]
++          else
++            tw = @tails[target_info.path]
++          end
+         end
+         if tw
+           tw.unwatched = unwatched
+@@ -478,10 +491,19 @@ module Fluent::Plugin
+     end
+ 
+     def close_watcher_handles
+-      @tails.keys.each do |target_info|
+-        tw = @tails.delete(target_info)
+-        if tw
+-          tw.close
++      if @follow_inodes
++        @tails.keys.each do |ino|
++          tw = @tails.delete(ino)
++          if tw
++            tw.close
++          end
++        end
++      else
++        @tails.keys.each do |path|
++          tw = @tails.delete(path)
++          if tw
++            tw.close
++          end
+         end
+       end
+     end
+@@ -500,26 +522,25 @@ module Fluent::Plugin
+       end
+ 
+       rotated_target_info = TargetInfo.new(target_info.path, pe.read_inode)
+-      rotated_tw = @tails[rotated_target_info]
+-      new_target_info = target_info.dup
+ 
+       if @follow_inodes
++        rotated_tw = @tails[rotated_target_info.ino]
++        new_target_info = target_info.dup
+         new_position_entry = @pf[target_info]
+ 
          if new_position_entry.read_inode == 0
            # When follow_inodes is true, it's not cleaned up by refresh_watcher.
            # So it should be unwatched here explicitly.
 -          rotated_tw.unwatched = true
 +          rotated_tw.unwatched = true if rotated_tw
-           # Make sure to delete old key, it has a different ino while the hash key is same.
-           @tails.delete(rotated_target_info)
-           @tails[new_target_info] = setup_watcher(new_target_info, new_position_entry)
+-          # Make sure to delete old key, it has a different ino while the hash key is same.
+-          @tails.delete(rotated_target_info)
+-          @tails[new_target_info] = setup_watcher(new_target_info, new_position_entry)
+-          @tails[new_target_info].on_notify
++          @tails[new_target_info.ino] = setup_watcher(new_target_info, new_position_entry)
++          @tails[new_target_info.ino].on_notify
+         end
+       else
+-        # Make sure to delete old key, it has a different ino while the hash key is same.
+-        @tails.delete(rotated_target_info)
+-        @tails[new_target_info] = setup_watcher(new_target_info, pe)
+-        @tails[new_target_info].on_notify
++        rotated_tw = @tails[rotated_target_info.path]
++        new_target_info = target_info.dup
++
++        @tails[new_target_info.path] = setup_watcher(new_target_info, pe)
++        @tails[new_target_info.path].on_notify
+       end
+       detach_watcher_after_rotate_wait(rotated_tw, pe.read_inode) if rotated_tw
+     end
+diff --git a/lib/fluent/plugin/in_tail/position_file.rb b/lib/fluent/plugin/in_tail/position_file.rb
+index 340de6cd..ad1cb3ef 100644
+--- a/lib/fluent/plugin/in_tail/position_file.rb
++++ b/lib/fluent/plugin/in_tail/position_file.rb
+@@ -250,20 +250,6 @@ module Fluent::Plugin
+       end
+     end
+ 
+-    TargetInfo = Struct.new(:path, :ino) do
+-      def ==(other)
+-        return false unless other.is_a?(TargetInfo)
+-        self.path == other.path
+-      end
+-
+-      def hash
+-        self.path.hash
+-      end
+-
+-      def eql?(other)
+-        return false unless other.is_a?(TargetInfo)
+-        self.path == other.path
+-      end
+-    end
++    TargetInfo = Struct.new(:path, :ino)
+   end
+ end
