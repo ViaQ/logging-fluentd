@@ -1,0 +1,13 @@
+diff --git a/lib/fluent/plugin/in_tail.rb b/lib/fluent/plugin/in_tail.rb
+index 3ad5943f8..ac38f5eeb 100644
+--- a/lib/fluent/plugin/in_tail.rb
++++ b/lib/fluent/plugin/in_tail.rb
+@@ -509,7 +509,7 @@ module Fluent::Plugin
+         if new_position_entry.read_inode == 0
+           # When follow_inodes is true, it's not cleaned up by refresh_watcher.
+           # So it should be unwatched here explicitly.
+-          rotated_tw.unwatched = true
++          rotated_tw.unwatched = true if rotated_tw
+           # Make sure to delete old key, it has a different ino while the hash key is same.
+           @tails.delete(rotated_target_info)
+           @tails[new_target_info] = setup_watcher(new_target_info, new_position_entry)
