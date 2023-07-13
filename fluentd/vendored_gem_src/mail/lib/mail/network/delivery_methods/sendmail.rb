@@ -1,5 +1,5 @@
 # frozen_string_literal: true
-require 'mail/check_delivery_params'
+require 'mail/smtp_envelope'
 
 module Mail
   # A delivery method implementation which sends via sendmail.
@@ -40,39 +40,72 @@ module Mail
   class Sendmail
     DEFAULTS = {
       :location   => '/usr/sbin/sendmail',
-      :arguments  => '-i'
+      :arguments  => %w[ -i ]
     }
 
     attr_accessor :settings
 
+    class DeliveryError < StandardError
+    end
+
     def initialize(values)
+      if values[:arguments].is_a?(String)
+        deprecation_warn.call \
+          'Initializing Mail::Sendmail with :arguments of type String is deprecated.' \
+          ' Instead ensure :arguments is an array of strings, e.g. ["-i", "-t"]'
+      end
       self.settings = self.class::DEFAULTS.merge(values)
     end
 
-    def deliver!(mail)
-      smtp_from, smtp_to, message = Mail::CheckDeliveryParams.check(mail)
-
-      from = "-f #{self.class.shellquote(smtp_from)}" if smtp_from
-      to = smtp_to.map { |_to| self.class.shellquote(_to) }.join(' ')
-
-      arguments = "#{settings[:arguments]} #{from} --"
-      self.class.call(settings[:location], arguments, to, message)
+    def destinations_for(envelope)
+      envelope.to
     end
 
-    def self.call(path, arguments, destinations, encoded_message)
-      popen "#{path} #{arguments} #{destinations}" do |io|
-        io.puts ::Mail::Utilities.binary_unsafe_to_lf(encoded_message)
+    def deliver!(mail)
+      envelope = Mail::SmtpEnvelope.new(mail)
+
+      arguments = settings[:arguments]
+      if arguments.is_a? String
+        return old_deliver(envelope)
+      end
+
+      command = [settings[:location]]
+      command.concat Array(arguments)
+      command.concat [ '-f', envelope.from ] if envelope.from
+
+      if destinations = destinations_for(envelope)
+        command.push '--'
+        command.concat destinations
+      end
+
+      popen(command) do |io|
+        io.puts ::Mail::Utilities.binary_unsafe_to_lf(envelope.message)
         io.flush
       end
     end
 
-    if RUBY_VERSION < '1.9.0'
-      def self.popen(command, &block)
-        IO.popen "#{command} 2>&1", 'w+', &block
+    private
+      def popen(command, &block)
+        IO.popen(command, 'w+', :err => :out, &block).tap do
+          if $?.exitstatus != 0
+            raise DeliveryError, "Delivery failed with exitstatus #{$?.exitstatus}: #{command.inspect}"
+          end
+        end
       end
-    else
-      def self.popen(command, &block)
-        IO.popen command, 'w+', :err => :out, &block
+
+    #+ support for delivery using string arguments (deprecated)
+    def old_deliver(envelope)
+      smtp_from = envelope.from
+      smtp_to = destinations_for(envelope)
+
+      from = "-f #{shellquote(smtp_from)}" if smtp_from
+      destination = smtp_to.map { |to| shellquote(to) }.join(' ')
+
+      arguments = "#{settings[:arguments]} #{from} --"
+      command = "#{settings[:location]} #{arguments} #{destination}"
+      popen command do |io|
+        io.puts ::Mail::Utilities.binary_unsafe_to_lf(envelope.message)
+        io.flush
       end
     end
 
@@ -82,7 +115,7 @@ module Mail
     # - Wraps in double quotes
     # - Allows '+' to accept email addresses with them
     # - Allows '~' as it is not unescaped in double quotes
-    def self.shellquote(address)
+    def shellquote(address)
       # Process as a single byte sequence because not all shell
       # implementations are multibyte aware.
       #
@@ -90,6 +123,11 @@ module Mail
       # combo is regarded as line continuation and simply ignored. Strip it.
       escaped = address.gsub(/([^A-Za-z0-9_\s\+\-.,:\/@~])/n, "\\\\\\1").gsub("\n", '')
       %("#{escaped}")
+    end
+    #- support for delivery using string arguments
+
+    def deprecation_warn
+      defined?(ActiveSupport::Deprecation.warn) ? ActiveSupport::Deprecation.method(:warn) : Kernel.method(:warn)
     end
   end
 end

@@ -123,7 +123,7 @@ module ActiveModel
     #   user.serializable_hash(include: { notes: { only: 'title' }})
     #   # => {"name" => "Napoleon", "notes" => [{"title"=>"Battle of Austerlitz"}]}
     def serializable_hash(options = nil)
-      attribute_names = attributes.keys
+      attribute_names = attribute_names_for_serialization
 
       return serializable_attributes(attribute_names) if options.blank?
 
@@ -149,6 +149,10 @@ module ActiveModel
     end
 
     private
+      def attribute_names_for_serialization
+        attributes.keys
+      end
+
       # Hook method defining how an attribute value should be retrieved for
       # serialization. By default this is assumed to be an instance named after
       # the attribute. Override this method in subclasses should you need to
@@ -177,7 +181,7 @@ module ActiveModel
       #   +association+ - name of the association
       #   +records+     - the association record(s) to be serialized
       #   +opts+        - options for the association records
-      def serializable_add_includes(options = {}) #:nodoc:
+      def serializable_add_includes(options = {}) # :nodoc:
         return unless includes = options[:include]
 
         unless includes.is_a?(Hash)

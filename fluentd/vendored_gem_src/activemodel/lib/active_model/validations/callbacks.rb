@@ -43,10 +43,9 @@ module ActiveModel
         #     before_validation :remove_whitespaces
         #
         #     private
-        #
-        #     def remove_whitespaces
-        #       name.strip!
-        #     end
+        #       def remove_whitespaces
+        #         name.strip!
+        #       end
         #   end
         #
         #   person = Person.new
@@ -74,10 +73,9 @@ module ActiveModel
         #     after_validation :set_status
         #
         #     private
-        #
-        #     def set_status
-        #       self.status = errors.empty?
-        #     end
+        #       def set_status
+        #         self.status = errors.empty?
+        #       end
         #   end
         #
         #   person = Person.new
@@ -112,7 +110,7 @@ module ActiveModel
       end
 
     private
-      # Overwrite run validations to include callbacks.
+      # Override run_validations! to include callbacks.
       def run_validations!
         _run_validation_callbacks { super }
       end

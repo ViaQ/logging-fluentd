@@ -2,6 +2,9 @@
 require 'mail/utilities'
 require 'mail/parser_tools'
 
+begin
+  original_verbose, $VERBOSE = $VERBOSE, nil
+
 %%{
   # RFC 5322 Section 3.6.4: Identification Fields
   # https://tools.ietf.org/html/rfc5322#section-3.6.4
@@ -10,7 +13,11 @@ require 'mail/parser_tools'
 
   # Message Ids
   action msg_id_s { msg_id_s = p }
-  action msg_id_e { message_ids.message_ids << chars(data, msg_id_s, p-1).rstrip }
+  action msg_id_e {
+    id = chars(data, msg_id_s, p-1)
+    id = $1 if id =~ /.*<(.*)>.*/
+    message_ids.message_ids << id
+  }
 
   # No-op actions
   action angle_addr_s {}
@@ -79,4 +86,8 @@ module Mail::Parsers
       message_ids
     end
   end
+end
+
+ensure
+  $VERBOSE = original_verbose
 end

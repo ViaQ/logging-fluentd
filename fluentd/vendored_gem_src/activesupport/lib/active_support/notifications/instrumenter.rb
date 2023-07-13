@@ -31,6 +31,10 @@ module ActiveSupport
         end
       end
 
+      def new_event(name, payload = {}) # :nodoc:
+        Event.new(name, nil, nil, @id, payload)
+      end
+
       # Send a start notification with +name+ and +payload+.
       def start(name, payload)
         @notifier.start name, @id, payload
@@ -58,14 +62,27 @@ module ActiveSupport
       def initialize(name, start, ending, transaction_id, payload)
         @name           = name
         @payload        = payload.dup
-        @time           = start
+        @time           = start ? start.to_f * 1_000.0 : start
         @transaction_id = transaction_id
-        @end            = ending
+        @end            = ending ? ending.to_f * 1_000.0 : ending
         @children       = []
-        @cpu_time_start = 0
-        @cpu_time_finish = 0
+        @cpu_time_start = 0.0
+        @cpu_time_finish = 0.0
         @allocation_count_start = 0
         @allocation_count_finish = 0
+      end
+
+      def record
+        start!
+        begin
+          yield payload if block_given?
+        rescue Exception => e
+          payload[:exception] = [e.class.name, e.message]
+          payload[:exception_object] = e
+          raise e
+        ensure
+          finish!
+        end
       end
 
       # Record information at the time this event starts
@@ -85,7 +102,7 @@ module ActiveSupport
       # Returns the CPU time (in milliseconds) passed since the call to
       # +start!+ and the call to +finish!+
       def cpu_time
-        (@cpu_time_finish - @cpu_time_start) * 1000
+        @cpu_time_finish - @cpu_time_start
       end
 
       # Returns the idle time time (in milliseconds) passed since the call to
@@ -113,7 +130,7 @@ module ActiveSupport
       #
       #   @event.duration # => 1000.138
       def duration
-        1000.0 * (self.end - time)
+        self.end - time
       end
 
       def <<(event)
@@ -126,28 +143,28 @@ module ActiveSupport
 
       private
         def now
-          Concurrent.monotonic_time
+          Process.clock_gettime(Process::CLOCK_MONOTONIC, :float_millisecond)
         end
 
         begin
-          Process.clock_gettime(Process::CLOCK_THREAD_CPUTIME_ID)
+          Process.clock_gettime(Process::CLOCK_THREAD_CPUTIME_ID, :float_millisecond)
 
           def now_cpu
-            Process.clock_gettime(Process::CLOCK_THREAD_CPUTIME_ID)
+            Process.clock_gettime(Process::CLOCK_THREAD_CPUTIME_ID, :float_millisecond)
           end
         rescue
-          def now_cpu
-            0
+          def now_cpu # rubocop:disable Lint/DuplicateMethods
+            0.0
           end
         end
 
-        if defined?(JRUBY_VERSION)
+        if GC.stat.key?(:total_allocated_objects)
+          def now_allocations
+            GC.stat(:total_allocated_objects)
+          end
+        else # Likely on JRuby, TruffleRuby
           def now_allocations
             0
-          end
-        else
-          def now_allocations
-            GC.stat :total_allocated_objects
           end
         end
     end

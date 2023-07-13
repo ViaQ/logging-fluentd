@@ -34,19 +34,24 @@ module ActiveSupport
   extend ActiveSupport::Autoload
 
   autoload :Concern
+  autoload :CodeGenerator
   autoload :ActionableError
   autoload :ConfigurationFile
   autoload :CurrentAttributes
   autoload :Dependencies
   autoload :DescendantsTracker
+  autoload :ExecutionContext
   autoload :ExecutionWrapper
   autoload :Executor
+  autoload :ErrorReporter
   autoload :FileUpdateChecker
   autoload :EventedFileUpdateChecker
   autoload :ForkTracker
   autoload :LogSubscriber
+  autoload :IsolatedExecutionState
   autoload :Notifications
   autoload :Reloader
+  autoload :PerThreadRegistry
   autoload :SecureCompareRotator
 
   eager_autoload do
@@ -87,6 +92,17 @@ module ActiveSupport
   end
 
   cattr_accessor :test_order # :nodoc:
+  cattr_accessor :test_parallelization_threshold, default: 50 # :nodoc:
+
+  singleton_class.attr_accessor :error_reporter # :nodoc:
+
+  def self.cache_format_version
+    Cache.format_version
+  end
+
+  def self.cache_format_version=(value)
+    Cache.format_version = value
+  end
 
   def self.to_time_preserves_timezone
     DateAndTime::Compatibility.preserve_timezone

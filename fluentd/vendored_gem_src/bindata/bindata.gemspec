@@ -12,8 +12,13 @@ Gem::Specification.new do |s|
   s.require_path = 'lib'
   s.extra_rdoc_files = ['NEWS.rdoc']
   s.rdoc_options << '--main' << 'NEWS.rdoc'
-  s.files = `git ls-files`.split("\n")
-  s.license = 'Ruby'
+  s.files = Dir.chdir(__dir__) do
+    `git ls-files -z`.split("\x0").reject do |file|
+      file.start_with?(*%w[.git INSTALL])
+    end
+  end
+  s.license = 'BSD-2-Clause'
+  s.required_ruby_version = ">= 2.4.0"
 
   s.add_development_dependency('rake')
   s.add_development_dependency('minitest', "> 5.0.0", "< 5.12.0")

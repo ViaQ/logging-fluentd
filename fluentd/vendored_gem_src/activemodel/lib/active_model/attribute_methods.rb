@@ -49,24 +49,24 @@ module ActiveModel
   #     end
   #
   #     private
+  #       def attribute_contrived?(attr)
+  #         true
+  #       end
   #
-  #     def attribute_contrived?(attr)
-  #       true
-  #     end
+  #       def clear_attribute(attr)
+  #         send("#{attr}=", nil)
+  #       end
   #
-  #     def clear_attribute(attr)
-  #       send("#{attr}=", nil)
-  #     end
-  #
-  #     def reset_attribute_to_default!(attr)
-  #       send("#{attr}=", 'Default Name')
-  #     end
+  #       def reset_attribute_to_default!(attr)
+  #         send("#{attr}=", 'Default Name')
+  #       end
   #   end
   module AttributeMethods
     extend ActiveSupport::Concern
 
     NAME_COMPILABLE_REGEXP = /\A[a-zA-Z_]\w*[!?=]?\z/
     CALL_COMPILABLE_REGEXP = /\A[a-zA-Z_]\w*[!?]?\z/
+    FORWARD_PARAMETERS = "*args"
 
     included do
       class_attribute :attribute_aliases, instance_writer: false, default: {}
@@ -94,10 +94,9 @@ module ActiveModel
       #     define_attribute_methods :name
       #
       #     private
-      #
-      #     def clear_attribute(attr)
-      #       send("#{attr}=", nil)
-      #     end
+      #       def clear_attribute(attr)
+      #         send("#{attr}=", nil)
+      #       end
       #   end
       #
       #   person = Person.new
@@ -105,8 +104,8 @@ module ActiveModel
       #   person.name          # => "Bob"
       #   person.clear_name
       #   person.name          # => nil
-      def attribute_method_prefix(*prefixes)
-        self.attribute_method_matchers += prefixes.map! { |prefix| AttributeMethodMatcher.new prefix: prefix }
+      def attribute_method_prefix(*prefixes, parameters: nil)
+        self.attribute_method_matchers += prefixes.map! { |prefix| AttributeMethodMatcher.new(prefix: prefix, parameters: parameters) }
         undefine_attribute_methods
       end
 
@@ -130,18 +129,17 @@ module ActiveModel
       #     define_attribute_methods :name
       #
       #     private
-      #
-      #     def attribute_short?(attr)
-      #       send(attr).length < 5
-      #     end
+      #       def attribute_short?(attr)
+      #         send(attr).length < 5
+      #       end
       #   end
       #
       #   person = Person.new
       #   person.name = 'Bob'
       #   person.name          # => "Bob"
       #   person.name_short?   # => true
-      def attribute_method_suffix(*suffixes)
-        self.attribute_method_matchers += suffixes.map! { |suffix| AttributeMethodMatcher.new suffix: suffix }
+      def attribute_method_suffix(*suffixes, parameters: nil)
+        self.attribute_method_matchers += suffixes.map! { |suffix| AttributeMethodMatcher.new(suffix: suffix, parameters: parameters) }
         undefine_attribute_methods
       end
 
@@ -166,10 +164,9 @@ module ActiveModel
       #     define_attribute_methods :name
       #
       #     private
-      #
-      #     def reset_attribute_to_default!(attr)
-      #       send("#{attr}=", 'Default Name')
-      #     end
+      #       def reset_attribute_to_default!(attr)
+      #         send("#{attr}=", 'Default Name')
+      #       end
       #   end
       #
       #   person = Person.new
@@ -177,7 +174,7 @@ module ActiveModel
       #   person.reset_name_to_default!
       #   person.name                         # => 'Default Name'
       def attribute_method_affix(*affixes)
-        self.attribute_method_matchers += affixes.map! { |affix| AttributeMethodMatcher.new prefix: affix[:prefix], suffix: affix[:suffix] }
+        self.attribute_method_matchers += affixes.map! { |affix| AttributeMethodMatcher.new(**affix) }
         undefine_attribute_methods
       end
 
@@ -193,10 +190,9 @@ module ActiveModel
       #     alias_attribute :nickname, :name
       #
       #     private
-      #
-      #     def attribute_short?(attr)
-      #       send(attr).length < 5
-      #     end
+      #       def attribute_short?(attr)
+      #         send(attr).length < 5
+      #       end
       #   end
       #
       #   person = Person.new
@@ -207,11 +203,33 @@ module ActiveModel
       #   person.nickname_short? # => true
       def alias_attribute(new_name, old_name)
         self.attribute_aliases = attribute_aliases.merge(new_name.to_s => old_name.to_s)
-        CodeGenerator.batch(self, __FILE__, __LINE__) do |owner|
+        ActiveSupport::CodeGenerator.batch(self, __FILE__, __LINE__) do |code_generator|
           attribute_method_matchers.each do |matcher|
-            matcher_new = matcher.method_name(new_name).to_s
-            matcher_old = matcher.method_name(old_name).to_s
-            define_proxy_call false, owner, matcher_new, matcher_old
+            method_name = matcher.method_name(new_name).to_s
+            target_name = matcher.method_name(old_name).to_s
+            parameters = matcher.parameters
+
+            mangled_name = target_name
+            unless NAME_COMPILABLE_REGEXP.match?(target_name)
+              mangled_name = "__temp__#{target_name.unpack1("h*")}"
+            end
+
+            code_generator.define_cached_method(method_name, as: mangled_name, namespace: :alias_attribute) do |batch|
+              body = if CALL_COMPILABLE_REGEXP.match?(target_name)
+                "self.#{target_name}(#{parameters || ''})"
+              else
+                call_args = [":'#{target_name}'"]
+                call_args << parameters if parameters
+                "send(#{call_args.join(", ")})"
+              end
+
+              modifier = matcher.parameters == FORWARD_PARAMETERS ? "ruby2_keywords " : ""
+
+              batch <<
+                "#{modifier}def #{mangled_name}(#{parameters || ''})" <<
+                body <<
+                "end"
+            end
           end
         end
       end
@@ -230,7 +248,7 @@ module ActiveModel
       # <tt>ActiveModel::AttributeMethods</tt>.
       #
       # To use, pass attribute names (as strings or symbols). Be sure to declare
-      # +define_attribute_methods+ after you define any prefix, suffix or affix
+      # +define_attribute_methods+ after you define any prefix, suffix, or affix
       # methods, or they will not hook in.
       #
       #   class Person
@@ -245,13 +263,12 @@ module ActiveModel
       #     define_attribute_methods :name, :age, :address
       #
       #     private
-      #
-      #     def clear_attribute(attr)
-      #       send("#{attr}=", nil)
-      #     end
+      #       def clear_attribute(attr)
+      #         send("#{attr}=", nil)
+      #       end
       #   end
       def define_attribute_methods(*attr_names)
-        CodeGenerator.batch(generated_attribute_methods, __FILE__, __LINE__) do |owner|
+        ActiveSupport::CodeGenerator.batch(generated_attribute_methods, __FILE__, __LINE__) do |owner|
           attr_names.flatten.each { |attr_name| define_attribute_method(attr_name, _owner: owner) }
         end
       end
@@ -275,10 +292,9 @@ module ActiveModel
       #     define_attribute_method :name
       #
       #     private
-      #
-      #     def attribute_short?(attr)
-      #       send(attr).length < 5
-      #     end
+      #       def attribute_short?(attr)
+      #         send(attr).length < 5
+      #       end
       #   end
       #
       #   person = Person.new
@@ -286,7 +302,7 @@ module ActiveModel
       #   person.name        # => "Bob"
       #   person.name_short? # => true
       def define_attribute_method(attr_name, _owner: generated_attribute_methods)
-        CodeGenerator.batch(_owner, __FILE__, __LINE__) do |owner|
+        ActiveSupport::CodeGenerator.batch(_owner, __FILE__, __LINE__) do |owner|
           attribute_method_matchers.each do |matcher|
             method_name = matcher.method_name(attr_name)
 
@@ -296,7 +312,7 @@ module ActiveModel
               if respond_to?(generate_method, true)
                 send(generate_method, attr_name.to_s, owner: owner)
               else
-                define_proxy_call true, owner, method_name, matcher.target, attr_name.to_s
+                define_proxy_call(owner, method_name, matcher.target, matcher.parameters, attr_name.to_s, namespace: :active_model_proxy)
               end
             end
           end
@@ -314,10 +330,9 @@ module ActiveModel
       #     define_attribute_method :name
       #
       #     private
-      #
-      #     def attribute_short?(attr)
-      #       send(attr).length < 5
-      #     end
+      #       def attribute_short?(attr)
+      #         send(attr).length < 5
+      #       end
       #   end
       #
       #   person = Person.new
@@ -335,46 +350,6 @@ module ActiveModel
       end
 
       private
-        class CodeGenerator
-          class << self
-            def batch(owner, path, line)
-              if owner.is_a?(CodeGenerator)
-                yield owner
-              else
-                instance = new(owner, path, line)
-                result = yield instance
-                instance.execute
-                result
-              end
-            end
-          end
-
-          def initialize(owner, path, line)
-            @owner = owner
-            @path = path
-            @line = line
-            @sources = ["# frozen_string_literal: true\n"]
-            @renames = {}
-          end
-
-          def <<(source_line)
-            @sources << source_line
-          end
-
-          def rename_method(old_name, new_name)
-            @renames[old_name] = new_name
-          end
-
-          def execute
-            @owner.module_eval(@sources.join(";"), @path, @line - 1)
-            @renames.each do |old_name, new_name|
-              @owner.alias_method new_name, old_name
-              @owner.undef_method old_name
-            end
-          end
-        end
-        private_constant :CodeGenerator
-
         def generated_attribute_methods
           @generated_attribute_methods ||= Module.new.tap { |mod| include mod }
         end
@@ -398,42 +373,48 @@ module ActiveModel
 
         def attribute_method_matchers_matching(method_name)
           attribute_method_matchers_cache.compute_if_absent(method_name) do
-            attribute_method_matchers.map { |matcher| matcher.match(method_name) }.compact
+            attribute_method_matchers.filter_map { |matcher| matcher.match(method_name) }
           end
         end
 
         # Define a method `name` in `mod` that dispatches to `send`
-        # using the given `extra` args. This falls back on `define_method`
-        # and `send` if the given names cannot be compiled.
-        def define_proxy_call(include_private, code_generator, name, target, *extra)
-          defn = if NAME_COMPILABLE_REGEXP.match?(name)
-            "def #{name}(*args)"
-          else
-            "define_method(:'#{name}') do |*args|"
+        # using the given `extra` args. This falls back on `send`
+        # if the called name cannot be compiled.
+        def define_proxy_call(code_generator, name, target, parameters, *call_args, namespace:)
+          mangled_name = name
+          unless NAME_COMPILABLE_REGEXP.match?(name)
+            mangled_name = "__temp__#{name.unpack1("h*")}"
           end
 
-          extra = (extra.map!(&:inspect) << "*args").join(", ")
+          code_generator.define_cached_method(name, as: mangled_name, namespace: :"#{namespace}_#{target}") do |batch|
+            call_args.map!(&:inspect)
+            call_args << parameters if parameters
 
-          body = if CALL_COMPILABLE_REGEXP.match?(target)
-            "#{"self." unless include_private}#{target}(#{extra})"
-          else
-            "send(:'#{target}', #{extra})"
+            body = if CALL_COMPILABLE_REGEXP.match?(target)
+              "self.#{target}(#{call_args.join(", ")})"
+            else
+              call_args.unshift(":'#{target}'")
+              "send(#{call_args.join(", ")})"
+            end
+
+            modifier = parameters == FORWARD_PARAMETERS ? "ruby2_keywords " : ""
+
+            batch <<
+              "#{modifier}def #{mangled_name}(#{parameters || ''})" <<
+              body <<
+              "end"
           end
-
-          code_generator <<
-            defn <<
-            body <<
-            "end" <<
-            "ruby2_keywords(:'#{name}') if respond_to?(:ruby2_keywords, true)"
         end
 
-        class AttributeMethodMatcher #:nodoc:
-          attr_reader :prefix, :suffix, :target
+        class AttributeMethodMatcher # :nodoc:
+          attr_reader :prefix, :suffix, :target, :parameters
 
           AttributeMethodMatch = Struct.new(:target, :attr_name)
 
-          def initialize(options = {})
-            @prefix, @suffix = options.fetch(:prefix, ""), options.fetch(:suffix, "")
+          def initialize(prefix: "", suffix: "", parameters: nil)
+            @prefix = prefix
+            @suffix = suffix
+            @parameters = parameters.nil? ? FORWARD_PARAMETERS : parameters
             @regex = /^(?:#{Regexp.escape(@prefix)})(.*)(?:#{Regexp.escape(@suffix)})$/
             @target = "#{@prefix}attribute#{@suffix}"
             @method_name = "#{prefix}%s#{suffix}"
@@ -469,7 +450,7 @@ module ActiveModel
         match ? attribute_missing(match, *args, &block) : super
       end
     end
-    ruby2_keywords(:method_missing) if respond_to?(:ruby2_keywords, true)
+    ruby2_keywords(:method_missing)
 
     # +attribute_missing+ is like +method_missing+, but for attributes. When
     # +method_missing+ is called we check to see if there is a matching
@@ -478,6 +459,7 @@ module ActiveModel
     def attribute_missing(match, *args, &block)
       __send__(match.target, match.attr_name, *args, &block)
     end
+    ruby2_keywords(:attribute_missing)
 
     # A +Person+ instance with a +name+ attribute can ask
     # <tt>person.respond_to?(:name)</tt>, <tt>person.respond_to?(:name=)</tt>,
@@ -520,10 +502,6 @@ module ActiveModel
 
         # We want to generate the methods via module_eval rather than
         # define_method, because define_method is slower on dispatch.
-        # Evaluating many similar methods may use more memory as the instruction
-        # sequences are duplicated and cached (in MRI).  define_method may
-        # be slower on dispatch, but if you're careful about the closure
-        # created, then define_method will consume much less memory.
         #
         # But sometimes the database might return columns with
         # characters that are not allowed in normal method names (like
@@ -547,7 +525,6 @@ module ActiveModel
             temp_method_name = "__temp__#{safe_name}#{'=' if writer}"
             attr_name_expr = "::ActiveModel::AttributeMethods::AttrNames::#{const_name}"
             yield temp_method_name, attr_name_expr
-            owner.rename_method(temp_method_name, method_name)
           end
         end
       end

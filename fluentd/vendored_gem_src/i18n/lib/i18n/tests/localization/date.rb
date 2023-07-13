@@ -34,6 +34,11 @@ module I18n
           assert_equal 'Sa', I18n.l(@date, :format => '%a', :locale => :de)
         end
 
+        test "localize Date: given an meridian indicator format it returns the correct meridian indicator" do
+          assert_equal 'AM', I18n.l(@date, :format => '%p', :locale => :de)
+          assert_equal 'am', I18n.l(@date, :format => '%P', :locale => :de)
+        end
+
         test "localize Date: given an abbreviated and uppercased day name format it returns the correct abbreviated day name in upcase" do
           assert_equal 'sa'.upcase, I18n.l(@date, :format => '%^a', :locale => :de)
         end
@@ -59,7 +64,7 @@ module I18n
         end
 
         test "localize Date: given missing translations it returns the correct error message" do
-          assert_equal 'translation missing: fr.date.abbr_month_names', I18n.l(@date, :format => '%b', :locale => :fr)
+          assert_equal 'Translation missing: fr.date.abbr_month_names', I18n.l(@date, :format => '%b', :locale => :fr)
         end
 
         test "localize Date: given an unknown format it does not fail" do

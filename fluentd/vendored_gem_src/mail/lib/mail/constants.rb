@@ -16,9 +16,10 @@ module Mail
       control = control.dup.force_encoding(Encoding::BINARY)
     end
 
-    CRLF          = /\r?\n/
+    LAX_CRLF      = /\r?\n/
     WSP           = /[#{white_space}]/
-    FWS           = /#{CRLF}#{WSP}*/
+    FWS           = /#{LAX_CRLF}#{WSP}*/
+    UNFOLD_WS     = /#{LAX_CRLF}(#{WSP})/m
     TEXT          = /[#{text}]/ # + obs-text
     FIELD_NAME    = /[#{field_name}]+/
     FIELD_PREFIX  = /\A(#{FIELD_NAME})/
@@ -26,7 +27,7 @@ module Mail
     FIELD_LINE    = /^[#{field_name}]+:\s*.+$/
     FIELD_SPLIT   = /^(#{FIELD_NAME})\s*:\s*(#{FIELD_BODY})?$/
     HEADER_LINE   = /^([#{field_name}]+:\s*.+)$/
-    HEADER_SPLIT  = /#{CRLF}(?!#{WSP})/
+    HEADER_SPLIT  = /#{LAX_CRLF}(?!#{WSP})/
 
     QP_UNSAFE     = /[^#{qp_safe}]/
     QP_SAFE       = /[#{qp_safe}]/
@@ -34,8 +35,28 @@ module Mail
     ATOM_UNSAFE   = /[#{Regexp.quote aspecial}#{control}#{sp}]/n
     PHRASE_UNSAFE = /[#{Regexp.quote aspecial}#{control}]/n
     TOKEN_UNSAFE  = /[#{Regexp.quote tspecial}#{control}#{sp}]/n
-    ENCODED_VALUE = /\=\?([^?]+)\?([QB])\?[^?]*?\?\=/mi
-    FULL_ENCODED_VALUE = /(\=\?[^?]+\?[QB]\?[^?]*?\?\=)/mi
+
+    ENCODED_VALUE = %r{
+      \=\?     # literal =?
+      ([^?]+)  #
+      \?       # literal ?
+      ([QB])   # either a "Q" or a "B"
+      \?       # literal ?
+      .*?      # lazily match all characters
+      \?\=     # literal ?=
+    }mix # m is multi-line, i is case-insensitive, x is free-spacing
+
+    FULL_ENCODED_VALUE = %r{ # Identical to ENCODED_VALUE but captures the whole rather than components of
+      (
+        \=\?    # literal =?
+        [^?]+   #
+        \?      # literal ?
+        [QB]    # either a "Q" or a "B"
+        \?      # literal ?
+        .*?     # lazily match all characters
+        \?\=    # literal ?=
+      )
+    }mix # m is multi-line, i is case-insensitive, x is free-spacing
 
     EMPTY          = ''
     SPACE          = ' '
@@ -43,6 +64,7 @@ module Mail
     HYPHEN         = '-'
     COLON          = ':'
     ASTERISK       = '*'
+    CRLF           = "\r\n"
     CR             = "\r"
     LF             = "\n"
     CR_ENCODED     = "=0D"

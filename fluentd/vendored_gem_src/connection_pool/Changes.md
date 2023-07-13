@@ -1,5 +1,21 @@
 # connection_pool Changelog
 
+2.4.1
+------
+
+- New `auto_reload_after_fork` config option to disable auto-drop [#177, shayonj]
+
+2.4.0
+------
+
+- Automatically drop all connections after fork [#166]
+
+2.3.0
+------
+
+- Minimum Ruby version is now 2.5.0
+- Add pool size to TimeoutError message
+
 2.2.5
 ------
 

@@ -5,18 +5,21 @@ begin
   require "redis"
   require "redis/distributed"
 rescue LoadError
-  warn "The Redis cache store requires the redis gem, version 4.0.1 or later. Please add it to your Gemfile: `gem \"redis\", \"~> 4.0\"`"
+  warn "The Redis cache store requires the redis gem, version 4.0.1 or later. Please add it to your Gemfile: `gem \"redis\", \">= 4.0.1\"`"
   raise
 end
 
 # Prefer the hiredis driver but don't require it.
 begin
-  require "redis/connection/hiredis"
+  if ::Redis::VERSION < "5"
+    require "redis/connection/hiredis"
+  else
+    require "hiredis-client"
+  end
 rescue LoadError
 end
 
-require "digest/sha2"
-require "active_support/core_ext/marshal"
+require "active_support/digest"
 
 module ActiveSupport
   module Cache
@@ -46,7 +49,7 @@ module ActiveSupport
     #   4.0.1+ for distributed mget support.
     # * +delete_matched+ support for Redis KEYS globs.
     class RedisCacheStore < Store
-      # Keys are truncated with their own SHA2 digest if they exceed 1kB
+      # Keys are truncated with the ActiveSupport digest if they exceed 1kB
       MAX_KEY_BYTESIZE = 1024
 
       DEFAULT_REDIS_OPTIONS = {
@@ -71,35 +74,7 @@ module ActiveSupport
         true
       end
 
-      # Support raw values in the local cache strategy.
-      module LocalCacheWithRaw # :nodoc:
-        private
-          def write_entry(key, entry, **options)
-            if options[:raw] && local_cache
-              raw_entry = Entry.new(serialize_entry(entry, raw: true))
-              raw_entry.expires_at = entry.expires_at
-              super(key, raw_entry, **options)
-            else
-              super
-            end
-          end
-
-          def write_multi_entries(entries, **options)
-            if options[:raw] && local_cache
-              raw_entries = entries.map do |key, entry|
-                raw_entry = Entry.new(serialize_entry(entry, raw: true))
-                raw_entry.expires_at = entry.expires_at
-              end.to_h
-
-              super(raw_entries, **options)
-            else
-              super
-            end
-          end
-      end
-
       prepend Strategy::LocalCache
-      prepend LocalCacheWithRaw
 
       class << self
         # Factory method to create a new Redis instance.
@@ -113,7 +88,7 @@ module ActiveSupport
         #   :url    String  ->  Redis.new(url: …)
         #   :url    Array   ->  Redis::Distributed.new([{ url: … }, { url: … }, …])
         #
-        def build_redis(redis: nil, url: nil, **redis_options) #:nodoc:
+        def build_redis(redis: nil, url: nil, **redis_options) # :nodoc:
           urls = Array(url)
 
           if redis.is_a?(Proc)
@@ -121,9 +96,11 @@ module ActiveSupport
           elsif redis
             redis
           elsif urls.size > 1
-            build_redis_distributed_client urls: urls, **redis_options
+            build_redis_distributed_client(urls: urls, **redis_options)
+          elsif urls.empty?
+            build_redis_client(**redis_options)
           else
-            build_redis_client url: urls.first, **redis_options
+            build_redis_client(url: urls.first, **redis_options)
           end
         end
 
@@ -134,8 +111,8 @@ module ActiveSupport
             end
           end
 
-          def build_redis_client(url:, **redis_options)
-            ::Redis.new DEFAULT_REDIS_OPTIONS.merge(redis_options.merge(url: url))
+          def build_redis_client(**redis_options)
+            ::Redis.new(DEFAULT_REDIS_OPTIONS.merge(redis_options))
           end
       end
 
@@ -168,8 +145,8 @@ module ActiveSupport
       #
       # Race condition TTL is not set by default. This can be used to avoid
       # "thundering herd" cache writes when hot cache entries are expired.
-      # See <tt>ActiveSupport::Cache::Store#fetch</tt> for more.
-      def initialize(namespace: nil, compress: true, compress_threshold: 1.kilobyte, coder: DEFAULT_CODER, expires_in: nil, race_condition_ttl: nil, error_handler: DEFAULT_ERROR_HANDLER, **redis_options)
+      # See ActiveSupport::Cache::Store#fetch for more.
+      def initialize(namespace: nil, compress: true, compress_threshold: 1.kilobyte, coder: default_coder, expires_in: nil, race_condition_ttl: nil, error_handler: DEFAULT_ERROR_HANDLER, **redis_options)
         @redis_options = redis_options
 
         @max_key_bytesize = MAX_KEY_BYTESIZE
@@ -254,8 +231,8 @@ module ActiveSupport
       # Cache Store API implementation.
       #
       # Increment a cached value. This method uses the Redis incr atomic
-      # operator and can only be used on values written with the :raw option.
-      # Calling it on a value not stored with :raw will initialize that value
+      # operator and can only be used on values written with the +:raw+ option.
+      # Calling it on a value not stored with +:raw+ will initialize that value
       # to zero.
       #
       # Failsafe: Raises errors.
@@ -277,8 +254,8 @@ module ActiveSupport
       # Cache Store API implementation.
       #
       # Decrement a cached value. This method uses the Redis decr atomic
-      # operator and can only be used on values written with the :raw option.
-      # Calling it on a value not stored with :raw will initialize that value
+      # operator and can only be used on values written with the +:raw+ option.
+      # Calling it on a value not stored with +:raw+ will initialize that value
       # to zero.
       #
       # Failsafe: Raises errors.
@@ -319,12 +296,17 @@ module ActiveSupport
         end
       end
 
-      def mget_capable? #:nodoc:
+      # Get info from redis servers.
+      def stats
+        redis.with { |c| c.info }
+      end
+
+      def mget_capable? # :nodoc:
         set_redis_capabilities unless defined? @mget_capable
         @mget_capable
       end
 
-      def mset_capable? #:nodoc:
+      def mset_capable? # :nodoc:
         set_redis_capabilities unless defined? @mset_capable
         @mset_capable
       end
@@ -344,9 +326,12 @@ module ActiveSupport
         # Store provider interface:
         # Read an entry from the cache.
         def read_entry(key, **options)
+          deserialize_entry(read_serialized_entry(key, **options), **options)
+        end
+
+        def read_serialized_entry(key, raw: false, **options)
           failsafe :read_entry do
-            raw = options&.fetch(:raw, false)
-            deserialize_entry(redis.with { |c| c.get(key) }, raw: raw)
+            redis.with { |c| c.get(key) }
           end
         end
 
@@ -383,9 +368,11 @@ module ActiveSupport
         # Write an entry to the cache.
         #
         # Requires Redis 2.6.12+ for extended SET options.
-        def write_entry(key, entry, unless_exist: false, raw: false, expires_in: nil, race_condition_ttl: nil, **options)
-          serialized_entry = serialize_entry(entry, raw: raw)
+        def write_entry(key, entry, raw: false, **options)
+          write_serialized_entry(key, serialize_entry(entry, raw: raw, **options), raw: raw, **options)
+        end
 
+        def write_serialized_entry(key, payload, raw: false, unless_exist: false, expires_in: nil, race_condition_ttl: nil, **options)
           # If race condition TTL is in use, ensure that cache entries
           # stick around a bit longer after they would have expired
           # so we can purposefully serve stale entries.
@@ -393,16 +380,14 @@ module ActiveSupport
             expires_in += 5.minutes
           end
 
-          failsafe :write_entry, returning: false do
-            if unless_exist || expires_in
-              modifiers = {}
-              modifiers[:nx] = unless_exist
-              modifiers[:px] = (1000 * expires_in.to_f).ceil if expires_in
+          modifiers = {}
+          if unless_exist || expires_in
+            modifiers[:nx] = unless_exist
+            modifiers[:px] = (1000 * expires_in.to_f).ceil if expires_in
+          end
 
-              redis.with { |c| c.set key, serialized_entry, **modifiers }
-            else
-              redis.with { |c| c.set key, serialized_entry }
-            end
+          failsafe :write_entry, returning: false do
+            redis.with { |c| c.set key, payload, **modifiers }
           end
         end
 
@@ -429,7 +414,10 @@ module ActiveSupport
           if entries.any?
             if mset_capable? && expires_in.nil?
               failsafe :write_multi_entries do
-                redis.with { |c| c.mapped_mset(serialize_entries(entries, raw: options[:raw])) }
+                payload = serialize_entries(entries, **options)
+                redis.with do |c|
+                  c.mapped_mset(payload)
+                end
               end
             else
               super
@@ -444,7 +432,7 @@ module ActiveSupport
 
         def truncate_key(key)
           if key && key.bytesize > max_key_bytesize
-            suffix = ":sha2:#{::Digest::SHA2.hexdigest(key)}"
+            suffix = ":hash:#{ActiveSupport::Digest.hexdigest(key)}"
             truncate_at = max_key_bytesize - suffix.bytesize
             "#{key.byteslice(0, truncate_at)}#{suffix}"
           else
@@ -452,41 +440,34 @@ module ActiveSupport
           end
         end
 
-        def deserialize_entry(payload, raw:)
-          if payload && raw
-            Entry.new(payload, compress: false)
+        def deserialize_entry(payload, raw: false, **)
+          if raw && !payload.nil?
+            Entry.new(payload)
           else
             super(payload)
           end
         end
 
-        def serialize_entry(entry, raw: false)
+        def serialize_entry(entry, raw: false, **options)
           if raw
             entry.value.to_s
           else
-            super(entry)
+            super(entry, raw: raw, **options)
           end
         end
 
-        def serialize_entries(entries, raw: false)
+        def serialize_entries(entries, **options)
           entries.transform_values do |entry|
-            serialize_entry entry, raw: raw
+            serialize_entry(entry, **options)
           end
         end
 
         def failsafe(method, returning: nil)
           yield
-        rescue ::Redis::BaseError => e
-          handle_exception exception: e, method: method, returning: returning
+        rescue ::Redis::BaseError => error
+          ActiveSupport.error_reporter&.report(error, handled: true, severity: :warning)
+          @error_handler&.call(method: method, exception: error, returning: returning)
           returning
-        end
-
-        def handle_exception(exception:, method:, returning:)
-          if @error_handler
-            @error_handler.(method: method, exception: exception, returning: returning)
-          end
-        rescue => failsafe
-          warn "RedisCacheStore ignored exception in handle_exception: #{failsafe.class}: #{failsafe.message}\n  #{failsafe.backtrace.join("\n  ")}"
         end
     end
   end
