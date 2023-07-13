@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require "active_support/per_thread_registry"
 require "active_support/notifications"
 
 module ActiveSupport
@@ -150,25 +149,15 @@ module ActiveSupport
       send(method, event)
     end
 
+    def publish_event(event) # :nodoc:
+      method = event.name.split(".").first
+      send(method, event)
+    end
+
     private
       def event_stack
-        SubscriberQueueRegistry.instance.get_queue(@queue_key)
+        registry = ActiveSupport::IsolatedExecutionState[:active_support_subscriber_queue_registry] ||= {}
+        registry[@queue_key] ||= []
       end
-  end
-
-  # This is a registry for all the event stacks kept for subscribers.
-  #
-  # See the documentation of <tt>ActiveSupport::PerThreadRegistry</tt>
-  # for further details.
-  class SubscriberQueueRegistry # :nodoc:
-    extend PerThreadRegistry
-
-    def initialize
-      @registry = {}
-    end
-
-    def get_queue(queue_key)
-      @registry[queue_key] ||= []
-    end
   end
 end

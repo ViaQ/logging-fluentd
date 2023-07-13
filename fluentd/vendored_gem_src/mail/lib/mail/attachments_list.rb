@@ -74,7 +74,7 @@ module Mail
       end
 
       if hash[:body].respond_to? :force_encoding and hash[:body].respond_to? :valid_encoding?
-        if not hash[:body].valid_encoding? and default_values[:content_transfer_encoding].downcase == "binary"
+        if not hash[:body].valid_encoding? and default_values[:content_transfer_encoding].casecmp('binary').zero?
           hash[:body] = hash[:body].dup if hash[:body].frozen?
           hash[:body].force_encoding("BINARY")
         end
@@ -97,10 +97,7 @@ module Mail
     end
 
     def set_mime_type(filename)
-      # Have to do this because MIME::Types is not Ruby 1.9 safe yet
-      if RUBY_VERSION >= '1.9'
-        filename = filename.encode(Encoding::UTF_8) if filename.respond_to?(:encode)
-      end
+      filename = filename.encode(Encoding::UTF_8) if filename.respond_to?(:encode)
 
       @mime_type = MiniMime.lookup_by_filename(filename)
       @mime_type && @mime_type.content_type

@@ -3,7 +3,7 @@ module Mail
   module VERSION
 
     MAJOR = 2
-    MINOR = 7
+    MINOR = 8
     PATCH = 1
     BUILD = nil
 

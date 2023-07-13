@@ -1,36 +1,39 @@
 # frozen_string_literal: true
+#
+# This whole class and associated specs is deprecated and will go away in the version 3 release of mail.
 module Mail
   module CheckDeliveryParams #:nodoc:
     class << self
+
+      extend Gem::Deprecate
+
       def check(mail)
-        [ check_from(mail.smtp_envelope_from),
-          check_to(mail.smtp_envelope_to),
-          check_message(mail) ]
+        envelope = Mail::SmtpEnvelope.new(mail)
+        [ envelope.from,
+          envelope.to,
+          envelope.message ]
       end
+      deprecate :check, 'Mail::SmtpEnvelope.new created in commit c106bebea066782a72e4f24dd37b532d95773df7', 2023, 6
 
       def check_from(addr)
-        if Utilities.blank?(addr)
-          raise ArgumentError, "SMTP From address may not be blank: #{addr.inspect}"
-        end
-
-        check_addr 'From', addr
+        mail = Mail.new(from: 'deprecated@example.com', to: 'deprecated@example.com')
+        Mail::SmtpEnvelope.new(mail).send(:validate_addr, 'From', addr)
       end
+      deprecate :check_from, :none, 2023, 6
 
       def check_to(addrs)
-        if Utilities.blank?(addrs)
-          raise ArgumentError, "SMTP To address may not be blank: #{addrs.inspect}"
-        end
-
+        mail = Mail.new(from: 'deprecated@example.com', to: 'deprecated@example.com')
         Array(addrs).map do |addr|
-          check_addr 'To', addr
+          Mail::SmtpEnvelope.new(mail).send(:validate_addr, 'To', addr)
         end
       end
+      deprecate :check_to, :none, 2023, 6
 
       def check_addr(addr_name, addr)
-        validate_smtp_addr addr do |error_message|
-          raise ArgumentError, "SMTP #{addr_name} address #{error_message}: #{addr.inspect}"
-        end
+        mail = Mail.new(from: 'deprecated@example.com', to: 'deprecated@example.com')
+        Mail::SmtpEnvelope.new(mail).send(:validate_addr, addr_name, addr)
       end
+      deprecate :check_addr, :none, 2023, 6
 
       def validate_smtp_addr(addr)
         if addr
@@ -45,6 +48,7 @@ module Mail
 
         addr
       end
+      deprecate :validate_smtp_addr, :none, 2023, 6
 
       def check_message(message)
         message = message.encoded if message.respond_to?(:encoded)
@@ -55,6 +59,7 @@ module Mail
 
         message
       end
+      deprecate :check_message, :none, 2023, 6
     end
   end
 end

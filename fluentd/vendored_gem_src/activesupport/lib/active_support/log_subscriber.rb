@@ -6,7 +6,7 @@ require "active_support/subscriber"
 
 module ActiveSupport
   # <tt>ActiveSupport::LogSubscriber</tt> is an object set to consume
-  # <tt>ActiveSupport::Notifications</tt> with the sole purpose of logging them.
+  # ActiveSupport::Notifications with the sole purpose of logging them.
   # The log subscriber dispatches notifications to a registered object based
   # on its given namespace.
   #
@@ -36,7 +36,7 @@ module ActiveSupport
   # it will properly dispatch the event
   # (<tt>ActiveSupport::Notifications::Event</tt>) to the sql method.
   #
-  # Being an <tt>ActiveSupport::Notifications</tt> consumer,
+  # Being an ActiveSupport::Notifications consumer,
   # <tt>ActiveSupport::LogSubscriber</tt> exposes a simple interface to check if
   # instrumented code raises an exception. It is common to log a different
   # message in case of an error, and this can be achieved by extending
@@ -114,9 +114,13 @@ module ActiveSupport
     def finish(name, id, payload)
       super if logger
     rescue => e
-      if logger
-        logger.error "Could not log #{name.inspect} event. #{e.class}: #{e.message} #{e.backtrace}"
-      end
+      log_exception(name, e)
+    end
+
+    def publish_event(event)
+      super if logger
+    rescue => e
+      log_exception(event.name, e)
     end
 
   private
@@ -137,6 +141,12 @@ module ActiveSupport
       color = self.class.const_get(color.upcase) if color.is_a?(Symbol)
       bold  = bold ? BOLD : ""
       "#{bold}#{color}#{text}#{CLEAR}"
+    end
+
+    def log_exception(name, e)
+      if logger
+        logger.error "Could not log #{name.inspect} event. #{e.class}: #{e.message} #{e.backtrace}"
+      end
     end
   end
 end

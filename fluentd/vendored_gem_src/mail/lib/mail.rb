@@ -9,26 +9,8 @@ module Mail # :doc:
   require 'net/smtp'
   require 'mini_mime'
 
-  if RUBY_VERSION <= '1.8.6'
-    begin
-      require 'tlsmail'
-    rescue LoadError
-      raise "You need to install tlsmail if you are using ruby <= 1.8.6"
-    end
-  end
-
-  if RUBY_VERSION >= "1.9.0"
-    require 'mail/version_specific/ruby_1_9'
-    RubyVer = Ruby19
-  else
-    require 'mail/version_specific/ruby_1_8'
-    RubyVer = Ruby18
-  end
-
   require 'mail/version'
 
-  require 'mail/core_extensions/string'
-  require 'mail/core_extensions/smtp'
   require 'mail/indifferent_hash'
 
   require 'mail/multibyte'
@@ -68,8 +50,6 @@ module Mail # :doc:
 
   require 'mail/envelope'
 
-  register_autoload :Parsers, "mail/parsers"
-
   # Autoload header field elements and transfer encodings.
   require 'mail/elements'
   require 'mail/encodings'
@@ -79,6 +59,9 @@ module Mail # :doc:
 
   require 'mail/matchers/has_sent_mail'
   require 'mail/matchers/attachment_matchers.rb'
+
+  # Deprecated will be removed in 3.0 release
+  require 'mail/check_delivery_params'
 
   # Finally... require all the Mail.methods
   require 'mail/mail'

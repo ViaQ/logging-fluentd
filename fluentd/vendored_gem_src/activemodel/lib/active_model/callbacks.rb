@@ -32,7 +32,7 @@ module ActiveModel
   #     end
   #   end
   #
-  # Then in your class, you can use the +before_create+, +after_create+ and
+  # Then in your class, you can use the +before_create+, +after_create+, and
   # +around_create+ methods, just as you would in an Active Record model.
   #
   #   before_create :action_before_create
@@ -63,7 +63,7 @@ module ActiveModel
   # NOTE: Calling the same callback multiple times will overwrite previous callback definitions.
   #
   module Callbacks
-    def self.extended(base) #:nodoc:
+    def self.extended(base) # :nodoc:
       base.class_eval do
         include ActiveSupport::Callbacks
       end
@@ -74,7 +74,7 @@ module ActiveModel
     # <tt>:only</tt> option, where you can choose if you want all types (before,
     # around or after) or just some.
     #
-    #   define_model_callbacks :initializer, only: :after
+    #   define_model_callbacks :initialize, only: :after
     #
     # Note, the <tt>only: <type></tt> hash will apply to all callbacks defined
     # on that method call. To get around this you can call the define_model_callbacks
@@ -84,7 +84,7 @@ module ActiveModel
     #   define_model_callbacks :update,  only: :before
     #   define_model_callbacks :destroy, only: :around
     #
-    # Would create +after_create+, +before_update+ and +around_destroy+ methods
+    # Would create +after_create+, +before_update+, and +around_destroy+ methods
     # only.
     #
     # You can pass in a class to before_<type>, after_<type> and around_<type>,

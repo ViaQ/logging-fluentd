@@ -24,7 +24,7 @@ module I18n
         been set is likely to display text from the wrong locale to some users.
 
         If you have a legitimate reason to access i18n data outside of the user flow, you can do so by passing
-        the desired locale explictly with the `locale` argument, e.g. `I18n.#{method}(..., locale: :en)`
+        the desired locale explicitly with the `locale` argument, e.g. `I18n.#{method}(..., locale: :en)`
       MESSAGE
     end
   end
@@ -47,7 +47,7 @@ module I18n
 
   class MissingTranslation < ArgumentError
     module Base
-      PERMITTED_KEYS = [:scope].freeze
+      PERMITTED_KEYS = [:scope, :default].freeze
 
       attr_reader :locale, :key, :options
 
@@ -63,8 +63,18 @@ module I18n
       end
 
       def message
-        "translation missing: #{keys.join('.')}"
+        if (default = options[:default]).is_a?(Array) && default.any?
+          other_options = ([key, *default]).map { |k| normalized_option(k).prepend('- ') }.join("\n")
+          "Translation missing. Options considered were:\n#{other_options}"
+        else
+          "Translation missing: #{keys.join('.')}"
+        end
       end
+
+      def normalized_option(key)
+        I18n.normalize_keys(locale, key, options[:scope]).join('.')
+      end
+
       alias :to_s :message
 
       def to_exception

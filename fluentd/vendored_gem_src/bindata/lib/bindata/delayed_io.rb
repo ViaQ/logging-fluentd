@@ -116,9 +116,14 @@ module BinData
       0
     end
 
+    def include_obj?
+      ! has_parameter?(:onlyif) || eval_parameter(:onlyif)
+    end
+
     # DelayedIO objects aren't read when #read is called.
     # The reading is delayed until this method is called.
     def read_now!
+      return unless include_obj?
       raise IOError, "read from where?" unless @read_io
 
       @read_io.seekbytes(abs_offset - @read_io.offset)
@@ -130,7 +135,9 @@ module BinData
     # DelayedIO objects aren't written when #write is called.
     # The writing is delayed until this method is called.
     def write_now!
+      return unless include_obj?
       raise IOError, "write to where?" unless @write_io
+
       @write_io.seekbytes(abs_offset - @write_io.offset)
       @type.do_write(@write_io)
     end
@@ -152,9 +159,10 @@ module BinData
       # The +auto_call_delayed_io+ keyword sets a data object tree to perform
       # multi pass I/O automatically.
       def auto_call_delayed_io
+        include AutoCallDelayedIO
+
         return if DelayedIO.method_defined? :initialize_instance_without_record_io
 
-        include AutoCallDelayedIO
         DelayedIO.send(:alias_method, :initialize_instance_without_record_io, :initialize_instance)
         DelayedIO.send(:define_method, :initialize_instance) do
           if @parent && !defined? @delayed_io_recorded

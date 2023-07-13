@@ -23,8 +23,6 @@ module Mail
   #     sections 3 and 4 of this standard.
   #
   class Field
-
-    include Utilities
     include Comparable
 
     STRUCTURED_FIELDS = %w[ bcc cc content-description content-disposition
@@ -70,7 +68,7 @@ module Mail
     }
 
     FIELD_NAME_MAP = FIELDS_MAP.inject({}) do |map, (field, field_klass)|
-      map.update(field => field_klass::CAPITALIZED_FIELD)
+      map.update(field => field_klass::NAME)
     end
 
     # Generic Field Exception
@@ -121,7 +119,7 @@ module Mail
       #
       #  Mail::Field.parse("field-name: field data")
       #  # => #<Mail::Field …>
-      def parse(field, charset = nil)
+      def parse(field, charset = 'utf-8')
         name, value = split(field)
         if name && value
           new name, value, charset
@@ -145,6 +143,10 @@ module Mail
         warn "WARNING: Ignoring unparsable header #{raw_field.inspect}: #{error.class}: #{error.message}"
         nil
       end
+
+      def field_class_for(name) #:nodoc:
+        FIELDS_MAP[name.to_s.downcase]
+      end
     end
 
     attr_reader :unparsed_value
@@ -163,10 +165,8 @@ module Mail
     #  # => #<Mail::Field …>
     def initialize(name, value = nil, charset = 'utf-8')
       case
-      when name.index(COLON)
-        Kernel.warn 'Passing an unparsed header field to Mail::Field.new is deprecated and will be removed in Mail 2.8.0. Use Mail::Field.parse instead.'
-        @name, @unparsed_value = self.class.split(name)
-        @charset = Utilities.blank?(value) ? charset : value
+      when name.index(Constants::COLON)
+        raise ArgumentError, 'Passing an unparsed header field to Mail::Field.new is not supported in Mail 2.8.0+. Use Mail::Field.parse instead.'
       when Utilities.blank?(value)
         @name = name
         @unparsed_value = nil
@@ -179,8 +179,8 @@ module Mail
       @name = FIELD_NAME_MAP[@name.to_s.downcase] || @name
     end
 
-    def field=(value)
-      @field = value
+    def field=(field)
+      @field = field
     end
 
     def field
@@ -209,79 +209,63 @@ module Mail
       end.join(" ")}>"
     end
 
-    def update(name, value)
-      @field = create_field(name, value, @charset)
+    def same(other)
+      other.kind_of?(self.class) && Utilities.match_to_s(other.name, name)
     end
 
-    def same( other )
-      return false unless other.kind_of?(self.class)
-      match_to_s(other.name, self.name)
+    def ==(other)
+      same(other) && Utilities.match_to_s(other.value, value)
     end
 
-    def ==( other )
-      return false unless other.kind_of?(self.class)
-      match_to_s(other.name, self.name) && match_to_s(other.value, self.value)
+    def responsible_for?(field_name)
+      name.to_s.casecmp(field_name.to_s) == 0
     end
 
-    def responsible_for?( val )
-      name.to_s.casecmp(val.to_s) == 0
-    end
-
-    def <=>( other )
-      self.field_order_id <=> other.field_order_id
+    def <=>(other)
+      field_order_id <=> other.field_order_id
     end
 
     def field_order_id
-      @field_order_id ||= (FIELD_ORDER_LOOKUP[self.name.to_s.downcase] || 100)
+      @field_order_id ||= FIELD_ORDER_LOOKUP.fetch(self.name.to_s.downcase, 100)
     end
 
     def method_missing(name, *args, &block)
       field.send(name, *args, &block)
     end
 
-    if RUBY_VERSION >= '1.9.2'
-      def respond_to_missing?(method_name, include_private)
-        field.respond_to?(method_name, include_private) || super
-      end
-    else
-      def respond_to?(method_name, include_private = false)
-        field.respond_to?(method_name, include_private) || super
-      end
+    def respond_to_missing?(method_name, include_private)
+      field.respond_to?(method_name, include_private) || super
     end
 
-    FIELD_ORDER = %w[ return-path received
-                      resent-date resent-from resent-sender resent-to
-                      resent-cc resent-bcc resent-message-id
-                      date from sender reply-to to cc bcc
-                      message-id in-reply-to references
-                      subject comments keywords
-                      mime-version content-type content-transfer-encoding
-                      content-location content-disposition content-description ]
-
-    FIELD_ORDER_LOOKUP = Hash[FIELD_ORDER.each_with_index.to_a]
+    FIELD_ORDER_LOOKUP = Hash[%w[
+      return-path received
+      resent-date resent-from resent-sender resent-to
+      resent-cc resent-bcc resent-message-id
+      date from sender reply-to to cc bcc
+      message-id in-reply-to references
+      subject comments keywords
+      mime-version content-type content-transfer-encoding
+      content-location content-disposition content-description
+    ].each_with_index.to_a]
 
     private
 
     def create_field(name, value, charset)
-      new_field(name, value, charset)
+      parse_field(name, value, charset)
     rescue Mail::Field::ParseError => e
       field = Mail::UnstructuredField.new(name, value)
       field.errors << [name, value, e]
       field
     end
 
-    def new_field(name, value, charset)
+    def parse_field(name, value, charset)
       value = unfold(value) if value.is_a?(String)
 
-      if klass = field_class_for(name)
-        klass.new(value, charset)
+      if klass = self.class.field_class_for(name)
+        klass.parse(value, charset)
       else
-        OptionalField.new(name, value, charset)
+        OptionalField.parse(name, value, charset)
       end
-    end
-
-    def field_class_for(name)
-      FIELDS_MAP[name.to_s.downcase]
     end
 
     # 2.2.3. Long Header Fields
@@ -293,7 +277,7 @@ module Mail
     #  treated in its unfolded form for further syntactic and semantic
     #  evaluation.
     def unfold(string)
-      string.gsub(/#{Constants::CRLF}(#{Constants::WSP})/m, '\1')
+      string.gsub(Constants::UNFOLD_WS, '\1')
     end
   end
 end

@@ -30,6 +30,7 @@ require "active_model/version"
 module ActiveModel
   extend ActiveSupport::Autoload
 
+  autoload :API
   autoload :Attribute
   autoload :Attributes
   autoload :AttributeAssignment
@@ -57,6 +58,7 @@ module ActiveModel
     autoload :RangeError, "active_model/errors"
     autoload :StrictValidationFailed, "active_model/errors"
     autoload :UnknownAttributeError, "active_model/errors"
+    autoload :ValidationError, "active_model/validations"
   end
 
   module Serializers

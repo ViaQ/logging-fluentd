@@ -1,5 +1,5 @@
 # frozen_string_literal: true
-require 'mail/check_delivery_params'
+require 'mail/smtp_envelope'
 
 module Mail
   # FileDelivery class delivers emails into multiple files based on the destination
@@ -13,20 +13,16 @@ module Mail
   # Make sure the path you specify with :location is writable by the Ruby process
   # running Mail.
   class FileDelivery
-    if RUBY_VERSION >= '1.9.1'
-      require 'fileutils'
-    else
-      require 'ftools'
-    end
+    require 'fileutils'
 
     attr_accessor :settings
 
     def initialize(values)
-      self.settings = { :location => './mails' }.merge!(values)
+      self.settings = { :location => './mails', :extension => '' }.merge!(values)
     end
 
     def deliver!(mail)
-      Mail::CheckDeliveryParams.check(mail)
+      envelope = Mail::SmtpEnvelope.new(mail)
 
       if ::File.respond_to?(:makedirs)
         ::File.makedirs settings[:location]
@@ -34,8 +30,13 @@ module Mail
         ::FileUtils.mkdir_p settings[:location]
       end
 
-      mail.destinations.uniq.each do |to|
-        ::File.open(::File.join(settings[:location], File.basename(to.to_s)), 'a') { |f| "#{f.write(mail.encoded)}\r\n\r\n" }
+      envelope.to.uniq.each do |to|
+        path = ::File.join(settings[:location], File.basename(to.to_s+settings[:extension]))
+
+        ::File.open(path, 'a') do |f|
+          f.write envelope.message
+          f.write "\r\n\r\n"
+        end
       end
     end
   end

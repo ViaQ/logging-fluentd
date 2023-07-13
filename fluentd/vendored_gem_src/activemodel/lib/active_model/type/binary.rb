@@ -15,7 +15,9 @@ module ActiveModel
         if value.is_a?(Data)
           value.to_s
         else
-          super
+          value = super
+          value = value.b if ::String === value && value.encoding != Encoding::BINARY
+          value
         end
       end
 
@@ -31,7 +33,9 @@ module ActiveModel
 
       class Data # :nodoc:
         def initialize(value)
-          @value = value.to_s
+          value = value.to_s
+          value = value.b unless value.encoding == Encoding::BINARY
+          @value = value
         end
 
         def to_s
