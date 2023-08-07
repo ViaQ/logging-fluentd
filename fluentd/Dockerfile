@@ -29,13 +29,13 @@ FROM registry.access.redhat.com/ubi9/ruby-31 AS runtime
 ENV REMOTE_SOURCES=${REMOTE_SOURCES:-"."}
 ENV upstream_code=${upstream_code:-"."}
 
-ENV BUILD_VERSION=1.14.6
+ENV BUILD_VERSION=1.16.2
 ENV OS_GIT_MAJOR=1
-ENV OS_GIT_MINOR=14
-ENV OS_GIT_PATCH=6
+ENV OS_GIT_MINOR=16
+ENV OS_GIT_PATCH=2
 
 ARG DATA_VERSION_VALUE=1.6.0
-ARG FLUENTD_VERSION_VALUE=1.14.6
+ARG FLUENTD_VERSION_VALUE=1.16.2
 ARG CONTAINER_VALUE=oci
 
 ENV DATA_VERSION=$DATA_VERSION_VALUE \
@@ -66,9 +66,7 @@ RUN  mv /usr/share/gems/aws-sdk-core.source0001.patch /usr/share/gems/gems/aws-s
      cd /usr/share/gems/gems/aws-sdk-core-*/ && patch -p1 < aws-sdk-core.source0001.patch && \
      cd /usr/share/gems &&  \
      mv /usr/share/gems/fluent-plugin-detect-exceptions.source0001.patch /usr/share/gems/gems/fluent-plugin-detect-exceptions-*/ && \
-     cd /usr/share/gems/gems/fluent-plugin-detect-exceptions-*/ && patch -p1 < fluent-plugin-detect-exceptions.source0001.patch && \
-     mv /usr/share/gems/fluentd.source0001.patch /usr/share/gems/gems/fluentd-*/ && \
-     cd /usr/share/gems/gems/fluentd-*/ && patch -p1 < fluentd.source0001.patch
+     cd /usr/share/gems/gems/fluent-plugin-detect-exceptions-*/ && patch -p1 < fluent-plugin-detect-exceptions.source0001.patch
 
 RUN mkdir -p /etc/fluent/configs.d/user && \
     chmod 777 /etc/fluent/configs.d/user && \
@@ -86,6 +84,7 @@ LABEL \
         name="openshift-logging/fluentd" \
         com.redhat.component="logging-fluentd-container" \
         io.openshift.maintainer.product="OpenShift Container Platform" \
-        version=v1.14.6
+        io.openshift.logging.fluentd.version=v1.16.2 \
+        version=v1.16.2
 
 

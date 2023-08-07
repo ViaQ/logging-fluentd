@@ -9,7 +9,7 @@ Gem::Specification.new do |spec|
   spec.license       = "Apache-2.0"
 
   spec.files         = Dir['lib/**/*']
-  spec.add_runtime_dependency "fluentd", "=1.14.6"
+  spec.add_runtime_dependency "fluentd", "=1.16.2"
   spec.add_dependency "prometheus-client", ">=2.1.0"
   spec.add_development_dependency "rake", "~> 10.0"
   spec.add_development_dependency "test-unit", "~> 3.0"
