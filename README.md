@@ -7,7 +7,7 @@ stack for logging releases 5.x and later. Please refer to the [cluster-logging-o
 The `main` brance is empty except for this file.  The branches used by various releases are summarized here:
 
 | Release | Branch | fluentd Version | Ruby Version | Status |
-| --------|--------|-----------------|--------|
+| --------|--------|-----------------|--------|--------|
 | 5.8 | v1.16.x | v1.16.2| v3.1 | Pending |
 | 5.7 | release-5.7|v1.14.6| v2.7 | Current |
 | 5.6 | release-5.6|v1.14.6| v2.7 | Current |
