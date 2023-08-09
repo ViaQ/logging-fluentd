@@ -20,7 +20,3 @@ The `main` brance is empty except for this file.  The branches used by various r
 Any issues can be filed at [Red Hat JIRA](https://issues.redhat.com).  Please
 include as many details as possible in order to assist in issue resolution along with attaching the output 
 from the [must gather](https://github.com/openshift/cluster-logging-operator/tree/master/must-gather) associated with the release.
-
-## Contributing
-See the [hacking](HACKING.md) documentation.
-
