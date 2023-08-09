@@ -9,10 +9,10 @@ The `main` brance is empty except for this file.  The branches used by various r
 | Release | Branch | fluentd Version | Ruby Version | Status |
 | --------|--------|-----------------|--------|
 | 5.8 | v1.16.x | v1.16.2| v3.1 | Pending |
-| 5.7 | release-5.7|v1.14.6| v2.7 | Current
-| 5.6 | release-5.6|v1.14.6| v2.7 | Current
-| 5.5 | ruby27-v1.14.x|v1.14.6| v2.7 | Current
-| 5.4 | v1.14.5|v1.14.5| v2.7 | EOL
+| 5.7 | release-5.7|v1.14.6| v2.7 | Current |
+| 5.6 | release-5.6|v1.14.6| v2.7 | Current |
+| 5.5 | ruby27-v1.14.x|v1.14.6| v2.7 | Current |
+| 5.4 | v1.14.5|v1.14.5| v2.7 | EOL |
 
 
 ## Issues
