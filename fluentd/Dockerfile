@@ -7,10 +7,10 @@ USER 0
 RUN : 'removed yum-config-manager' \
  &&   BUILD_PKGS="make gcc-c++ libffi-devel autoconf automake libtool m4 redhat-rpm-config libxml2-devel" \
  &&   RUNTIME_PKGS="hostname bc iproute" \
- &&   yum install -y --setopt=tsflags=nodocs $BUILD_PKGS $RUNTIME_PKGS \
+ &&   dnf install -y --setopt=tsflags=nodocs $BUILD_PKGS $RUNTIME_PKGS \
  &&   rpm -V $BUILD_PKGS \
  &&   rpm -V $RUNTIME_PKGS \
- &&   yum clean all
+ &&   dnf clean all
 
 
 ENV upstream_code=${upstream_code:-"."} \
@@ -24,7 +24,15 @@ RUN CONFIGURE_ARGS="--with-cflags='$( rpm --eval %optflags )'" bundle install &&
     for d in $(ls lib); do pushd lib/$d; gem build --force -V *.gemspec; \ 
     gem install -N -minimal-deps --local --force --install-dir /usr/share/gems --bindir /usr/bin *.gem; popd; done
 
-FROM registry.access.redhat.com/ubi9/ruby-31 AS runtime
+# Patch gems from upstream which are no longer vendored
+COPY ${upstream_code}/*.patch /usr/share/gems
+RUN  mv /usr/share/gems/aws-sdk-core.source0001.patch /usr/share/gems/gems/aws-sdk-core-*/ && \
+     cd /usr/share/gems/gems/aws-sdk-core-*/ && patch -p1 < aws-sdk-core.source0001.patch && \
+     cd /usr/share/gems &&  \
+     mv /usr/share/gems/fluent-plugin-detect-exceptions.source0001.patch /usr/share/gems/gems/fluent-plugin-detect-exceptions-*/ && \
+     cd /usr/share/gems/gems/fluent-plugin-detect-exceptions-*/ && patch -p1 < fluent-plugin-detect-exceptions.source0001.patch
+
+FROM registry.access.redhat.com/ubi9/ubi-minimal AS runtime
 
 ENV REMOTE_SOURCES=${REMOTE_SOURCES:-"."}
 ENV upstream_code=${upstream_code:-"."}
@@ -42,13 +50,16 @@ ENV DATA_VERSION=$DATA_VERSION_VALUE \
     FLUENTD_VERSION=$FLUENTD_VERSION_VALUE \
     HOME=/opt/app-root/src \
     PATH=/opt/app-root/src/bin:/opt/app-root/bin:$PATH \
-    container=$CONTAINER_VALUE
+    container=$CONTAINER_VALUE \
+    RUBY_MAJOR_VERSION=3 \
+    RUBY_MINOR_VERSION=1
 
 USER 0
-RUN RUNTIME_PKGS="hostname bc iproute libxml2" \
- &&   yum install -y --setopt=tsflags=nodocs $RUNTIME_PKGS \
+RUN RUNTIME_PKGS="hostname bc iproute libxml2 ruby" \
+ &&   microdnf -y module enable ruby:${RUBY_MAJOR_VERSION}.${RUBY_MINOR_VERSION} \
+ &&   microdnf install -y --setopt=tsflags=nodocs $RUNTIME_PKGS \
  &&   rpm -V $RUNTIME_PKGS \
- &&   yum clean all
+ &&   microdnf clean all --enablerepo='*'
 
 RUN mkdir -p /etc/fluent/plugin
 
@@ -59,14 +70,6 @@ COPY --from=builder /usr/share/gems /usr/share/gems
 COPY --from=builder /usr/lib64/gems/ruby /usr/lib64/gems/ruby
 COPY ${upstream_code}/run.sh ${HOME}/
 COPY ${upstream_code}/utils/ /usr/local/bin/
-
-# Patch gems from upstream which are no longer vendored
-COPY ${upstream_code}/*.patch /usr/share/gems
-RUN  mv /usr/share/gems/aws-sdk-core.source0001.patch /usr/share/gems/gems/aws-sdk-core-*/ && \
-     cd /usr/share/gems/gems/aws-sdk-core-*/ && patch -p1 < aws-sdk-core.source0001.patch && \
-     cd /usr/share/gems &&  \
-     mv /usr/share/gems/fluent-plugin-detect-exceptions.source0001.patch /usr/share/gems/gems/fluent-plugin-detect-exceptions-*/ && \
-     cd /usr/share/gems/gems/fluent-plugin-detect-exceptions-*/ && patch -p1 < fluent-plugin-detect-exceptions.source0001.patch
 
 RUN mkdir -p /etc/fluent/configs.d/user && \
     chmod 777 /etc/fluent/configs.d/user && \
