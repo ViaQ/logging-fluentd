@@ -15,18 +15,14 @@ gem 'fluent-plugin-systemd'
 gem 'fluent-plugin-prometheus'
 gem 'fluent-plugin-splunk-hec', '1.3.2'
 gem 'fluent-plugin-label-router'
-gem 'kubeclient'
 gem 'libxml-ruby' #aws-sdk-core
-gem 'typhoeus'
+gem 'typhoeus' # gems that supports elasticsearch
+
+# gems that support fluentd
 gem 'oj'
 gem 'bigdecimal'
 
-#Below gem(and two of its dependencies) are moved to O_A_L/fluentd/lib, but its dependencies still exist in O_A_L/fluentd/vendored_gem_src/
-gem 'ffi'
-gem 'uuidtools'
 gem 'rake'
-gem 'async'
-gem 'async-http'
 
 path 'lib' do
   gem 'filter_parse_json_field'
