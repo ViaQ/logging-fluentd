@@ -37,22 +37,6 @@ GEM
     addressable (2.8.0)
       public_suffix (>= 2.0.2, < 5.0)
     aes_key_wrap (1.1.0)
-    async (1.30.2)
-      console (~> 1.10)
-      nio4r (~> 2.3)
-      timers (~> 4.1)
-    async-http (0.56.6)
-      async (>= 1.25)
-      async-io (>= 1.28)
-      async-pool (>= 0.2)
-      protocol-http (~> 0.22.0)
-      protocol-http1 (~> 0.14.0)
-      protocol-http2 (~> 0.14.0)
-      traces (~> 0.4.0)
-    async-io (1.33.0)
-      async
-    async-pool (0.3.10)
-      async (>= 1.25)
     attr_required (1.0.1)
     aws-eventstream (1.2.0)
     aws-partitions (1.586.0)
@@ -70,8 +54,6 @@ GEM
     bindata (2.4.15)
     concurrent-ruby (1.2.2)
     connection_pool (2.4.1)
-    console (1.15.0)
-      fiber-local
     cool.io (1.8.0)
     date (3.3.3)
     digest-crc (0.6.4)
@@ -118,7 +100,6 @@ GEM
     ffi-compiler (1.0.1)
       ffi (>= 1.0.0)
       rake
-    fiber-local (1.0.0)
     fluent-config-regexp-type (1.0.0)
       fluentd (> 1.0.0, < 2)
     fluent-mixin-config-placeholders (0.4.0)
@@ -237,7 +218,6 @@ GEM
     net-smtp (0.3.3)
       net-protocol
     netrc (0.11.0)
-    nio4r (2.5.8)
     oj (3.13.11)
     openid_connect (1.1.8)
       activemodel
@@ -250,13 +230,6 @@ GEM
       validate_url
       webfinger (>= 1.0.1)
     prometheus-client (4.0.0)
-    protocol-hpack (1.4.2)
-    protocol-http (0.22.6)
-    protocol-http1 (0.14.4)
-      protocol-http (~> 0.22)
-    protocol-http2 (0.14.2)
-      protocol-hpack (~> 1.4)
-      protocol-http (~> 0.18)
     public_suffix (4.0.7)
     rack (3.0.8)
     rack-oauth2 (1.21.3)
@@ -286,8 +259,6 @@ GEM
     systemd-journal (1.4.2)
       ffi (~> 1.9)
     timeout (0.4.0)
-    timers (4.3.3)
-    traces (0.4.1)
     typhoeus (1.4.0)
       ethon (>= 0.9.0)
     tzinfo (2.0.6)
@@ -315,11 +286,8 @@ PLATFORMS
   ruby
 
 DEPENDENCIES
-  async
-  async-http
   bigdecimal
   elasticsearch (< 8.0)
-  ffi
   filter_elasticsearch_genid_ext!
   filter_parse_json_field!
   fluent-plugin-cloudwatch-logs (= 0.14.2)
@@ -342,7 +310,6 @@ DEPENDENCIES
   fluent-plugin-viaq_data_model (= 0.0.23)!
   fluentd (= 1.16.2)
   formatter-single-json-value!
-  kubeclient
   libxml-ruby
   oj
   parser_viaq_host_audit!
@@ -350,7 +317,6 @@ DEPENDENCIES
   remote_syslog_sender!
   syslog_protocol!
   typhoeus
-  uuidtools
 
 BUNDLED WITH
    2.3.7
