@@ -1,0 +1,13 @@
+diff --git a/net/http.rb b/net/http.rb
+index 88a174a248..3e76c63503 100644
+--- a/net/http.rb
++++ b/net/http.rb
+@@ -589,7 +589,7 @@ def HTTP.start(address, *arg, &block) # :yield: +http+
+       port, p_addr, p_port, p_user, p_pass = *arg
+       p_addr = :ENV if arg.size < 2
+       port = https_default_port if !port && opt && opt[:use_ssl]
+-      http = new(address, port, p_addr, p_port, p_user, p_pass)
++      http = new(address, port, p_addr, p_port, p_user, p_pass, (ENV['NO_PROXY']||ENV['no_proxy']))
+       http.ipaddr = opt[:ipaddr] if opt && opt[:ipaddr]
+ 
+       if opt
