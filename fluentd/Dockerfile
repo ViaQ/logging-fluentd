@@ -32,7 +32,9 @@ RUN  mv /usr/share/gems/aws-sdk-core.source0001.patch /usr/share/gems/gems/aws-s
      mv /usr/share/gems/fluent-plugin-detect-exceptions.source0001.patch /usr/share/gems/gems/fluent-plugin-detect-exceptions-*/ && \
      cd /usr/share/gems/gems/fluent-plugin-detect-exceptions-*/ && patch -p1 < fluent-plugin-detect-exceptions.source0001.patch && \
      mv /usr/share/gems/fluent-plugin-elasticsearch.source0001.patch /usr/share/gems/gems/fluent-plugin-elasticsearch-*/ && \
-     cd /usr/share/gems/gems/fluent-plugin-elasticsearch-*/ && patch -p1 < fluent-plugin-elasticsearch.source0001.patch
+     cd /usr/share/gems/gems/fluent-plugin-elasticsearch-*/ && patch -p1 < fluent-plugin-elasticsearch.source0001.patch && \
+     mv /usr/share/gems/log4366_ruby_lib_net_http.patch /usr/share/ruby/ && \
+     cd /usr/share/ruby && patch -p1 < log4366_ruby_lib_net_http.patch
 
 FROM registry.access.redhat.com/ubi9/ubi-minimal AS runtime
 
@@ -70,6 +72,7 @@ COPY --from=builder /usr/bin/fluent-cat /usr/local/bin
 
 COPY --from=builder /usr/share/gems /usr/share/gems
 COPY --from=builder /usr/lib64/gems/ruby /usr/lib64/gems/ruby
+COPY --from=builder /usr/share/ruby/net/http.rb /usr/share/ruby/net/
 COPY ${upstream_code}/run.sh ${HOME}/
 COPY ${upstream_code}/utils/ /usr/local/bin/
 
