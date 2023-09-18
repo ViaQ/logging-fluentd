@@ -32,6 +32,7 @@ COPY ${upstream_code}/lib ${HOME}/vendored_gem_src
 COPY ${upstream_code}/install-gems.sh ${HOME}/vendored_gem_src/
 COPY ${upstream_code}/*.patch.sh ${HOME}/vendored_gem_src/
 COPY ${upstream_code}/*.patch ${HOME}/vendored_gem_src/
+RUN rm ${HOME}/vendored_gem_src/log4366_ruby_lib_net_http.patch
 
 RUN cd ${HOME}/vendored_gem_src/ && ./install-gems.sh
 
@@ -83,6 +84,9 @@ COPY ${upstream_code}/generate_syslog_config.rb ${HOME}/
 COPY ${upstream_code}/wait_for_es_version.rb ${HOME}/
 COPY ${upstream_code}/wait_for_es_version.sh ${HOME}/
 COPY ${upstream_code}/utils/ /usr/local/bin/
+
+COPY ${upstream_code}/log4366_ruby_lib_net_http.patch /usr/share/ruby/
+RUN  cd /usr/share/ruby && patch -p1 < log4366_ruby_lib_net_http.patch
 
 RUN mkdir -p /etc/fluent/configs.d/user && \
     chmod 777 /etc/fluent/configs.d/user && \
