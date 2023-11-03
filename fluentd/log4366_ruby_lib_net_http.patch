@@ -1,5 +1,5 @@
 diff --git a/net/http.rb b/net/http.rb
-index 88a174a248..3e76c63503 100644
+index 88a174a248..4da8dfa894 100644
 --- a/net/http.rb
 +++ b/net/http.rb
 @@ -589,7 +589,7 @@ def HTTP.start(address, *arg, &block) # :yield: +http+
@@ -11,3 +11,13 @@ index 88a174a248..3e76c63503 100644
        http.ipaddr = opt[:ipaddr] if opt && opt[:ipaddr]
  
        if opt
+@@ -642,7 +642,8 @@ def HTTP.new(address, port = nil, p_addr = :ENV, p_port = nil, p_user = nil, p_p
+       elsif p_addr == :ENV then
+         http.proxy_from_env = true
+       else
+-        if p_addr && p_no_proxy && !URI::Generic.use_proxy?(p_addr, p_addr, p_port, p_no_proxy)
++        # patched: https://github.com/ruby/net-http/pull/64
++        if p_addr && p_no_proxy && !URI::Generic.use_proxy?(address, address, p_port, p_no_proxy)
+           p_addr = nil
+           p_port = nil
+         end
