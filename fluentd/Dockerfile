@@ -30,7 +30,9 @@ RUN  mv /usr/share/gems/aws-sdk-core.source0001.patch /usr/share/gems/gems/aws-s
      cd /usr/share/gems/gems/aws-sdk-core-*/ && patch -p1 < aws-sdk-core.source0001.patch && \
      cd /usr/share/gems &&  \
      mv /usr/share/gems/fluent-plugin-detect-exceptions.source0001.patch /usr/share/gems/gems/fluent-plugin-detect-exceptions-*/ && \
-     cd /usr/share/gems/gems/fluent-plugin-detect-exceptions-*/ && patch -p1 < fluent-plugin-detect-exceptions.source0001.patch
+     cd /usr/share/gems/gems/fluent-plugin-detect-exceptions-*/ && patch -p1 < fluent-plugin-detect-exceptions.source0001.patch && \
+     mv /usr/share/gems/fluent-plugin-elasticsearch.source0001.patch /usr/share/gems/gems/fluent-plugin-elasticsearch-*/ && \
+     cd /usr/share/gems/gems/fluent-plugin-elasticsearch-*/ && patch -p1 < fluent-plugin-elasticsearch.source0001.patch
 
 FROM registry.access.redhat.com/ubi9/ubi-minimal AS runtime
 
