@@ -29,7 +29,6 @@ http-parser 1.2.3 https://github.com/cotag/http-parser
 jemalloc 5.2.1 https://github.com/jemalloc/jemalloc/releases/download/5.2.1/jemalloc-5.2.1.tar.bz2
 jmespath 1.6.1 http://github.com/trevorrowe/jmespath.rb
 json-jwt 1.15.3 https://github.com/nov/json-jwt
-jsonpath 1.1.2 https://github.com/joshbuddy/jsonpath
 ltsv 0.1.2 https://github.com/condor/ltsv
 net-imap 0.3.6 https://github.com/ruby/net-imap
 net-pop 0.1.2 https://github.com/ruby/net-pop
@@ -41,8 +40,8 @@ protocol-http 0.22.6 https://github.com/socketry/protocol-http
 protocol-http1 0.14.4 https://github.com/socketry/protocol-http1
 protocol-http2 0.14.2 https://github.com/socketry/protocol-http2
 rack-oauth2 1.21.3 https://github.com/nov/rack-oauth2
-rubygem-activemodel 7.0.6 https://rubyonrails.org
-rubygem-activesupport 7.0.6 https://rubyonrails.org
+rubygem-activemodel 7.0.8 https://rubyonrails.org
+rubygem-activesupport 7.0.8 https://rubyonrails.org
 rubygem-addressable 2.8.0 https://github.com/sporkmonger/addressable
 rubygem-bigdecimal 3.1.2 https://github.com/ruby/bigdecimal
 rubygem-bundler 1.17.3 http://bundler.io
@@ -83,6 +82,7 @@ rubygem-http-cookie 1.0.4 https://github.com/sparklemotion/http-cookie
 rubygem-http-form_data 2.3.0 https://github.com/httprb/form_data.rb
 rubygem-http_parser.rb 0.8.0 https://github.com/tmm1/http_parser.rb
 rubygem-i18n 1.14.1 https://github.com/ruby-i18n/i18n
+rubygem-jsonpath 1.1.2 https://github.com/joshbuddy/jsonpath
 rubygem-kubeclient 4.9.3 https://github.com/abonas/kubeclient
 rubygem-lru_redux 1.1.0 https://github.com/SamSaffron/lru_redux
 rubygem-mail 2.8.1 https://github.com/mikel/mail
