@@ -229,6 +229,7 @@ GEM
       validate_email
       validate_url
       webfinger (>= 1.0.1)
+    openssl (3.2.0)
     prometheus-client (4.0.0)
     public_suffix (4.0.7)
     rack (3.0.8)
@@ -312,6 +313,7 @@ DEPENDENCIES
   formatter-single-json-value!
   libxml-ruby
   oj
+  openssl (= 3.2.0)
   parser_viaq_host_audit!
   rake
   remote_syslog_sender!

@@ -21,6 +21,7 @@ gem 'typhoeus' # gems that supports elasticsearch
 # gems that support fluentd
 gem 'oj'
 gem 'bigdecimal'
+gem 'openssl', '3.2.0' #LOG-3933
 
 gem 'rake'
 
