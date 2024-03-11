@@ -4,13 +4,10 @@ filters:
     approvers:
       - jcantrill
       - alanconway
-      - vimalk78
       - cahartma
     reviewers:
       - jcantrill
       - alanconway
-      - vimalk78
-      - syedriko
       - vparfonov
       - cahartma
       - Clee2691
