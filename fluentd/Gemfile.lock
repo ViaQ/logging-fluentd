@@ -55,7 +55,7 @@ GEM
     concurrent-ruby (1.2.2)
     connection_pool (2.4.1)
     cool.io (1.8.0)
-    date (3.3.3)
+    date (3.4.1)
     digest-crc (0.6.4)
       rake (>= 12.0.0, < 14.0.0)
     domain_name (0.5.20190701)
@@ -208,7 +208,7 @@ GEM
     multipart-post (2.1.1)
     net-http-persistent (4.0.2)
       connection_pool (~> 2.2)
-    net-imap (0.3.6)
+    net-imap (0.3.8)
       date
       net-protocol
     net-pop (0.1.2)
@@ -312,6 +312,7 @@ DEPENDENCIES
   fluentd (= 1.16.2)
   formatter-single-json-value!
   libxml-ruby
+  net-imap (= 0.3.8)
   oj
   openssl (= 3.2.0)
   parser_viaq_host_audit!
