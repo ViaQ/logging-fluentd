@@ -232,7 +232,7 @@ GEM
     openssl (3.2.0)
     prometheus-client (4.0.0)
     public_suffix (4.0.7)
-    rack (3.0.12)
+    rack (3.0.14)
     rack-oauth2 (1.21.3)
       activesupport
       attr_required
@@ -269,7 +269,7 @@ GEM
     unf (0.1.4)
       unf_ext
     unf_ext (0.0.8.1)
-    uuidtools (2.2.0)
+    uuidtools (3.0.0)
     validate_email (0.1.6)
       activemodel (>= 3.0)
       mail (>= 2.2.5)
@@ -316,7 +316,7 @@ DEPENDENCIES
   oj
   openssl (= 3.2.0)
   parser_viaq_host_audit!
-  rack (= 3.0.12)
+  rack (= 3.0.14)
   rake
   remote_syslog_sender!
   syslog_protocol!
